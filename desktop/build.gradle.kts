@@ -1,7 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
-val appVersion = "1.1.1"
+val appVersion = "1.2.0"
 
 plugins {
     kotlin("jvm") version "2.4.20"
@@ -28,8 +28,12 @@ dependencies {
  * Si prende l'ultimo APK arm64 compilato del progetto Android; se non c'è,
  * l'app desktop funziona lo stesso e semplicemente non propone l'installazione.
  */
-val androidApk = file("../app/build/outputs/apk/debug/app-arm64-v8a-debug.apk")
-val androidApkMetadata = file("../app/build/outputs/apk/debug/output-metadata.json")
+// Di norma l'APK sta nella build del progetto Android accanto; con
+// -PandroidApkDir si indica un'altra cartella (per esempio se le build
+// stanno fuori dal progetto).
+val androidApkDir = providers.gradleProperty("androidApkDir").orElse("../app/build/outputs/apk/debug").get()
+val androidApk = file("$androidApkDir/app-arm64-v8a-debug.apk")
+val androidApkMetadata = file("$androidApkDir/output-metadata.json")
 val bundledResources = layout.buildDirectory.dir("bundled-resources")
 val prepareAndroidApk by tasks.registering(Copy::class) {
     from(androidApk) { rename { "xaos-android.apk" } }
