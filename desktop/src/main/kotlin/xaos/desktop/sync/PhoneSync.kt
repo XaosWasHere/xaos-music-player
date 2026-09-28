@@ -95,9 +95,16 @@ sealed interface SyncStatus {
  */
 class PhoneSync(
     private val scope: CoroutineScope,
-    val remoteRoot: String = "/sdcard/Music/Xaos",
+    remoteRoot: String = "/sdcard/Music/Xaos",
 ) {
+    /** La cartella di destinazione sul telefono, dalle impostazioni. */
+    @Volatile var remoteRoot: String = remoteRoot.trimEnd('/')
+        set(value) { field = value.trim().trimEnd('/').ifEmpty { field } }
+
     private val adb: File? = locateAdb()
+
+    /** Il percorso di adb in uso, per la schermata Informazioni. */
+    val adbPath: String? get() = adb?.path
 
     private val _state = MutableStateFlow<PhoneState>(if (adb == null) PhoneState.NoAdb else PhoneState.Disconnected)
     val state: StateFlow<PhoneState> = _state.asStateFlow()
@@ -133,7 +140,7 @@ class PhoneSync(
      * caso sul telefono finisce nella cartella del suo album, senza la
      * sottocartella "MP3" che sul PC serve solo a tenere separate le copie.
      */
-    fun plan(root: File, tracks: List<Track>, preferMp3: Boolean) {
+    fun plan(roots: List<File>, tracks: List<Track>, preferMp3: Boolean) {
         val phone = _state.value as? PhoneState.Connected ?: return
         if (_status.value is SyncStatus.Running) return
         scope.launch(Dispatchers.IO) {
@@ -144,7 +151,7 @@ class PhoneSync(
                 val matcher = SongMatcher(listPhoneSongs(phone.serial))
                 val items = tracks.mapNotNull { track ->
                     val file = File(if (preferMp3) track.mobilePath ?: track.path else track.path)
-                    val rel = remoteRelative(root, file) ?: return@mapNotNull null
+                    val rel = remoteRelative(roots, file) ?: return@mapNotNull null
                     SyncItem(track, file, rel, file.length())
                 }
                 // Già presente se Xaos l'ha mandato (stesso percorso e stessa
@@ -167,22 +174,25 @@ class PhoneSync(
         }
     }
 
-    /** Invia i brani mancanti; [tracks] è la libreria intera, per ricalcolare il piano alla fine. */
-    fun sync(root: File, tracks: List<Track>, preferMp3: Boolean) {
+    /**
+     * Invia [selected], i brani mancanti che l'utente ha lasciato spuntati;
+     * [tracks] è la libreria intera, per ricalcolare il piano alla fine.
+     */
+    fun sync(roots: List<File>, tracks: List<Track>, preferMp3: Boolean, selected: List<SyncItem>) {
         val phone = _state.value as? PhoneState.Connected ?: return
-        val plan = _plan.value ?: return
-        if (plan.missing.isEmpty() || syncJob?.isActive == true) return
+        if (selected.isEmpty() || syncJob?.isActive == true) return
+        val totalBytes = selected.sumOf { it.size }
 
         syncJob = scope.launch(Dispatchers.IO) {
-            val total = plan.missing.size
+            val total = selected.size
             var sent = 0
             var failed = 0
             var doneBytes = 0L
             val pushed = mutableListOf<String>()
 
-            for (item in plan.missing) {
+            for (item in selected) {
                 if (!isActive) break
-                _status.value = SyncStatus.Running(sent + failed, total, doneBytes, plan.bytesToSend, item.file.name)
+                _status.value = SyncStatus.Running(sent + failed, total, doneBytes, totalBytes, item.file.name)
                 val remote = "$remoteRoot/${item.remoteRel}"
                 val ok = push(phone.serial, item.file, remote)
                 if (ok) { sent++; pushed += remote } else failed++
@@ -196,7 +206,7 @@ class PhoneSync(
                 announce(phone.serial, pushed)
             }
             _status.value = SyncStatus.Done(sent, failed, cancelled)
-            plan(root, tracks, preferMp3)
+            plan(roots, tracks, preferMp3)
         }
     }
 
@@ -373,8 +383,12 @@ class PhoneSync(
     /** Virgolette singole per la shell del telefono, apostrofi compresi. */
     private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
-    /** Il percorso sul telefono: quello sul PC, senza la sottocartella delle copie MP3. */
-    private fun remoteRelative(root: File, file: File): String? = runCatching {
+    /**
+     * Il percorso sul telefono: quello sul PC relativo alla sua cartella di
+     * libreria, senza la sottocartella delle copie MP3.
+     */
+    private fun remoteRelative(roots: List<File>, file: File): String? = runCatching {
+        val root = roots.firstOrNull { file.path.startsWith(it.path + File.separator) } ?: return null
         val folder = Library.collapsedParent(file) ?: return null
         val relFolder = root.toPath().relativize(folder.toPath()).joinToString("/")
         if (relFolder.startsWith("..")) null

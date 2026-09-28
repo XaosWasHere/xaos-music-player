@@ -32,7 +32,11 @@ import androidx.compose.runtime.setValue
 import xaos.desktop.sync.AppInstall
 import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
+import xaos.desktop.sync.SyncItem
 import xaos.desktop.sync.SyncPlan
+import xaos.desktop.library.Library
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.draw.rotate
 import xaos.desktop.sync.SyncStatus
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
@@ -43,23 +47,29 @@ fun PhoneScreen(
     phone: PhoneSync,
     snapshot: LibrarySnapshot,
     preferMp3: Boolean,
-    onPreferMp3Change: (Boolean) -> Unit,
+    phoneFolder: String,
+    excluded: Set<String>,
+    onExcludedChange: (Set<String>) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val state by phone.state.collectAsState()
     val plan by phone.plan.collectAsState()
     val status by phone.status.collectAsState()
     val install by phone.install.collectAsState()
     var confirmInstall by remember { mutableStateOf(false) }
-    val root = snapshot.root
+    val roots = snapshot.roots
+    val expanded = remember { mutableStateListOf<String>() }
 
     // Appena il telefono c'è e la libreria è letta, si calcola cosa manca:
     // collegarlo deve bastare a vedere la situazione.
-    LaunchedEffect(state, snapshot.tracks.size, preferMp3) {
-        if (state is PhoneState.Connected && root != null && snapshot.tracks.isNotEmpty()) {
-            phone.plan(root, snapshot.tracks, preferMp3)
+    LaunchedEffect(state, snapshot.tracks.size, preferMp3, phoneFolder) {
+        if (state is PhoneState.Connected && roots.isNotEmpty() && snapshot.tracks.isNotEmpty()) {
+            phone.plan(roots, snapshot.tracks, preferMp3)
         }
     }
-    val hasTwins = remember(snapshot) { snapshot.tracks.any { it.mobilePath != null } }
+
+    val pending = plan?.missing.orEmpty()
+    val selected = remember(pending, excluded) { pending.filter { it.track.path !in excluded } }
 
     val connected = state as? PhoneState.Connected
     if (confirmInstall && connected != null) {
@@ -106,52 +116,190 @@ fun PhoneScreen(
                         onDismiss = phone::dismissInstall,
                     )
                     ConnectedPanel(
-                    state = s,
-                    remoteRoot = phone.remoteRoot,
-                    plan = plan,
-                    status = status,
-                    onSync = { if (root != null) phone.sync(root, snapshot.tracks, preferMp3) },
-                    onCancel = phone::cancel,
-                    onRefresh = { if (root != null) phone.plan(root, snapshot.tracks, preferMp3) },
-                    onDismiss = phone::dismissResult,
+                        state = s,
+                        remoteRoot = phone.remoteRoot,
+                        formatLabel = if (preferMp3) "MP3 QUANDO C'È" else "ORIGINALE",
+                        plan = plan,
+                        selected = selected,
+                        status = status,
+                        onSync = { phone.sync(roots, snapshot.tracks, preferMp3, selected) },
+                        onCancel = phone::cancel,
+                        onRefresh = { phone.plan(roots, snapshot.tracks, preferMp3) },
+                        onDismiss = phone::dismissResult,
+                        onOpenSettings = onOpenSettings,
                     )
                 }
             }
         }
 
-        if (hasTwins) {
-            item {
-                FormatChoice(
-                    preferMp3 = preferMp3,
-                    enabled = status !is SyncStatus.Running,
-                    onChange = onPreferMp3Change,
-                )
-            }
-        }
-
-        val pending = plan?.missing.orEmpty()
         if (state is PhoneState.Connected && pending.isNotEmpty() && status !is SyncStatus.Running) {
-            val byAlbum = pending.groupBy { it.track.album }.entries.sortedBy { it.key.lowercase() }
+            val byAlbum = pending
+                .groupBy { (Library.collapsedParent(it.track.file)?.path ?: "") + "|" + it.track.album }
+                .entries
+                .sortedBy { it.value.first().track.album.lowercase() }
+            val allPaths = pending.map { it.track.path }.toSet()
+
             item {
-                SectionHeader(
-                    "DA INVIARE",
-                    count = byAlbum.size,
-                    modifier = Modifier.padding(top = 28.dp, bottom = 10.dp),
+                SelectAllRow(
+                    state = checkOf(selected.size, pending.size),
+                    selectedCount = selected.size,
+                    total = pending.size,
+                    selectedBytes = selected.sumOf { it.size },
+                    onToggle = {
+                        onExcludedChange(
+                            if (selected.size == pending.size) excluded + allPaths else excluded - allPaths
+                        )
+                    },
                 )
             }
-            items(byAlbum, key = { it.key }) { (album, entries) ->
-                val colors = Xaos.colors
-                Row(
-                    Modifier.fillMaxWidth().hoverRow().padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ArtworkImage(entries.first().track, size = 36.dp, corner = 6.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(album.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("[${entries.size}] · ${formatBytes(entries.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+            byAlbum.forEach { (key, entries) ->
+                val paths = entries.map { it.track.path }.toSet()
+                val chosen = entries.count { it.track.path !in excluded }
+                val isOpen = key in expanded
+                item(key = key) {
+                    AlbumSelectRow(
+                        entries = entries,
+                        check = checkOf(chosen, entries.size),
+                        chosen = chosen,
+                        expanded = isOpen,
+                        onToggle = {
+                            onExcludedChange(if (chosen == entries.size) excluded + paths else excluded - paths)
+                        },
+                        onExpand = { if (isOpen) expanded.remove(key) else expanded.add(key) },
+                    )
+                }
+                if (isOpen) {
+                    items(entries, key = { "t-" + it.track.path }) { item ->
+                        val on = item.track.path !in excluded
+                        TrackSelectRow(
+                            item = item,
+                            checked = on,
+                            onToggle = {
+                                onExcludedChange(if (on) excluded + item.track.path else excluded - item.track.path)
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+private fun checkOf(chosen: Int, total: Int): Check = when (chosen) {
+    0 -> Check.OFF
+    total -> Check.ON
+    else -> Check.PARTIAL
+}
+
+@Composable
+private fun SelectAllRow(
+    state: Check,
+    selectedCount: Int,
+    total: Int,
+    selectedBytes: Long,
+    onToggle: () -> Unit,
+) {
+    val colors = Xaos.colors
+    Column(Modifier.padding(top = 28.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            XaosCheckbox(state, onToggle)
+            Spacer(Modifier.width(14.dp))
+            Text(
+                if (state == Check.ON) "DESELEZIONA TUTTO" else "SELEZIONA TUTTO",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.ink,
+                modifier = Modifier.pressable(onToggle),
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "[$selectedCount/$total] SELEZIONATI · ${formatBytes(selectedBytes)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.inkTertiary,
+            )
+        }
+        Text(
+            "Le spunte vengono ricordate: quello che togli resta escluso anche le prossime volte.",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkTertiary,
+            modifier = Modifier.padding(start = 46.dp, bottom = 8.dp),
+        )
+        Hairline()
+        Spacer(Modifier.height(6.dp))
+    }
+}
+
+@Composable
+private fun AlbumSelectRow(
+    entries: List<SyncItem>,
+    check: Check,
+    chosen: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    val colors = Xaos.colors
+    val first = entries.first().track
+    Row(
+        Modifier.fillMaxWidth().hoverRow().pressable(onExpand).padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        XaosCheckbox(check, onToggle)
+        Spacer(Modifier.width(14.dp))
+        ArtworkImage(first, size = 38.dp, corner = 6.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                first.album.uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (check == Check.OFF) colors.inkTertiary else colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(first.albumArtist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            "[$chosen/${entries.size}] · ${formatBytes(entries.sumOf { it.size })}",
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.inkTertiary,
+        )
+        Spacer(Modifier.width(10.dp))
+        Icon(
+            XaosIcons.ChevronDown,
+            if (expanded) "Chiudi" else "Mostra i brani",
+            tint = colors.inkSecondary,
+            modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
+        )
+    }
+}
+
+@Composable
+private fun TrackSelectRow(item: SyncItem, checked: Boolean, onToggle: () -> Unit) {
+    val colors = Xaos.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 46.dp)
+            .hoverRow()
+            .pressable(onToggle)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        XaosCheckbox(if (checked) Check.ON else Check.OFF, onToggle, size = 16.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            item.track.title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (checked) colors.ink else colors.inkTertiary,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(item.file.extension.uppercase(), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+        Spacer(Modifier.width(12.dp))
+        Text(formatBytes(item.size), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
     }
 }
 
@@ -159,12 +307,15 @@ fun PhoneScreen(
 private fun ConnectedPanel(
     state: PhoneState.Connected,
     remoteRoot: String,
+    formatLabel: String,
     plan: SyncPlan?,
+    selected: List<SyncItem>,
     status: SyncStatus,
     onSync: () -> Unit,
     onCancel: () -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val colors = Xaos.colors
     Column(Modifier.fillMaxWidth().nothingCard().padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -173,7 +324,13 @@ private fun ConnectedPanel(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(state.name.uppercase(), style = MaterialTheme.typography.titleLarge, color = colors.ink)
-                Text("CARTELLA  $remoteRoot", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                // Cartella e versione si cambiano dalle impostazioni: un clic ci porta.
+                Text(
+                    "CARTELLA  $remoteRoot  ·  VERSIONE  $formatLabel",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.inkTertiary,
+                    modifier = Modifier.pressable(onOpenSettings),
+                )
             }
             AccentDot(size = 8.dp)
             Spacer(Modifier.width(8.dp))
@@ -189,7 +346,7 @@ private fun ConnectedPanel(
                 Spacer(Modifier.width(12.dp))
                 Text("CONFRONTO CON LA LIBRERIA DEL TELEFONO…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
-            else -> PlanView(plan, onSync, onRefresh)
+            else -> PlanView(plan, selected, onSync, onRefresh)
         }
 
         when (status) {
@@ -208,24 +365,30 @@ private fun ConnectedPanel(
 }
 
 @Composable
-private fun PlanView(plan: SyncPlan, onSync: () -> Unit, onRefresh: () -> Unit) {
+private fun PlanView(plan: SyncPlan, selected: List<SyncItem>, onSync: () -> Unit, onRefresh: () -> Unit) {
     val colors = Xaos.colors
+    val bytes = selected.sumOf { it.size }
+    val fits = plan.freeBytes == null || bytes < plan.freeBytes - SyncPlan.SPACE_MARGIN
     Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-        BigStat(plan.missing.size.toString(), "DA INVIARE")
-        BigStat(formatBytes(plan.bytesToSend), "DA COPIARE")
+        BigStat(selected.size.toString(), "DA INVIARE")
+        BigStat(formatBytes(bytes), "DA COPIARE")
         BigStat(plan.alreadyThere.toString(), "GIÀ SUL TELEFONO")
         plan.freeBytes?.let { BigStat(formatBytes(it), "SPAZIO LIBERO") }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         PillButton(
-            text = if (plan.missing.isEmpty()) "TUTTO SINCRONIZZATO" else "SINCRONIZZA",
+            text = when {
+                plan.missing.isEmpty() -> "TUTTO SINCRONIZZATO"
+                selected.isEmpty() -> "NIENTE SELEZIONATO"
+                else -> "SINCRONIZZA [${selected.size}]"
+            },
             onClick = onSync,
             icon = XaosIcons.Sync,
             filled = true,
-            enabled = plan.missing.isNotEmpty() && plan.fits,
+            enabled = selected.isNotEmpty() && fits,
         )
         PillButton("RICONTROLLA", onClick = onRefresh)
-        if (!plan.fits) {
+        if (!fits) {
             Text(
                 "NON C'È ABBASTANZA SPAZIO SUL TELEFONO",
                 style = MaterialTheme.typography.labelMedium,
@@ -287,29 +450,6 @@ private fun InfoCard(title: String, body: String) {
             Text(title, style = MaterialTheme.typography.labelLarge, color = colors.ink)
         }
         Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
-    }
-}
-
-/**
- * Quale versione mandare quando un brano c'è sia in FLAC sia in MP3. Compare
- * solo se la libreria ha davvero delle copie doppie.
- */
-@Composable
-private fun FormatChoice(preferMp3: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = Xaos.colors
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("VERSIONE PER IL TELEFONO")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            PillButton("MP3 QUANDO C'È", onClick = { onChange(true) }, filled = preferMp3, enabled = enabled || preferMp3)
-            PillButton("ORIGINALE (FLAC)", onClick = { onChange(false) }, filled = !preferMp3, enabled = enabled || !preferMp3)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (preferMp3) "Le copie MP3 pesano circa un quinto dei FLAC."
-                else "Qualità piena, ma occupa molto più spazio.",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.inkTertiary,
-            )
-        }
     }
 }
 

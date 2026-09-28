@@ -62,13 +62,13 @@ data class Artist(val name: String, val albums: List<Album>) {
 }
 
 data class LibrarySnapshot(
-    val root: File?,
+    val roots: List<File>,
     val tracks: List<Track>,
     val albums: List<Album>,
     val artists: List<Artist>,
 ) {
     companion object {
-        val Empty = LibrarySnapshot(null, emptyList(), emptyList(), emptyList())
+        val Empty = LibrarySnapshot(emptyList(), emptyList(), emptyList(), emptyList())
     }
 }
 
@@ -79,7 +79,7 @@ sealed interface ScanState {
 }
 
 /**
- * La libreria del PC: tutti i file audio sotto una cartella.
+ * La libreria del PC: tutti i file audio sotto una o più cartelle.
  *
  * Leggere i tag di migliaia di file costa qualche secondo, quindi il risultato
  * resta in un indice su disco: al riavvio si rileggono solo i file nuovi o
@@ -103,14 +103,20 @@ class Library(private val indexFile: File) {
         quietLogger.level = Level.OFF
     }
 
-    suspend fun load(root: File) = withContext(Dispatchers.IO) {
-        val cached = readIndex()
+    /**
+     * Legge le cartelle [roots]. Con [force] si rileggono i tag di tutti i
+     * file, anche di quelli che l'indice dà per invariati: serve quando un
+     * programma esterno ritocca i tag senza cambiare la data del file.
+     */
+    suspend fun load(roots: List<File>, force: Boolean = false) = withContext(Dispatchers.IO) {
+        val cached = if (force) emptyMap() else readIndex()
+        fun inRoots(path: String) = roots.any { path.startsWith(it.path + File.separator) }
         // Si mostra subito quello che c'era, poi si aggiorna.
-        if (cached.isNotEmpty()) publish(root, cached.values.filter { it.path.startsWith(root.path) })
+        if (cached.isNotEmpty()) publish(roots, cached.values.filter { inRoots(it.path) })
 
-        val files = root.walkTopDown()
-            .filter { it.isFile && it.extension.lowercase() in AUDIO_EXTENSIONS }
-            .toList()
+        val files = roots.filter { it.isDirectory }
+            .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension.lowercase() in AUDIO_EXTENSIONS } }
+            .distinctBy { it.path }
         _scan.value = ScanState.Scanning(0, files.size)
 
         val done = AtomicInteger()
@@ -131,12 +137,12 @@ class Library(private val indexFile: File) {
             }.awaitAll().filterNotNull()
         }
 
-        publish(root, tracks)
+        publish(roots, tracks)
         writeIndex(tracks)
         _scan.value = ScanState.Idle
     }
 
-    private fun publish(root: File, all: List<Track>) {
+    private fun publish(roots: List<File>, all: List<Track>) {
         val tracks = mergeTwins(all)
         val albums = tracks
             .groupBy { albumKey(it) }
@@ -160,7 +166,7 @@ class Library(private val indexFile: File) {
             .sortedBy { it.name.lowercase() }
 
         val ordered = albums.flatMap { it.tracks }
-        _snapshot.value = LibrarySnapshot(root, ordered, albums, artists)
+        _snapshot.value = LibrarySnapshot(roots, ordered, albums, artists)
     }
 
     /**

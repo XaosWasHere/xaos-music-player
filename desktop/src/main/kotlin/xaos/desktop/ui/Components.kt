@@ -348,3 +348,112 @@ fun DotSlider(
         }
     }
 }
+
+/** Stato di una casella: spuntata, vuota, o in parte (un album con solo alcuni brani). */
+enum class Check { ON, OFF, PARTIAL }
+
+/**
+ * Casella di spunta: quadratino arrotondato, pieno nel colore d'accento
+ * quando è spuntata, con un trattino quando lo è solo in parte.
+ */
+@Composable
+fun XaosCheckbox(state: Check, onClick: () -> Unit, modifier: Modifier = Modifier, size: Dp = 20.dp) {
+    val c = Xaos.colors
+    val shape = RoundedCornerShape(6.dp)
+    val filled = state != Check.OFF
+    Box(
+        modifier
+            .size(size)
+            .clip(shape)
+            .background(if (filled) c.accent else Color.Transparent, shape)
+            .then(if (filled) Modifier else Modifier.border(1.5.dp, c.inkTertiary, shape))
+            .pressable(onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (state) {
+            Check.ON -> Icon(XaosIcons.Check, null, tint = c.onAccent, modifier = Modifier.size(size * 0.75f))
+            Check.PARTIAL -> Box(Modifier.size(width = size * 0.5f, height = 2.dp).background(c.onAccent, RoundedCornerShape(1.dp)))
+            Check.OFF -> Unit
+        }
+    }
+}
+
+/** Interruttore a pillola: il pallino scorre e la pista si riempie d'accento. */
+@Composable
+fun XaosSwitch(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val c = Xaos.colors
+    val knob by androidx.compose.animation.core.animateDpAsState(if (checked) 20.dp else 2.dp, label = "switch")
+    val track by androidx.compose.animation.animateColorAsState(if (checked) c.accent else c.card, label = "switch-track")
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier
+            .size(width = 42.dp, height = 24.dp)
+            .clip(shape)
+            .background(track, shape)
+            .border(1.dp, if (checked) Color.Transparent else c.line, shape)
+            .pressable { onChange(!checked) },
+    ) {
+        Box(
+            Modifier
+                .padding(start = knob, top = 2.dp)
+                .size(20.dp)
+                .background(if (checked) c.onAccent else c.inkTertiary, CircleShape),
+        )
+    }
+}
+
+/**
+ * Cursore verticale a punti, per le bande dell'equalizzatore: una colonna di
+ * punti con lo zero al centro, accesi dallo zero fino al valore. Si trascina
+ * o si clicca; [range] è simmetrico attorno allo zero.
+ */
+@Composable
+fun VerticalDotSlider(
+    value: Float,
+    onChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    range: Float = 20f,
+    enabled: Boolean = true,
+) {
+    val c = Xaos.colors
+    val lit = if (enabled) c.accent else c.inkTertiary
+    fun valueAt(y: Float, height: Float): Float {
+        val f = 1f - (y / height).coerceIn(0f, 1f)
+        // Aggancio al decibel intero: valori come 3,37 dB non servono a nessuno.
+        return (f * 2f * range - range).let { kotlin.math.round(it) }.coerceIn(-range, range)
+    }
+    Canvas(
+        modifier
+            .pointerHoverIcon(if (enabled) PointerIcon.Hand else PointerIcon.Default)
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { onChange(valueAt(it.y, size.height.toFloat())) }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    onChange(valueAt(change.position.y, size.height.toFloat()))
+                }
+            },
+    ) {
+        val steps = 20
+        // Mezzo passo di margine sopra e sotto: i punti estremi restano interi.
+        val stepY = size.height / (steps + 1)
+        val x = size.width / 2f
+        val r = 2.dp.toPx()
+        val zeroRow = steps / 2
+        val valueRow = ((1f - (value + range) / (2f * range)) * steps).let { kotlin.math.round(it).toInt() }
+        for (row in 0..steps) {
+            val y = (row + 0.5f) * stepY
+            val between = (row in minOf(zeroRow, valueRow)..maxOf(zeroRow, valueRow))
+            val color = when {
+                row == valueRow -> lit
+                between && value != 0f -> lit.copy(alpha = 0.55f)
+                row == zeroRow -> c.inkSecondary
+                else -> c.track
+            }
+            drawCircle(color, if (row == valueRow) r * 1.9f else r, Offset(x, y))
+        }
+    }
+}

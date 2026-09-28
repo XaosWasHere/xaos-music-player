@@ -35,7 +35,7 @@ import xaos.desktop.theme.Xaos
  * con i controlli a punti e il play nel colore d'accento.
  */
 @Composable
-fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit) {
+fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: () -> Unit) {
     val colors = Xaos.colors
     val current by player.current.collectAsState()
     val isPlaying by player.isPlaying.collectAsState()
@@ -55,9 +55,10 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 val track = current
                 if (track != null) {
-                    ArtworkImage(track, size = 58.dp, corner = 10.dp)
+                    // Copertina e titolo aprono lo schermo intero, come su Spotify.
+                    ArtworkImage(track, size = 58.dp, corner = 10.dp, modifier = Modifier.pressable(onOpenFullscreen))
                     Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f).pressable(onOpenFullscreen)) {
                         Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -132,6 +133,8 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit) {
                     onChange = { player.setVolume((it * 100).toInt()) },
                     onChangeFinished = { onVolumeChange((it * 100).toInt()) },
                 )
+                Spacer(Modifier.width(14.dp))
+                CircleIconButton(XaosIcons.Fullscreen, "Schermo intero", onOpenFullscreen, size = 34.dp)
             }
         }
     }

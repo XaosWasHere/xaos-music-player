@@ -50,7 +50,11 @@ enum class Section(val label: String, val icon: ImageVector) {
     SONGS("BRANI", XaosIcons.MusicNote),
     ARTISTS("ARTISTI", XaosIcons.Person),
     PHONE("TELEFONO", XaosIcons.Phone),
+    SETTINGS("IMPOSTAZIONI", XaosIcons.Settings),
 }
+
+/** Le sezioni della navigazione principale; le impostazioni stanno in fondo, a parte. */
+private val MainSections = listOf(Section.ALBUMS, Section.SONGS, Section.ARTISTS, Section.PHONE)
 
 /** Le schermate di dettaglio, impilate sopra la sezione. */
 sealed interface Detail {
@@ -64,14 +68,21 @@ fun XaosDesktopApp(
     library: Library,
     player: Player,
     phone: PhoneSync,
-    onPickLibrary: () -> Unit,
+    fullscreen: Boolean,
+    onFullscreenChange: (Boolean) -> Unit,
+    onAddFolder: () -> Unit,
+    onRescan: () -> Unit,
 ) {
     val prefs by settings.data.collectAsState()
     val snapshot by library.snapshot.collectAsState()
     val scan by library.scan.collectAsState()
     val phoneState by phone.state.collectAsState()
 
-    var section by remember { mutableStateOf(Section.ALBUMS) }
+    // XAOS_START apre direttamente una sezione: serve solo per provare l'app
+    // durante lo sviluppo, senza dover navigare a mano.
+    var section by remember {
+        mutableStateOf(Section.entries.firstOrNull { it.name == System.getenv("XAOS_START") } ?: Section.ALBUMS)
+    }
     val details = remember { mutableStateListOf<Detail>() }
     var query by remember { mutableStateOf("") }
 
@@ -82,18 +93,23 @@ fun XaosDesktopApp(
     }
 
     val colors = Xaos.colors
+    if (fullscreen) {
+        FullscreenPlayer(
+            player = player,
+            background = prefs.fullscreenBackground,
+            onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
+            onClose = { onFullscreenChange(false) },
+        )
+        return
+    }
     Column(Modifier.fillMaxSize().background(colors.background)) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Sidebar(
                 selected = section,
                 phoneState = phoneState,
                 scan = scan,
-                libraryRoot = prefs.libraryRoot,
                 trackCount = snapshot.tracks.size,
-                isDark = prefs.dark,
                 onSelect = ::select,
-                onToggleTheme = { settings.update { it.copy(dark = !it.dark) } },
-                onPickLibrary = onPickLibrary,
             )
 
             Box(
@@ -104,7 +120,7 @@ fun XaosDesktopApp(
                     .dotGrid(colors.dot),
             ) {
                 Column(Modifier.fillMaxSize()) {
-                    if (section != Section.PHONE) {
+                    if (section != Section.PHONE && section != Section.SETTINGS) {
                         TopBar(
                             query = query,
                             onQueryChange = { query = it },
@@ -119,7 +135,18 @@ fun XaosDesktopApp(
                                 phone = phone,
                                 snapshot = snapshot,
                                 preferMp3 = prefs.preferMp3OnPhone,
-                                onPreferMp3Change = { v -> settings.update { it.copy(preferMp3OnPhone = v) } },
+                                phoneFolder = prefs.phoneFolder,
+                                excluded = prefs.syncExcluded,
+                                onExcludedChange = { set -> settings.update { it.copy(syncExcluded = set) } },
+                                onOpenSettings = { select(Section.SETTINGS) },
+                            )
+                            section == Section.SETTINGS -> SettingsScreen(
+                                settings = settings,
+                                library = library,
+                                player = player,
+                                phone = phone,
+                                onAddFolder = onAddFolder,
+                                onRescan = onRescan,
                             )
                             query.isNotBlank() -> SearchResults(
                                 query = query,
@@ -150,7 +177,11 @@ fun XaosDesktopApp(
                 }
             }
         }
-        PlayerBar(player = player, onVolumeChange = { v -> settings.update { it.copy(volume = v) } })
+        PlayerBar(
+            player = player,
+            onVolumeChange = { v -> settings.update { it.copy(volume = v) } },
+            onOpenFullscreen = { onFullscreenChange(true) },
+        )
     }
 }
 
@@ -159,12 +190,8 @@ private fun Sidebar(
     selected: Section,
     phoneState: PhoneState,
     scan: ScanState,
-    libraryRoot: String?,
     trackCount: Int,
-    isDark: Boolean,
     onSelect: (Section) -> Unit,
-    onToggleTheme: () -> Unit,
-    onPickLibrary: () -> Unit,
 ) {
     val colors = Xaos.colors
     Column(
@@ -184,7 +211,7 @@ private fun Sidebar(
 
         Spacer(Modifier.height(28.dp))
 
-        Section.entries.forEach { entry ->
+        MainSections.forEach { entry ->
             NavItem(
                 section = entry,
                 selected = entry == selected,
@@ -199,51 +226,22 @@ private fun Sidebar(
         PhoneStatusCard(phoneState, onClick = { onSelect(Section.PHONE) })
         Spacer(Modifier.height(12.dp))
 
-        // La cartella della libreria, con lo stato della scansione.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .pressable(onPickLibrary)
-                .padding(vertical = 6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(XaosIcons.Folder, null, tint = colors.inkSecondary, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    libraryRoot?.let { java.io.File(it).name.uppercase() } ?: "SCEGLI CARTELLA",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = when (scan) {
-                    is ScanState.Scanning -> "SCANSIONE ${scan.done}/${scan.total}"
-                    is ScanState.Failed -> "ERRORE DI LETTURA"
-                    ScanState.Idle -> "[$trackCount] BRANI"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.inkTertiary,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CircleIconButton(
-                icon = XaosIcons.Contrast,
-                contentDescription = if (isDark) "Tema chiaro" else "Tema scuro",
-                onClick = onToggleTheme,
-                size = 32.dp,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                if (isDark) "TEMA SCURO" else "TEMA CHIARO",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.inkTertiary,
-            )
-        }
+        NavItem(
+            section = Section.SETTINGS,
+            selected = selected == Section.SETTINGS,
+            badge = false,
+            onClick = { onSelect(Section.SETTINGS) },
+        )
+        Text(
+            text = when (scan) {
+                is ScanState.Scanning -> "SCANSIONE ${scan.done}/${scan.total}"
+                is ScanState.Failed -> "ERRORE DI LETTURA"
+                ScanState.Idle -> "[$trackCount] BRANI IN LIBRERIA"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkTertiary,
+            modifier = Modifier.padding(start = 12.dp, top = 6.dp),
+        )
     }
 }
 

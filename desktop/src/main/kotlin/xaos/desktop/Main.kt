@@ -3,13 +3,20 @@ package xaos.desktop
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.decodeToImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.launch
@@ -37,9 +44,31 @@ fun main() = application {
         BitmapPainter(bytes.decodeToImageBitmap())
     }
 
-    // La libreria si ricarica a ogni cambio di cartella.
-    LaunchedEffect(prefs.libraryRoot) {
-        prefs.libraryRoot?.let { File(it) }?.takeIf { it.isDirectory }?.let { library.load(it) }
+    // Le impostazioni si applicano man mano che cambiano, e una volta all'avvio.
+    LaunchedEffect(prefs.roots) {
+        library.load(prefs.roots.map { File(it) }.filter { it.isDirectory })
+    }
+    LaunchedEffect(prefs.equalizer) {
+        player.applyEqualizer(prefs.equalizer.enabled, prefs.equalizer.preamp, prefs.equalizer.bands)
+    }
+    LaunchedEffect(prefs.outputDevice) { player.setOutputDevice(prefs.outputDevice) }
+    LaunchedEffect(prefs.phoneFolder) { phone.remoteRoot = prefs.phoneFolder }
+
+    val windowState = rememberWindowState(size = DpSize(1320.dp, 860.dp))
+    var fullscreen by remember { mutableStateOf(System.getenv("XAOS_START") == "FULLSCREEN") }
+    var placementBefore by remember { mutableStateOf(WindowPlacement.Floating) }
+
+    // Il player a tutto schermo porta a tutto schermo anche la finestra, come
+    // Spotify; uscendo, la finestra torna com'era (anche se era massimizzata).
+    fun setFullscreen(on: Boolean) {
+        if (on == fullscreen) return
+        if (on) {
+            placementBefore = windowState.placement
+            windowState.placement = WindowPlacement.Fullscreen
+        } else {
+            windowState.placement = placementBefore
+        }
+        fullscreen = on
     }
 
     Window(
@@ -49,7 +78,19 @@ fun main() = application {
         },
         title = "Xaos",
         icon = appIcon,
-        state = rememberWindowState(size = DpSize(1320.dp, 860.dp)),
+        state = windowState,
+        onPreviewKeyEvent = { event ->
+            // I tasti valgono solo a schermo intero: altrove lo spazio serve a
+            // scrivere nella ricerca.
+            if (!fullscreen || event.type != KeyEventType.KeyDown) return@Window false
+            when (event.key) {
+                Key.Escape -> { setFullscreen(false); true }
+                Key.Spacebar -> { player.togglePlayPause(); true }
+                Key.DirectionRight -> { player.seekBy(10_000); true }
+                Key.DirectionLeft -> { player.seekBy(-10_000); true }
+                else -> false
+            }
+        },
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)
         XaosTheme(dark = prefs.dark) {
@@ -58,11 +99,18 @@ fun main() = application {
                 library = library,
                 player = player,
                 phone = phone,
-                onPickLibrary = {
+                fullscreen = fullscreen,
+                onFullscreenChange = ::setFullscreen,
+                onAddFolder = {
                     scope.launch {
-                        pickFolder(prefs.libraryRoot)?.let { dir ->
-                            settings.update { it.copy(libraryRoot = dir.path) }
+                        pickFolder(prefs.roots.firstOrNull())?.let { dir ->
+                            settings.setRoots(prefs.roots + dir.path)
                         }
+                    }
+                },
+                onRescan = {
+                    scope.launch {
+                        library.load(prefs.roots.map { File(it) }.filter { it.isDirectory }, force = true)
                     }
                 },
             )
@@ -75,7 +123,7 @@ private fun pickFolder(start: String?): File? {
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
     val chooser = JFileChooser(start).apply {
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        dialogTitle = "Cartella della musica"
+        dialogTitle = "Aggiungi una cartella di musica"
         isAcceptAllFileFilterUsed = false
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null

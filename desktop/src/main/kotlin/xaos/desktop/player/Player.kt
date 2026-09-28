@@ -32,6 +32,52 @@ class Player {
         if (available) runCatching { MediaPlayerFactory("--no-video", "--quiet") }.getOrNull() else null
     private val mp: MediaPlayer? = factory?.mediaPlayers()?.newMediaPlayer()
 
+    /** La versione di VLC in uso, per la schermata Informazioni. */
+    val vlcVersion: String? = runCatching { factory?.application()?.version() }.getOrNull()
+
+    // ---------------------------------------------------------- equalizzatore
+
+    /** Le frequenze centrali delle bande, in Hz, come le espone VLC. */
+    val eqBands: List<Float> = runCatching { factory?.equalizer()?.bands() }.getOrNull().orEmpty()
+
+    /** I preset di VLC ("Flat", "Rock", "Classical"…). */
+    val eqPresets: List<String> = runCatching { factory?.equalizer()?.presets() }.getOrNull().orEmpty()
+
+    private val equalizer = runCatching { factory?.equalizer()?.newEqualizer() }.getOrNull()
+
+    /** Preamp e bande di un preset, per mostrarli e poi ritoccarli a mano. */
+    fun presetValues(name: String): Pair<Float, List<Float>>? = runCatching {
+        val eq = factory?.equalizer()?.newEqualizer(name) ?: return null
+        eq.preamp() to eq.amps().toList()
+    }.getOrNull()
+
+    /**
+     * Applica l'equalizzatore. vlcj ricalcola il filtro a ogni modifica
+     * dell'oggetto, quindi basta aggiornarne i valori; spento, lo si stacca.
+     */
+    fun applyEqualizer(enabled: Boolean, preamp: Float, bands: List<Float>) {
+        val eq = equalizer ?: return
+        val player = mp ?: return
+        eq.setPreamp(preamp.coerceIn(-20f, 20f))
+        bands.forEachIndexed { i, v -> if (i < eq.bandCount()) eq.setAmp(i, v.coerceIn(-20f, 20f)) }
+        player.audio().setEqualizer(if (enabled) eq else null)
+    }
+
+    // ---------------------------------------------------------- uscita audio
+
+    /** Le uscite audio disponibili: identificativo e nome leggibile. */
+    fun outputDevices(): List<Pair<String, String>> = runCatching {
+        mp?.audio()?.outputDevices()?.map { it.deviceId to it.longName }
+    }.getOrNull().orEmpty().filter { it.first.isNotBlank() }
+
+    private var outputDevice: String? = null
+
+    /** null = l'uscita predefinita di Windows. Vale dal brano in corso in poi. */
+    fun setOutputDevice(id: String?) {
+        outputDevice = id
+        mp?.audio()?.setOutputDevice(null, id ?: "")
+    }
+
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     val queue: StateFlow<List<Track>> = _queue.asStateFlow()
 
@@ -55,6 +101,10 @@ class Player {
 
     private val _repeat = MutableStateFlow(RepeatMode.OFF)
     val repeat: StateFlow<RepeatMode> = _repeat.asStateFlow()
+
+    private val _upNext = MutableStateFlow<List<Track>>(emptyList())
+    /** I prossimi brani, nell'ordine in cui verranno davvero suonati. */
+    val upNext: StateFlow<List<Track>> = _upNext.asStateFlow()
 
     /** L'ordine di ascolto: gli indici della coda, mescolati se c'è il casuale. */
     private var order: List<Int> = emptyList()
@@ -119,6 +169,16 @@ class Player {
         _positionMs.value = target
     }
 
+    /** Avanti o indietro di [deltaMs] nel brano in corso. */
+    fun seekBy(deltaMs: Long) {
+        val player = mp ?: return
+        val duration = _durationMs.value
+        if (duration <= 0) return
+        val target = (_positionMs.value + deltaMs).coerceIn(0, duration - 500)
+        player.controls().setTime(target)
+        _positionMs.value = target
+    }
+
     fun setVolume(percent: Int) {
         val v = percent.coerceIn(0, 100)
         _volume.value = v
@@ -152,6 +212,7 @@ class Player {
         val indices = _queue.value.indices.toList()
         order = if (_shuffle.value) listOf(first) + (indices - first).shuffled() else indices
         cursor = order.indexOf(first).coerceAtLeast(0)
+        refreshUpNext()
     }
 
     private fun advance(automatic: Boolean) {
@@ -180,10 +241,18 @@ class Player {
         val player = mp ?: return
         val track = _queue.value.getOrNull(order.getOrNull(cursor) ?: return) ?: return
         _current.value = track
+        refreshUpNext()
         _positionMs.value = 0
         _durationMs.value = track.durationMs
         player.media().play(mrlOf(track))
         player.audio().setVolume(_volume.value)
+        // VLC dimentica l'uscita scelta a ogni nuovo media: la si riapplica.
+        outputDevice?.let { player.audio().setOutputDevice(null, it) }
+    }
+
+    private fun refreshUpNext() {
+        val queue = _queue.value
+        _upNext.value = order.drop(cursor + 1).take(UP_NEXT).mapNotNull { queue.getOrNull(it) }
     }
 
     /**
@@ -196,5 +265,6 @@ class Player {
 
     private companion object {
         const val RESTART_THRESHOLD_MS = 3_000L
+        const val UP_NEXT = 3
     }
 }
