@@ -26,6 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xaos.desktop.library.LibrarySnapshot
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import xaos.desktop.sync.AppInstall
 import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.sync.SyncPlan
@@ -44,6 +48,8 @@ fun PhoneScreen(
     val state by phone.state.collectAsState()
     val plan by phone.plan.collectAsState()
     val status by phone.status.collectAsState()
+    val install by phone.install.collectAsState()
+    var confirmInstall by remember { mutableStateOf(false) }
     val root = snapshot.root
 
     // Appena il telefono c'è e la libreria è letta, si calcola cosa manca:
@@ -54,6 +60,16 @@ fun PhoneScreen(
         }
     }
     val hasTwins = remember(snapshot) { snapshot.tracks.any { it.mobilePath != null } }
+
+    val connected = state as? PhoneState.Connected
+    if (confirmInstall && connected != null) {
+        ConfirmInstallDialog(
+            phoneName = connected.name,
+            apkSize = phone.bundledApk?.length(),
+            onConfirm = { confirmInstall = false; phone.installApp() },
+            onDismiss = { confirmInstall = false },
+        )
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 18.dp, bottom = 28.dp)) {
         item {
@@ -79,7 +95,17 @@ fun PhoneScreen(
                     "Sul telefono è comparso \"Consentire il debug USB?\": tocca Consenti " +
                         "(e \"Consenti sempre da questo computer\", così non lo chiede più).",
                 )
-                is PhoneState.Connected -> ConnectedPanel(
+                is PhoneState.Connected -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    AppCard(
+                        phone = s,
+                        install = install,
+                        canInstall = phone.canInstallOn(s),
+                        apkSize = phone.bundledApk?.length(),
+                        onInstall = { confirmInstall = true },
+                        onLaunch = phone::launchApp,
+                        onDismiss = phone::dismissInstall,
+                    )
+                    ConnectedPanel(
                     state = s,
                     remoteRoot = phone.remoteRoot,
                     plan = plan,
@@ -88,7 +114,8 @@ fun PhoneScreen(
                     onCancel = phone::cancel,
                     onRefresh = { if (root != null) phone.plan(root, snapshot.tracks, preferMp3) },
                     onDismiss = phone::dismissResult,
-                )
+                    )
+                }
             }
         }
 
@@ -284,6 +311,97 @@ private fun FormatChoice(preferMp3: Boolean, enabled: Boolean, onChange: (Boolea
             )
         }
     }
+}
+
+/**
+ * Lo stato di Xaos per Android sul telefono: se manca, la proposta di
+ * installarlo. Chi usa già un altro player può ignorarla e sincronizzare lo
+ * stesso: i brani finiscono in Musica, e qualunque app li vede.
+ */
+@Composable
+private fun AppCard(
+    phone: PhoneState.Connected,
+    install: AppInstall,
+    canInstall: Boolean,
+    apkSize: Long?,
+    onInstall: () -> Unit,
+    onLaunch: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = Xaos.colors
+    val justInstalled = install is AppInstall.Done
+    if (phone.appInstalled && !justInstalled) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            AccentDot(size = 6.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("XAOS PER ANDROID INSTALLATO SUL TELEFONO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f))
+            PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone)
+        }
+        return
+    }
+    Row(
+        Modifier.fillMaxWidth().nothingCard().padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Tag(if (justInstalled) "INSTALLATO" else "NON INSTALLATO")
+                Spacer(Modifier.width(10.dp))
+                Text("XAOS PER ANDROID", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            }
+            Text(
+                text = when {
+                    justInstalled -> "Pronto: aprilo sul telefono per dargli l'accesso alla musica."
+                    install is AppInstall.Failed -> "Non è andata: ${install.message}"
+                    !canInstall && apkSize == null -> "Questa versione di Xaos desktop non include l'app per il telefono."
+                    !canInstall -> "L'app inclusa è per processori arm64, il telefono è ${phone.abi}."
+                    else -> "Sul telefono non c'è. Puoi installarlo da qui, oppure continuare con il " +
+                        "player che usi già: i brani sincronizzati li vede qualunque app."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.inkSecondary,
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        when {
+            install is AppInstall.Installing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                DotSpinner(size = 20.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("INSTALLAZIONE…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+            }
+            justInstalled -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone, filled = true)
+                PillButton("OK", onClick = onDismiss)
+            }
+            canInstall -> PillButton(
+                text = if (install is AppInstall.Failed) "RIPROVA" else "INSTALLA XAOS",
+                onClick = onInstall,
+                icon = XaosIcons.Download,
+                filled = true,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmInstallDialog(phoneName: String, apkSize: Long?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val colors = Xaos.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text("Installare Xaos sul telefono?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        text = {
+            Text(
+                "Xaos Music Player per Android verrà installato su $phoneName" +
+                    (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
+                    ". Non tocca le altre app né la musica già presente.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.inkSecondary,
+            )
+        },
+        confirmButton = { PillButton("INSTALLA", onClick = onConfirm, filled = true) },
+        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+    )
 }
 
 fun formatBytes(bytes: Long): String {

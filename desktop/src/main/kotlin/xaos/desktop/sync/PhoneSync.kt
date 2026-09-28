@@ -22,7 +22,16 @@ sealed interface PhoneState {
     data object Disconnected : PhoneState
     /** Collegato, ma sul telefono non è stato ancora accettato questo PC. */
     data class Unauthorized(val serial: String) : PhoneState
-    data class Connected(val serial: String, val name: String) : PhoneState
+    /**
+     * [appInstalled]: se sul telefono c'è Xaos per Android. [abi]: il
+     * processore, per sapere se l'APK incluso ci gira.
+     */
+    data class Connected(
+        val serial: String,
+        val name: String,
+        val appInstalled: Boolean,
+        val abi: String,
+    ) : PhoneState
 }
 
 /** Un brano da mandare: quale file, e dove finisce sul telefono. */
@@ -46,6 +55,14 @@ data class SyncPlan(
         /** Mezzo giga di margine: un telefono pieno fino all'ultimo byte smette di funzionare bene. */
         const val SPACE_MARGIN = 512L * 1024 * 1024
     }
+}
+
+/** L'installazione dell'app Android sul telefono. */
+sealed interface AppInstall {
+    data object Idle : AppInstall
+    data object Installing : AppInstall
+    data object Done : AppInstall
+    data class Failed(val message: String) : AppInstall
 }
 
 sealed interface SyncStatus {
@@ -188,6 +205,58 @@ class PhoneSync(
         currentPush?.destroy()
     }
 
+    // ---------------------------------------------------------- app Android
+
+    /**
+     * L'APK di Xaos per Android incluso nell'app desktop, se c'è. Sta fra le
+     * risorse del pacchetto, non dentro il jar: è un file da passare ad adb.
+     */
+    val bundledApk: File? = System.getProperty("compose.application.resources.dir")
+        ?.let { File(it, BUNDLED_APK) }
+        ?.takeIf { it.isFile }
+
+    private val _install = MutableStateFlow<AppInstall>(AppInstall.Idle)
+    val install: StateFlow<AppInstall> = _install.asStateFlow()
+
+    /** Se l'APK incluso può girare sul telefono collegato. */
+    fun canInstallOn(phone: PhoneState.Connected): Boolean =
+        bundledApk != null && (phone.abi.isEmpty() || phone.abi == BUNDLED_ABI)
+
+    /** Installa l'app Android: va chiamato solo dopo la conferma dell'utente. */
+    fun installApp() {
+        val phone = _state.value as? PhoneState.Connected ?: return
+        val apk = bundledApk ?: return
+        if (_install.value is AppInstall.Installing) return
+        scope.launch(Dispatchers.IO) {
+            _install.value = AppInstall.Installing
+            val out = run(listOf("-s", phone.serial, "install", "-r", apk.path), timeoutS = INSTALL_TIMEOUT_S)
+            val installed = isAppInstalled(phone.serial)
+            if (installed) {
+                _state.value = phone.copy(appInstalled = true)
+                _install.value = AppInstall.Done
+            } else {
+                // adb scrive il motivo come "Failure [INSTALL_FAILED_...]".
+                val reason = out?.lineSequence()?.firstOrNull { it.contains("Failure") }?.trim()
+                _install.value = AppInstall.Failed(reason ?: "Installazione non riuscita")
+            }
+        }
+    }
+
+    /** Apre Xaos sul telefono, dopo l'installazione. */
+    fun launchApp() {
+        val phone = _state.value as? PhoneState.Connected ?: return
+        scope.launch(Dispatchers.IO) {
+            shell(phone.serial, "monkey -p $APP_PACKAGE -c android.intent.category.LAUNCHER 1")
+        }
+    }
+
+    fun dismissInstall() { _install.value = AppInstall.Idle }
+
+    private fun isAppInstalled(serial: String): Boolean =
+        shell(serial, "pm list packages $APP_PACKAGE")
+            ?.lineSequence()
+            ?.any { it.trim() == "package:$APP_PACKAGE" } == true
+
     fun dismissResult() {
         if (_status.value is SyncStatus.Done || _status.value is SyncStatus.Failed) _status.value = SyncStatus.Idle
     }
@@ -204,7 +273,12 @@ class PhoneSync(
             "device" -> {
                 val known = _state.value
                 if (known is PhoneState.Connected && known.serial == serial) known
-                else PhoneState.Connected(serial, deviceName(serial, parts))
+                else PhoneState.Connected(
+                    serial = serial,
+                    name = deviceName(serial, parts),
+                    appInstalled = isAppInstalled(serial),
+                    abi = shell(serial, "getprop ro.product.cpu.abi")?.trim().orEmpty(),
+                )
             }
             "unauthorized" -> PhoneState.Unauthorized(serial)
             else -> PhoneState.Disconnected
@@ -309,6 +383,10 @@ class PhoneSync(
     }.getOrNull()
 
     private companion object {
+        const val APP_PACKAGE = "com.example.xaosmusicplayer"
+        const val BUNDLED_APK = "xaos-android.apk"
+        const val BUNDLED_ABI = "arm64-v8a"
+        const val INSTALL_TIMEOUT_S = 180L
         const val POLL_MS = 2_000L
         const val ANNOUNCE_BATCH = 40
 

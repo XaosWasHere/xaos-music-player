@@ -19,11 +19,26 @@ dependencies {
     implementation("net.jthink:jaudiotagger:3.0.1")
 }
 
+/*
+ * L'APK dell'app Android viaggia dentro l'app desktop, fra le risorse del
+ * pacchetto: collegando un telefono senza Xaos, lo si può installare da qui.
+ * Si prende l'ultimo APK arm64 compilato del progetto Android; se non c'è,
+ * l'app desktop funziona lo stesso e semplicemente non propone l'installazione.
+ */
+val androidApk = file("../app/build/outputs/apk/debug/app-arm64-v8a-debug.apk")
+val bundledResources = layout.buildDirectory.dir("bundled-resources")
+val prepareAndroidApk by tasks.registering(Copy::class) {
+    from(androidApk) { rename { "xaos-android.apk" } }
+    into(bundledResources.map { it.dir("common") })
+}
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareAndroidApk) }
+
 compose.desktop {
     application {
         mainClass = "xaos.desktop.MainKt"
 
         nativeDistributions {
+            appResourcesRootDir.set(bundledResources)
             // jdk.unsupported serve a JNA (vlcj), java.logging a jaudiotagger.
             modules("java.instrument", "jdk.unsupported", "java.logging")
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
