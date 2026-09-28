@@ -1,5 +1,8 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
+/** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
+val appVersion = "1.1.0"
+
 plugins {
     kotlin("jvm") version "2.4.20"
     kotlin("plugin.compose") version "2.4.20"
@@ -36,6 +39,7 @@ tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(pr
 compose.desktop {
     application {
         mainClass = "xaos.desktop.MainKt"
+        jvmArgs += "-Dxaos.version=$appVersion"
 
         nativeDistributions {
             appResourcesRootDir.set(bundledResources)
@@ -43,7 +47,7 @@ compose.desktop {
             modules("java.instrument", "jdk.unsupported", "java.logging")
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Xaos"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
             description = "Xaos Music Player per desktop"
             windows {
                 menuGroup = "Xaos"
