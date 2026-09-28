@@ -77,7 +77,8 @@ val DarkPalette = XaosPalette(
     accent = NothingRed,
     onAccent = Nos0,
     accentInk = NothingRed,
-    dot = Nos0.copy(alpha = 0.13f),
+    // Più alto che sul telefono: qui un puntino è un paio di pixel, non una decina.
+    dot = Nos0.copy(alpha = 0.30f),
     track = Nos800,
 )
 

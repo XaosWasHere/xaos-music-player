@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import xaos.desktop.theme.Xaos
 import kotlin.math.PI
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -60,15 +62,28 @@ import kotlin.math.sin
  * il puntatore a manina e gli stati di hover che su un PC ci si aspetta.
  */
 
+/**
+ * La griglia di puntini, allineata ai pixel dello schermo.
+ *
+ * Passo e diametro sono arrotondati a pixel interi e ogni centro cade sempre
+ * nello stesso punto di un pixel. Senza, un puntino a cavallo fra due pixel
+ * viene sfumato dall'antialiasing e sembra più tenue degli altri: con lo
+ * zoom di Windows, o semplicemente con la larghezza della finestra, i puntini
+ * "mezzi" si alternano a quelli pieni e compare una trama a scacchiera.
+ */
 fun Modifier.dotGrid(color: Color, spacing: Dp = 14.dp, radius: Dp = 0.9.dp): Modifier =
     drawWithCache {
-        val step = spacing.toPx()
+        val step = spacing.toPx().roundToInt().coerceAtLeast(2).toFloat()
+        val diameter = (radius.toPx() * 2f).roundToInt().coerceAtLeast(1)
+        // Diametro pari: centro sul bordo fra pixel; dispari: al centro del pixel.
+        val phase = if (diameter % 2 == 0) 0f else 0.5f
         // Fuori da buildList: lì dentro `size` sarebbe quella della lista.
         val width = size.width
         val height = size.height
         val points = buildList {
-            val startX = (width % step) / 2f + step / 2f
-            var y = step / 2f
+            val startX = floor((width % step) / 2f + step / 2f) + phase
+            val startY = floor(step / 2f) + phase
+            var y = startY
             while (y < height) {
                 var x = startX
                 while (x < width) {
@@ -77,7 +92,7 @@ fun Modifier.dotGrid(color: Color, spacing: Dp = 14.dp, radius: Dp = 0.9.dp): Mo
                 y += step
             }
         }
-        val stroke = radius.toPx() * 2f
+        val stroke = diameter.toFloat()
         onDrawBehind {
             drawPoints(points, PointMode.Points, color, strokeWidth = stroke, cap = StrokeCap.Round)
         }

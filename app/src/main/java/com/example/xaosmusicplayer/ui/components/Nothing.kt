@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import kotlin.math.PI
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -63,15 +65,20 @@ fun Modifier.dotGrid(
     spacing: Dp = DotGridSpacing,
     radius: Dp = DotGridRadius,
 ): Modifier = drawWithCache {
-    val step = spacing.toPx()
+    // Passo e diametro in pixel interi, e ogni centro nello stesso punto di un
+    // pixel: un puntino a cavallo fra due pixel verrebbe sfumato e sembrerebbe
+    // più tenue degli altri.
+    val step = spacing.toPx().roundToInt().coerceAtLeast(2).toFloat()
+    val diameter = (radius.toPx() * 2f).roundToInt().coerceAtLeast(1)
+    val phase = if (diameter % 2 == 0) 0f else 0.5f
     // Fuori da buildList: lì dentro `size` sarebbe quella della lista.
     val width = size.width
     val height = size.height
     val points = buildList {
         // Mezzo passo di margine: la griglia resta centrata invece di
         // appoggiarsi al bordo sinistro.
-        val startX = (width % step) / 2f + step / 2f
-        val startY = step / 2f
+        val startX = floor((width % step) / 2f + step / 2f) + phase
+        val startY = floor(step / 2f) + phase
         var y = startY
         while (y < height) {
             var x = startX
@@ -82,7 +89,7 @@ fun Modifier.dotGrid(
             y += step
         }
     }
-    val stroke = radius.toPx() * 2f
+    val stroke = diameter.toFloat()
     onDrawBehind {
         drawPoints(points, PointMode.Points, color, strokeWidth = stroke, cap = StrokeCap.Round)
     }

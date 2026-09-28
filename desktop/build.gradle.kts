@@ -34,6 +34,9 @@ compose.desktop {
                 menuGroup = "Xaos"
                 shortcut = true
                 dirChooser = true
+                // Fisso per sempre: è ciò che fa riconoscere a Windows una
+                // versione nuova come aggiornamento di quella installata.
+                upgradeUuid = "64f0ed55-26a1-43a7-8814-f7f5064c6442"
             }
         }
     }
