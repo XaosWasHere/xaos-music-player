@@ -5,6 +5,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -27,6 +29,13 @@ fun main() = application {
     val scope = rememberCoroutineScope()
     val phone = remember { PhoneSync(scope).also { it.startWatching() } }
     val prefs by settings.data.collectAsState()
+    // La stessa icona dell'app Android: barra del titolo e barra delle applicazioni.
+    val appIcon = remember {
+        val bytes = Thread.currentThread().contextClassLoader
+            .getResourceAsStream("xaos.png")!!
+            .use { it.readAllBytes() }
+        BitmapPainter(bytes.decodeToImageBitmap())
+    }
 
     // La libreria si ricarica a ogni cambio di cartella.
     LaunchedEffect(prefs.libraryRoot) {
@@ -39,6 +48,7 @@ fun main() = application {
             exitApplication()
         },
         title = "Xaos",
+        icon = appIcon,
         state = rememberWindowState(size = DpSize(1320.dp, 860.dp)),
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)

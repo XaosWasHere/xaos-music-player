@@ -32,6 +32,8 @@ compose.desktop {
             description = "Xaos Music Player per desktop"
             windows {
                 menuGroup = "Xaos"
+                // La stessa icona dell'app Android, ridisegnata dal suo vettore.
+                iconFile.set(project.file("src/main/resources/xaos.ico"))
                 shortcut = true
                 dirChooser = true
                 // Fisso per sempre: è ciò che fa riconoscere a Windows una
