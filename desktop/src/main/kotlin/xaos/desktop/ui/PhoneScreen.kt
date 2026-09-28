@@ -34,6 +34,9 @@ import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.sync.SyncItem
 import xaos.desktop.sync.LyricsCheck
+import xaos.desktop.sync.ImportPlan
+import xaos.desktop.sync.ImportStatus
+import xaos.desktop.sync.PhoneFile
 import xaos.desktop.sync.SyncPlan
 import xaos.desktop.library.Library
 import androidx.compose.runtime.mutableStateListOf
@@ -52,8 +55,16 @@ fun PhoneScreen(
     excluded: Set<String>,
     onExcludedChange: (Set<String>) -> Unit,
     onOpenSettings: () -> Unit,
+    importFolder: String?,
+    importExcluded: Set<String>,
+    onImportExcludedChange: (Set<String>) -> Unit,
+    onImport: (List<PhoneFile>) -> Unit,
 ) {
     val state by phone.state.collectAsState()
+    val importPlan by phone.importPlan.collectAsState()
+    val importStatus by phone.importStatus.collectAsState()
+    var importMode by remember { mutableStateOf(false) }
+    val importExpanded = remember { mutableStateListOf<String>() }
     val plan by phone.plan.collectAsState()
     val status by phone.status.collectAsState()
     val install by phone.install.collectAsState()
@@ -66,6 +77,13 @@ fun PhoneScreen(
     LaunchedEffect(state, snapshot.tracks.size, preferMp3, phoneFolder) {
         if (state is PhoneState.Connected && roots.isNotEmpty() && snapshot.tracks.isNotEmpty()) {
             phone.plan(roots, snapshot.tracks, preferMp3)
+        }
+    }
+
+    // Aprire l'importazione basta a vedere cosa c'è solo sul telefono.
+    LaunchedEffect(state, snapshot.tracks.size, importMode) {
+        if (importMode && state is PhoneState.Connected && snapshot.tracks.isNotEmpty()) {
+            phone.planImport(snapshot.tracks)
         }
     }
 
@@ -89,10 +107,27 @@ fun PhoneScreen(
         item {
             ScreenTitle(
                 "TELEFONO",
-                caption = "INVIO VIA USB · SOLO AGGIUNTE, NIENTE VIENE CANCELLATO",
+                caption = if (importMode) "IMPORTAZIONE VIA USB · SOLO COPIE, SUL TELEFONO NON CAMBIA NIENTE"
+                else "INVIO VIA USB · SOLO AGGIUNTE, NIENTE VIENE CANCELLATO",
+                trailing = if (state is PhoneState.Connected) {
+                    { DirectionSelector(importMode) { importMode = it } }
+                } else null,
             )
         }
-        item {
+        if (importMode && state is PhoneState.Connected) {
+            importSection(
+                phone = phone,
+                snapshotTracks = snapshot.tracks,
+                plan = importPlan,
+                status = importStatus,
+                folder = importFolder,
+                excluded = importExcluded,
+                expanded = importExpanded,
+                onExcludedChange = onImportExcludedChange,
+                onImport = onImport,
+                onOpenSettings = onOpenSettings,
+            )
+        } else item {
             when (val s = state) {
                 PhoneState.NoAdb -> InfoCard(
                     "ADB NON TROVATO",
@@ -139,7 +174,7 @@ fun PhoneScreen(
             }
         }
 
-        if (state is PhoneState.Connected && pending.isNotEmpty() && status !is SyncStatus.Running) {
+        if (!importMode && state is PhoneState.Connected && pending.isNotEmpty() && status !is SyncStatus.Running) {
             val byAlbum = pending
                 .groupBy { (Library.collapsedParent(it.track.file)?.path ?: "") + "|" + it.track.album }
                 .entries
@@ -189,6 +224,241 @@ fun PhoneScreen(
                 }
             }
         }
+    }
+}
+
+/** Le due direzioni, come i filtri a pillola del resto dell'app. */
+@Composable
+private fun DirectionSelector(importMode: Boolean, onChange: (Boolean) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PillButton("INVIA AL TELEFONO", onClick = { onChange(false) }, icon = XaosIcons.Phone, filled = !importMode)
+        PillButton("IMPORTA DAL TELEFONO", onClick = { onChange(true) }, icon = XaosIcons.Download, filled = importMode)
+    }
+}
+
+/**
+ * La direzione opposta: i brani che sono solo sul telefono, da copiare sul PC.
+ * Stessa lista a spunte dell'invio, raggruppata per album del telefono.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.importSection(
+    phone: PhoneSync,
+    snapshotTracks: List<xaos.desktop.library.Track>,
+    plan: ImportPlan?,
+    status: ImportStatus,
+    folder: String?,
+    excluded: Set<String>,
+    expanded: MutableList<String>,
+    onExcludedChange: (Set<String>) -> Unit,
+    onImport: (List<PhoneFile>) -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val files = plan?.onlyOnPhone.orEmpty()
+    val chosen = files.filter { it.path !in excluded }
+    item {
+        ImportPanel(
+            plan = plan,
+            chosen = chosen,
+            status = status,
+            folder = folder,
+            onImport = { onImport(chosen) },
+            onCancel = phone::cancelImport,
+            onRefresh = { phone.planImport(snapshotTracks) },
+            onDismiss = phone::dismissImportResult,
+            onOpenSettings = onOpenSettings,
+        )
+    }
+    if (files.isEmpty() || status is ImportStatus.Running) return
+
+    val byAlbum = files
+        .groupBy { it.path.substringBeforeLast('/') + "|" + it.album }
+        .entries
+        .sortedBy { (it.value.first().album.ifBlank { it.value.first().path.substringBeforeLast('/') }).lowercase() }
+    val allPaths = files.map { it.path }.toSet()
+    item {
+        SelectAllRow(
+            state = checkOf(chosen.size, files.size),
+            selectedCount = chosen.size,
+            total = files.size,
+            selectedBytes = chosen.sumOf { it.size },
+            onToggle = {
+                onExcludedChange(if (chosen.size == files.size) excluded + allPaths else excluded - allPaths)
+            },
+        )
+    }
+    byAlbum.forEach { (key, entries) ->
+        val paths = entries.map { it.path }.toSet()
+        val count = entries.count { it.path !in excluded }
+        val isOpen = key in expanded
+        item(key = "imp-$key") {
+            ImportAlbumRow(
+                entries = entries,
+                check = checkOf(count, entries.size),
+                chosen = count,
+                expanded = isOpen,
+                onToggle = { onExcludedChange(if (count == entries.size) excluded + paths else excluded - paths) },
+                onExpand = { if (isOpen) expanded.remove(key) else expanded.add(key) },
+            )
+        }
+        if (isOpen) {
+            items(entries, key = { "impt-" + it.path }) { f ->
+                val on = f.path !in excluded
+                ImportTrackRow(f, on) { onExcludedChange(if (on) excluded + f.path else excluded - f.path) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportPanel(
+    plan: ImportPlan?,
+    chosen: List<PhoneFile>,
+    status: ImportStatus,
+    folder: String?,
+    onImport: () -> Unit,
+    onCancel: () -> Unit,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val colors = Xaos.colors
+    Column(Modifier.fillMaxWidth().nothingCard().padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(XaosIcons.Folder, null, tint = colors.ink, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("SUL PC IN", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                Text(
+                    folder ?: "Aggiungi una cartella di musica nelle impostazioni",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.pressable(onOpenSettings),
+                )
+            }
+        }
+        Hairline()
+        when {
+            status is ImportStatus.Running -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    DotText("${(status.fraction * 100).toInt()}%", color = colors.ink, pitch = 5.dp)
+                    Text(
+                        "[${status.done}/${status.total}] · ${formatBytes(status.doneBytes)} / ${formatBytes(status.totalBytes)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.inkTertiary,
+                    )
+                }
+                DotProgressLine(status.fraction, modifier = Modifier.fillMaxWidth().height(10.dp), spacing = 6.dp, radius = 1.8.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    DotSpinner(size = 16.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(status.name, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    PillButton("ANNULLA", onClick = onCancel, icon = XaosIcons.Close)
+                }
+            }
+            plan == null || status is ImportStatus.Planning -> Row(verticalAlignment = Alignment.CenterVertically) {
+                DotSpinner(size = 22.dp)
+                Spacer(Modifier.width(12.dp))
+                Text("CONFRONTO FRA TELEFONO E PC…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+            }
+            else -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                    BigStat(chosen.size.toString(), "DA IMPORTARE")
+                    BigStat(formatBytes(chosen.sumOf { it.size }), "DA COPIARE")
+                    BigStat(plan.onlyOnPhone.size.toString(), "SOLO SUL TELEFONO")
+                    BigStat(plan.phoneTotal.toString(), "BRANI SUL TELEFONO")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PillButton(
+                        text = when {
+                            plan.onlyOnPhone.isEmpty() -> "IL PC HA GIÀ TUTTO"
+                            chosen.isEmpty() -> "NIENTE SELEZIONATO"
+                            else -> "IMPORTA SUL PC [${chosen.size}]"
+                        },
+                        onClick = onImport,
+                        icon = XaosIcons.Download,
+                        filled = true,
+                        enabled = chosen.isNotEmpty() && folder != null,
+                    )
+                    PillButton("RICONTROLLA", onClick = onRefresh)
+                }
+            }
+        }
+        when (status) {
+            is ImportStatus.Done -> ResultLine(
+                text = buildString {
+                    append(if (status.cancelled) "INTERROTTO · " else "COMPLETATO · ")
+                    append("[${status.copied}] COPIATI SUL PC")
+                    if (status.failed > 0) append(" · [${status.failed}] NON RIUSCITI")
+                },
+                onDismiss = onDismiss,
+            )
+            is ImportStatus.Failed -> ResultLine("ERRORE · ${status.message}", onDismiss)
+            else -> Unit
+        }
+    }
+}
+
+@Composable
+private fun ImportAlbumRow(
+    entries: List<PhoneFile>,
+    check: Check,
+    chosen: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    val colors = Xaos.colors
+    val first = entries.first()
+    Row(
+        Modifier.fillMaxWidth().hoverRow().pressable(onExpand).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        XaosCheckbox(check, onToggle)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                first.album.ifBlank { first.path.substringBeforeLast('/').substringAfterLast('/') }.uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (check == Check.OFF) colors.inkTertiary else colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                first.artist.ifBlank { "Artista sconosciuto" },
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.inkSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text("[$chosen/${entries.size}] · ${formatBytes(entries.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+        Spacer(Modifier.width(10.dp))
+        Icon(
+            XaosIcons.ChevronDown,
+            if (expanded) "Chiudi" else "Mostra i brani",
+            tint = colors.inkSecondary,
+            modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
+        )
+    }
+}
+
+@Composable
+private fun ImportTrackRow(file: PhoneFile, checked: Boolean, onToggle: () -> Unit) {
+    val colors = Xaos.colors
+    Row(
+        Modifier.fillMaxWidth().padding(start = 46.dp).hoverRow().pressable(onToggle).padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        XaosCheckbox(if (checked) Check.ON else Check.OFF, onToggle, size = 16.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(file.title, style = MaterialTheme.typography.bodyMedium, color = if (checked) colors.ink else colors.inkTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(file.path.substringAfterLast('/'), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(formatDuration(file.durationMs), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+        Spacer(Modifier.width(12.dp))
+        Text(formatBytes(file.size), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
     }
 }
 

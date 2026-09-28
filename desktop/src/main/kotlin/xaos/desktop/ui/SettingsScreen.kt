@@ -66,6 +66,7 @@ fun SettingsScreen(
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
     onPickDownloadFolder: () -> Unit,
+    onPickImportFolder: () -> Unit,
 ) {
     val prefs by settings.data.collectAsState()
     val scan by library.scan.collectAsState()
@@ -194,7 +195,7 @@ fun SettingsScreen(
             }
         }
 
-        item { PhoneCard(prefs, settings) }
+        item { PhoneCard(prefs, settings, onPickImportFolder) }
 
         item {
             SettingsCard("ASPETTO") {
@@ -375,7 +376,7 @@ private fun formatHz(hz: Float): String =
     if (hz >= 1000f) String.format(Locale.US, "%.0fK", hz / 1000f) else String.format(Locale.US, "%.0f", hz)
 
 @Composable
-private fun PhoneCard(prefs: SettingsData, settings: Settings) {
+private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolder: () -> Unit) {
     val colors = Xaos.colors
     var folder by remember(prefs.phoneFolder) { mutableStateOf(prefs.phoneFolder) }
     SettingsCard("TELEFONO") {
@@ -415,6 +416,23 @@ private fun PhoneCard(prefs: SettingsData, settings: Settings) {
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
         )
+
+        Spacer(Modifier.height(4.dp))
+        Text("IMPORTATI DAL TELEFONO, SUL PC IN", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                prefs.effectiveImportFolder ?: "—",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.ink,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            PillButton("CAMBIA", onClick = onPickImportFolder, icon = XaosIcons.Folder)
+            if (prefs.importFolder != null) {
+                PillButton("PREDEFINITA", onClick = { settings.update { it.copy(importFolder = null) } })
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
         Text("VERSIONE DA INVIARE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)

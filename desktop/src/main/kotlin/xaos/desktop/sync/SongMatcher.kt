@@ -30,23 +30,30 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
     fun isOnPhone(track: Track): Boolean = find(track) != null
 
     /** Il brano del telefono che corrisponde a [track], con il suo percorso. */
-    fun find(track: Track): PhoneSong? {
-        byTitle[fullKey(track.title)]?.let { candidates ->
+    fun find(track: Track): PhoneSong? = find(track.title, track.artist, track.durationMs)
+
+    /**
+     * Il brano dell'elenco che corrisponde a titolo, artista e durata dati.
+     * Funziona nei due sensi: l'elenco può essere quello del telefono (per
+     * sapere cosa c'è già lì) o la libreria del PC (per sapere cosa c'è solo
+     * sul telefono).
+     */
+    fun find(title: String, artist: String, durationMs: Long): PhoneSong? {
+        byTitle[fullKey(title)]?.let { candidates ->
             // A parità di titolo, prima quello con la durata più vicina.
             candidates
-                .filter { artistsCompatible(it.artist, track.artist) || closeDuration(it, track) }
-                .minByOrNull { abs(it.durationMs - track.durationMs) }
+                .filter { artistsCompatible(it.artist, artist) || closeDuration(it.durationMs, durationMs) }
+                .minByOrNull { abs(it.durationMs - durationMs) }
                 ?.let { return it }
         }
-        byBareTitle[bareKey(track.title)]?.let { candidates ->
-            candidates.filter { closeDuration(it, track) }.minByOrNull { abs(it.durationMs - track.durationMs) }?.let { return it }
+        byBareTitle[bareKey(title)]?.let { candidates ->
+            candidates.filter { closeDuration(it.durationMs, durationMs) }.minByOrNull { abs(it.durationMs - durationMs) }?.let { return it }
         }
         return null
     }
 
-    private fun closeDuration(song: PhoneSong, track: Track): Boolean =
-        song.durationMs > 0 && track.durationMs > 0 &&
-            abs(song.durationMs - track.durationMs) <= DURATION_TOLERANCE_MS
+    private fun closeDuration(a: Long, b: Long): Boolean =
+        a > 0 && b > 0 && abs(a - b) <= DURATION_TOLERANCE_MS
 
     /**
      * "9Lana, Giga, TeddyLoid" e "9Lana" sono compatibili: basta che uno
@@ -106,5 +113,26 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
             }.filter { it.title.isNotBlank() }.toList()
 
         private fun String.nullIfNull() = if (this == "NULL") "" else this
+
+        /**
+         * Legge l'uscita di `content query` con le colonne [keys], nell'ordine
+         * della proiezione. I valori possono contenere virgole, quindi ogni
+         * colonna si cerca dall'ultima alla prima, a ritroso.
+         */
+        fun parseRows(output: String, keys: List<String>): List<Map<String, String>> =
+            output.lineSequence().mapNotNull { raw ->
+                val line = raw.trimEnd('\r')
+                if (!line.startsWith("Row:")) return@mapNotNull null
+                val row = HashMap<String, String>()
+                var end = line.length
+                for (i in keys.indices.reversed()) {
+                    val marker = if (i == 0) " ${keys[i]}=" else ", ${keys[i]}="
+                    val at = line.lastIndexOf(marker, end - 1)
+                    if (at < 0) return@mapNotNull null
+                    row[keys[i]] = line.substring(at + marker.length, end).nullIfNull()
+                    end = at
+                }
+                row
+            }.toList()
     }
 }

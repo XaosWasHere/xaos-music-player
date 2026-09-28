@@ -42,6 +42,7 @@ import xaos.desktop.player.Player
 import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.online.OnlineTrack
+import xaos.desktop.sync.PhoneFile
 import xaos.desktop.online.YtDlp
 import androidx.compose.runtime.CompositionLocalProvider
 import xaos.desktop.theme.DotText
@@ -81,6 +82,8 @@ fun XaosDesktopApp(
     onRescan: () -> Unit,
     onPickDownloadFolder: () -> Unit,
     onDownload: (OnlineTrack) -> Unit,
+    onImport: (List<PhoneFile>) -> Unit,
+    onPickImportFolder: () -> Unit,
 ) {
     val prefs by settings.data.collectAsState()
     val snapshot by library.snapshot.collectAsState()
@@ -180,6 +183,10 @@ fun XaosDesktopApp(
                                 excluded = prefs.syncExcluded,
                                 onExcludedChange = { set -> settings.update { it.copy(syncExcluded = set) } },
                                 onOpenSettings = { select(Section.SETTINGS) },
+                                importFolder = prefs.effectiveImportFolder,
+                                importExcluded = prefs.importExcluded,
+                                onImportExcludedChange = { set -> settings.update { it.copy(importExcluded = set) } },
+                                onImport = onImport,
                             )
                             section == Section.SETTINGS -> SettingsScreen(
                                 settings = settings,
@@ -190,6 +197,7 @@ fun XaosDesktopApp(
                                 onAddFolder = onAddFolder,
                                 onRescan = onRescan,
                                 onPickDownloadFolder = onPickDownloadFolder,
+                                onPickImportFolder = onPickImportFolder,
                             )
                             query.isNotBlank() -> SearchResults(
                                 query = query,

@@ -60,6 +60,29 @@ data class LyricsUpdate(
     val missingOnPhone: Boolean,
 )
 
+/** Un brano che sta sul telefono, con quanto serve per portarlo sul PC. */
+data class PhoneFile(
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationMs: Long,
+    val size: Long,
+    val path: String,
+)
+
+/** Quello che c'è sul telefono e non sul PC. */
+data class ImportPlan(val onlyOnPhone: List<PhoneFile>, val phoneTotal: Int)
+
+sealed interface ImportStatus {
+    data object Idle : ImportStatus
+    data object Planning : ImportStatus
+    data class Running(val done: Int, val total: Int, val doneBytes: Long, val totalBytes: Long, val name: String) : ImportStatus {
+        val fraction: Float get() = if (totalBytes <= 0) 0f else doneBytes.toFloat() / totalBytes
+    }
+    data class Done(val copied: Int, val failed: Int, val cancelled: Boolean) : ImportStatus
+    data class Failed(val message: String) : ImportStatus
+}
+
 sealed interface LyricsCheck {
     data object Idle : LyricsCheck
     data class Checking(val done: Int, val total: Int) : LyricsCheck
@@ -147,6 +170,13 @@ class PhoneSync(
 
     private var syncJob: Job? = null
     private var lyricsJob: Job? = null
+    private var importJob: Job? = null
+
+    private val _importPlan = MutableStateFlow<ImportPlan?>(null)
+    val importPlan: StateFlow<ImportPlan?> = _importPlan.asStateFlow()
+
+    private val _importStatus = MutableStateFlow<ImportStatus>(ImportStatus.Idle)
+    val importStatus: StateFlow<ImportStatus> = _importStatus.asStateFlow()
     @Volatile private var currentPush: Process? = null
 
     /** Controlla ogni due secondi se il telefono c'è: collegarlo basta. */
@@ -159,6 +189,7 @@ class PhoneSync(
                     _state.value = next
                     if (next !is PhoneState.Connected) {
                         _plan.value = null
+                        _importPlan.value = null
                         lyricsJob?.cancel()
                         _lyrics.value = LyricsCheck.Idle
                     }
@@ -345,6 +376,123 @@ class PhoneSync(
 
     private fun normalize(text: String) = text.replace("\r\n", "\n").replace('\r', '\n').lines()
         .joinToString("\n") { it.trimEnd() }.trim()
+
+    // ---------------------------------------------------------- telefono → PC
+
+    /**
+     * Cerca i brani che stanno sul telefono e non sul PC: tutti quelli che
+     * Android conosce come musica, confrontati con la libreria per titolo,
+     * artista e durata, come nell'altra direzione.
+     */
+    fun planImport(tracks: List<Track>) {
+        val phone = _state.value as? PhoneState.Connected ?: return
+        if (_importStatus.value is ImportStatus.Running) return
+        scope.launch(Dispatchers.IO) {
+            if (_importStatus.value !is ImportStatus.Done) _importStatus.value = ImportStatus.Planning
+            val result = runCatching {
+                val onPhone = listPhoneMusic(phone.serial)
+                // Le copie MP3 dei FLAC contano come lo stesso brano: il PC ce l'ha.
+                val pc = SongMatcher(tracks.map { PhoneSong(it.title, it.artist, it.durationMs, it.path) })
+                ImportPlan(
+                    onlyOnPhone = onPhone.filter { pc.find(it.title, it.artist, it.durationMs) == null },
+                    phoneTotal = onPhone.size,
+                )
+            }
+            result.onSuccess {
+                _importPlan.value = it
+                if (_importStatus.value is ImportStatus.Planning) _importStatus.value = ImportStatus.Idle
+            }
+            result.onFailure { _importStatus.value = ImportStatus.Failed(it.message ?: "Impossibile leggere il telefono") }
+        }
+    }
+
+    /**
+     * Copia [selected] dal telefono in [destination], mantenendo le cartelle
+     * che hanno sotto Music (di solito Artista/Album). Alla fine [onDone]
+     * rilegge la libreria; il piano si ricalcola da solo.
+     */
+    fun importFiles(selected: List<PhoneFile>, destination: File, onDone: () -> Unit) {
+        val phone = _state.value as? PhoneState.Connected ?: return
+        if (selected.isEmpty() || importJob?.isActive == true) return
+        val totalBytes = selected.sumOf { it.size }
+        importJob = scope.launch(Dispatchers.IO) {
+            var copied = 0
+            var failed = 0
+            var doneBytes = 0L
+            for (file in selected) {
+                if (!isActive) break
+                _importStatus.value = ImportStatus.Running(copied + failed, selected.size, doneBytes, totalBytes, file.path.substringAfterLast('/'))
+                val target = localTarget(destination, file.path)
+                target.parentFile?.mkdirs()
+                val ok = runCatching {
+                    if (target.exists() && target.length() == file.size) return@runCatching true
+                    val process = ProcessBuilder(adb!!.path, "-s", phone.serial, "pull", file.path, target.path)
+                        .redirectErrorStream(true).start()
+                    currentPush = process
+                    process.inputStream.readAllBytes()
+                    process.waitFor() == 0 && target.isFile
+                }.getOrDefault(false)
+                currentPush = null
+                if (ok) copied++ else { failed++; target.takeIf { it.exists() && it.length() != file.size }?.delete() }
+                doneBytes += file.size
+            }
+            val cancelled = !isActive
+            _importStatus.value = ImportStatus.Done(copied, failed, cancelled)
+            onDone()
+        }
+    }
+
+    fun cancelImport() {
+        importJob?.cancel()
+        currentPush?.destroy()
+    }
+
+    fun dismissImportResult() {
+        if (_importStatus.value is ImportStatus.Done || _importStatus.value is ImportStatus.Failed) {
+            _importStatus.value = ImportStatus.Idle
+        }
+    }
+
+    /** Tutta la musica del telefono secondo MediaStore, con peso e percorso. */
+    private fun listPhoneMusic(serial: String): List<PhoneFile> {
+        val keys = listOf("title", "artist", "album", "duration", "_size", "_data")
+        val out = shell(
+            serial,
+            "content query --uri content://media/external/audio/media " +
+                "--projection ${keys.joinToString(":")} --where \"is_music!=0\"",
+            timeoutS = 60,
+        ) ?: return emptyList()
+        return SongMatcher.parseRows(out, keys).mapNotNull { row ->
+            val path = row["_data"]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val duration = row["duration"]?.toLongOrNull() ?: 0L
+            // Suonerie e note vocali passano il filtro di Android più spesso di
+            // quanto si creda: sotto i trenta secondi non è un brano da importare.
+            if (duration in 1 until MIN_IMPORT_MS) return@mapNotNull null
+            PhoneFile(
+                title = row["title"].orEmpty().ifBlank { path.substringAfterLast('/').substringBeforeLast('.') },
+                artist = row["artist"].orEmpty().let { if (it == "<unknown>") "" else it },
+                album = row["album"].orEmpty(),
+                durationMs = duration,
+                size = row["_size"]?.toLongOrNull() ?: 0L,
+                path = path.replace("/storage/emulated/0/", "/sdcard/"),
+            )
+        }
+    }
+
+    /**
+     * Dove finisce sul PC un file del telefono: le cartelle sotto Music
+     * restano (Artista/Album), il resto va in una cartella col nome di quella
+     * d'origine. I caratteri che Windows non accetta nei nomi si sostituiscono.
+     */
+    private fun localTarget(destination: File, phonePath: String): File {
+        val music = "/sdcard/Music/"
+        val relative = if (phonePath.startsWith(music)) phonePath.removePrefix(music)
+        else phonePath.split('/').takeLast(2).joinToString("/")
+        val safe = relative.split('/').filter { it.isNotBlank() }.joinToString(File.separator) { segment ->
+            segment.replace(Regex("[<>:\"\\\\|?*]"), "_").trimEnd('.', ' ').ifEmpty { "_" }
+        }
+        return File(destination, safe)
+    }
 
     fun cancel() {
         syncJob?.cancel()
@@ -579,6 +727,7 @@ class PhoneSync(
         const val APP_PACKAGE = "com.example.xaosmusicplayer"
         /** Quanto leggere al primo colpo: basta per quasi tutti i tag senza copertine enormi. */
         const val HEAD_PROBE = 256 * 1024
+        const val MIN_IMPORT_MS = 30_000L
         const val BUNDLED_APK = "xaos-android.apk"
         const val BUNDLED_VERSION = "xaos-android.properties"
         const val BUNDLED_ABI = "arm64-v8a"

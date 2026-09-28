@@ -126,6 +126,24 @@ fun main() = application {
                         }
                     }
                 },
+                onPickImportFolder = {
+                    scope.launch {
+                        pickFolder(prefs.effectiveImportFolder)?.let { dir ->
+                            settings.update { it.copy(importFolder = dir.path) }
+                        }
+                    }
+                },
+                onImport = { files ->
+                    val folder = prefs.effectiveImportFolder?.let(::File) ?: return@XaosDesktopApp
+                    // Come per i download: la cartella d'arrivo entra in libreria.
+                    if (prefs.roots.none { folder.path.startsWith(it) }) settings.setRoots(prefs.roots + folder.path)
+                    phone.importFiles(files, folder) {
+                        scope.launch {
+                            library.load(settings.data.value.roots.map(::File).filter { it.isDirectory })
+                            phone.planImport(library.snapshot.value.tracks)
+                        }
+                    }
+                },
                 onDownload = { track ->
                     val folder = prefs.effectiveDownloadFolder?.let(::File) ?: return@XaosDesktopApp
                     // Se i download finiscono fuori dalla libreria, la cartella

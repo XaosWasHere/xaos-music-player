@@ -45,12 +45,19 @@ data class SettingsData(
     val fullscreenBackground: FullscreenBackground = FullscreenBackground.ANIMATED,
     /** Dove finiscono i brani scaricati; null = "Xaos" dentro la prima cartella della libreria. */
     val downloadFolder: String? = null,
+    /** Dove finiscono i brani importati dal telefono; null = "Dal telefono" nella prima cartella. */
+    val importFolder: String? = null,
+    /** I brani del telefono da non importare: le spunte si ricordano anche qui. */
+    val importExcluded: Set<String> = emptySet(),
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }
 
     val effectiveDownloadFolder: String?
         get() = downloadFolder ?: roots.firstOrNull()?.let { File(it, "Xaos").path }
+
+    val effectiveImportFolder: String?
+        get() = importFolder ?: roots.firstOrNull()?.let { File(it, "Dal telefono").path }
 
     companion object {
         const val DEFAULT_PHONE_FOLDER = "/sdcard/Music/Xaos"

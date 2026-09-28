@@ -17,3 +17,7 @@ local.properties
 # Cache del compilatore Kotlin e impostazioni locali di Claude Code
 .kotlin
 /.claude/settings.local.json
+
+# File temporanei di Google Drive per desktop
+.tmp.driveupload/
+.tmp.drivedownload/
