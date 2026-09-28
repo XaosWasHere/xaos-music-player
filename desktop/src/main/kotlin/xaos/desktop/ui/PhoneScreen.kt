@@ -33,6 +33,7 @@ import xaos.desktop.sync.AppInstall
 import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.sync.SyncItem
+import xaos.desktop.sync.LyricsCheck
 import xaos.desktop.sync.SyncPlan
 import xaos.desktop.library.Library
 import androidx.compose.runtime.mutableStateListOf
@@ -128,6 +129,7 @@ fun PhoneScreen(
                         onDismiss = phone::dismissResult,
                         onOpenSettings = onOpenSettings,
                     )
+                    LyricsPanel(phone)
                 }
             }
         }
@@ -289,6 +291,11 @@ private fun TrackSelectRow(item: SyncItem, checked: Boolean, onToggle: () -> Uni
     ) {
         XaosCheckbox(if (checked) Check.ON else Check.OFF, onToggle, size = 16.dp)
         Spacer(Modifier.width(12.dp))
+        // Già sul telefono, ma modificato sul PC da allora: va rimandato.
+        if (item.isUpdate) {
+            Tag("AGGIORNATO")
+            Spacer(Modifier.width(8.dp))
+        }
         Text(
             item.track.title,
             style = MaterialTheme.typography.bodyMedium,
@@ -542,6 +549,99 @@ private fun ConfirmInstallDialog(phoneName: String, apkSize: Long?, onConfirm: (
         confirmButton = { PillButton("INSTALLA", onClick = onConfirm, filled = true) },
         dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
     )
+}
+
+/**
+ * I testi aggiunti o cambiati sul PC che sul telefono mancano o sono diversi.
+ * Aggiornarli tocca solo il testo dentro il file del telefono.
+ */
+@Composable
+private fun LyricsPanel(phone: PhoneSync) {
+    val colors = Xaos.colors
+    val check by phone.lyrics.collectAsState()
+    val deselected = remember { mutableStateListOf<String>() }
+
+    when (val c = check) {
+        LyricsCheck.Idle -> Unit
+        is LyricsCheck.Checking -> Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            DotSpinner(size = 16.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("CONTROLLO DEI TESTI SUL TELEFONO  ${c.done}/${c.total}", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+        }
+        is LyricsCheck.Updating -> Column(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionHeader("AGGIORNAMENTO DEI TESTI", count = c.total)
+            DotProgressLine(c.done.toFloat() / c.total.coerceAtLeast(1), modifier = Modifier.fillMaxWidth().height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DotSpinner(size = 14.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("[${c.done}/${c.total}]  ${c.name}", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        is LyricsCheck.Updated -> Row(Modifier.fillMaxWidth().nothingCard().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AccentDot(size = 6.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "TESTI AGGIORNATI SUL TELEFONO · [${c.ok}]" + if (c.failed > 0) " · [${c.failed}] NON RIUSCITI" else "",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.ink,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(XaosIcons.Close, "Chiudi", tint = colors.inkTertiary, modifier = Modifier.size(16.dp).pressable(phone::dismissLyricsResult))
+        }
+        is LyricsCheck.Ready -> if (c.updates.isNotEmpty()) {
+            val chosen = c.updates.filter { it.track.path !in deselected }
+            Column(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader("TESTI DA AGGIORNARE SUL TELEFONO", count = c.updates.size) {
+                    PillButton(
+                        "AGGIORNA TESTI [${chosen.size}]",
+                        onClick = { phone.updateLyrics(chosen) },
+                        icon = XaosIcons.Sync,
+                        filled = true,
+                        enabled = chosen.isNotEmpty(),
+                    )
+                }
+                Text(
+                    "Sul PC questi brani hanno un testo che sul telefono manca o è diverso. " +
+                        "L'aggiornamento scrive solo il testo nel file del telefono: audio, nome e cartella restano quelli.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.inkTertiary,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val all = chosen.size == c.updates.size
+                    XaosCheckbox(checkOf(chosen.size, c.updates.size), onClick = {
+                        if (all) deselected.addAll(c.updates.map { it.track.path }) else deselected.clear()
+                    }, size = 18.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(if (all) "DESELEZIONA TUTTO" else "SELEZIONA TUTTO", style = MaterialTheme.typography.labelMedium, color = colors.ink)
+                }
+                c.updates.forEach { u ->
+                    val on = u.track.path !in deselected
+                    Row(
+                        Modifier.fillMaxWidth().hoverRow().pressable {
+                            if (on) deselected.add(u.track.path) else deselected.remove(u.track.path)
+                        }.padding(horizontal = 6.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        XaosCheckbox(if (on) Check.ON else Check.OFF, onClick = {
+                            if (on) deselected.add(u.track.path) else deselected.remove(u.track.path)
+                        }, size = 16.dp)
+                        Spacer(Modifier.width(12.dp))
+                        ArtworkImage(u.track, size = 30.dp, corner = 5.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(u.track.title, style = MaterialTheme.typography.bodyMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(u.phonePath.substringAfterLast('/'), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(
+                            if (u.missingOnPhone) "MANCA SUL TELEFONO" else "DIVERSO",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inkSecondary,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 fun formatBytes(bytes: Long): String {

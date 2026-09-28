@@ -5,7 +5,7 @@ import java.text.Normalizer
 import kotlin.math.abs
 
 /** Un brano come lo conosce la libreria di Android (MediaStore). */
-data class PhoneSong(val title: String, val artist: String, val durationMs: Long)
+data class PhoneSong(val title: String, val artist: String, val durationMs: Long, val path: String = "")
 
 /**
  * Riconosce se un brano del PC c'è già sul telefono, a prescindere da dove sta
@@ -27,14 +27,21 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
     private val byTitle: Map<String, List<PhoneSong>> = phoneSongs.groupBy { fullKey(it.title) }
     private val byBareTitle: Map<String, List<PhoneSong>> = phoneSongs.groupBy { bareKey(it.title) }
 
-    fun isOnPhone(track: Track): Boolean {
+    fun isOnPhone(track: Track): Boolean = find(track) != null
+
+    /** Il brano del telefono che corrisponde a [track], con il suo percorso. */
+    fun find(track: Track): PhoneSong? {
         byTitle[fullKey(track.title)]?.let { candidates ->
-            if (candidates.any { artistsCompatible(it.artist, track.artist) || closeDuration(it, track) }) return true
+            // A parità di titolo, prima quello con la durata più vicina.
+            candidates
+                .filter { artistsCompatible(it.artist, track.artist) || closeDuration(it, track) }
+                .minByOrNull { abs(it.durationMs - track.durationMs) }
+                ?.let { return it }
         }
         byBareTitle[bareKey(track.title)]?.let { candidates ->
-            if (candidates.any { closeDuration(it, track) }) return true
+            candidates.filter { closeDuration(it, track) }.minByOrNull { abs(it.durationMs - track.durationMs) }?.let { return it }
         }
-        return false
+        return null
     }
 
     private fun closeDuration(song: PhoneSong, track: Track): Boolean =
@@ -83,14 +90,18 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
             output.lineSequence().mapNotNull { raw ->
                 val line = raw.trimEnd('\r')
                 if (!line.startsWith("Row:")) return@mapNotNull null
-                val d = line.lastIndexOf(", duration=")
+                // Il percorso, se chiesto, è l'ultima colonna.
+                val p = line.lastIndexOf(", _data=")
+                val endDuration = if (p >= 0) p else line.length
+                val d = line.lastIndexOf(", duration=", endDuration)
                 val a = line.lastIndexOf(", artist=", d)
                 val t = line.indexOf("title=")
                 if (d < 0 || a < 0 || t < 0 || t > a) return@mapNotNull null
                 PhoneSong(
                     title = line.substring(t + 6, a).nullIfNull(),
                     artist = line.substring(a + 9, d).nullIfNull(),
-                    durationMs = line.substring(d + 11).trim().toLongOrNull() ?: 0L,
+                    durationMs = line.substring(d + 11, endDuration).trim().toLongOrNull() ?: 0L,
+                    path = if (p >= 0) line.substring(p + 8).nullIfNull() else "",
                 )
             }.filter { it.title.isNotBlank() }.toList()
 

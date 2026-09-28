@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -457,3 +458,51 @@ fun VerticalDotSlider(
         }
     }
 }
+
+/** Campo di testo a pillola, con l'etichetta tecnica sopra. */
+@Composable
+fun XaosTextField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+) {
+    val c = Xaos.colors
+    val shape = RoundedCornerShape(12.dp)
+    val focus = remember { MutableInteractionSource() }
+    val focused by focus.collectIsFocusedAsState()
+    androidx.compose.foundation.layout.Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = c.inkTertiary)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(c.card, shape)
+                .border(1.dp, if (focused) c.accent else c.line, shape)
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+        ) {
+            if (value.isEmpty() && placeholder.isNotEmpty()) {
+                Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = c.inkTertiary)
+            }
+            androidx.compose.foundation.text.BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                interactionSource = focus,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.ink),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accentInk),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/** Le azioni su un brano, offerte da ogni elenco tramite il suo menu. */
+class TrackActions(
+    val onEdit: (xaos.desktop.library.Track) -> Unit,
+    val onLyrics: (xaos.desktop.library.Track) -> Unit,
+    val onShowInFolder: (xaos.desktop.library.Track) -> Unit,
+)
+
+val LocalTrackActions = androidx.compose.runtime.staticCompositionLocalOf<TrackActions?> { null }

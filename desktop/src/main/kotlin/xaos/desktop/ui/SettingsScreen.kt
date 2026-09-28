@@ -42,8 +42,12 @@ import xaos.desktop.Settings
 import xaos.desktop.SettingsData
 import xaos.desktop.library.Library
 import xaos.desktop.library.ScanState
+import xaos.desktop.library.hasLyricsFile
 import xaos.desktop.player.Player
 import xaos.desktop.sync.PhoneSync
+import xaos.desktop.online.YtDlp
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import xaos.desktop.theme.Xaos
 import java.io.File
 import java.util.Locale
@@ -58,12 +62,17 @@ fun SettingsScreen(
     library: Library,
     player: Player,
     phone: PhoneSync,
+    ytdlp: YtDlp,
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
+    onPickDownloadFolder: () -> Unit,
 ) {
     val prefs by settings.data.collectAsState()
     val scan by library.scan.collectAsState()
     val snapshot by library.snapshot.collectAsState()
+    val scope = rememberCoroutineScope()
+    var embedding by remember { mutableStateOf<String?>(null) }
+    val lrcCount = remember(snapshot) { snapshot.tracks.count { it.hasLyricsFile() } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 18.dp, bottom = 40.dp)) {
         item { ScreenTitle("IMPOSTAZIONI", caption = "OGNI MODIFICA VALE SUBITO") }
@@ -101,6 +110,58 @@ fun SettingsScreen(
                         color = Xaos.colors.inkTertiary,
                     )
                 }
+                if (lrcCount > 0) {
+                    Hairline()
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("[$lrcCount] TESTI IN FILE .LRC", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
+                            Text(
+                                "Il telefono legge solo i testi dentro i file: incorporali per vederli anche lì.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Xaos.colors.inkTertiary,
+                            )
+                        }
+                        val status = embedding
+                        if (status != null) {
+                            Text(status, style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+                        }
+                        PillButton(
+                            "INCORPORA I TESTI",
+                            onClick = {
+                                scope.launch {
+                                    val n = xaos.desktop.library.TagEditor.embedSidecarLyrics(snapshot.tracks) { done, total ->
+                                        embedding = "$done/$total"
+                                    }
+                                    embedding = "[$n] AGGIORNATI"
+                                    onRescan()
+                                }
+                            },
+                            icon = XaosIcons.Download,
+                            enabled = embedding == null || embedding!!.startsWith("["),
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingsCard("DOWNLOAD") {
+                Text(
+                    "I brani scaricati dalla ricerca in rete, in MP3 con copertina e metadati.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Xaos.colors.inkSecondary,
+                )
+                prefs.effectiveDownloadFolder?.let { folder ->
+                    FolderRow(path = folder, canRemove = false, onRemove = {})
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton("CAMBIA CARTELLA", onClick = onPickDownloadFolder, icon = XaosIcons.Folder)
+                    if (prefs.downloadFolder != null) {
+                        PillButton("PREDEFINITA", onClick = { settings.update { it.copy(downloadFolder = null) } })
+                    }
+                }
+                InfoLine("YT-DLP", ytdlp.exe?.path ?: "non trovato — winget install yt-dlp.yt-dlp")
+                InfoLine("FFMPEG", ytdlp.ffmpeg?.path ?: "non trovato — winget install Gyan.FFmpeg")
             }
         }
 

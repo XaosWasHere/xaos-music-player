@@ -35,6 +35,17 @@ object ArtworkLoader {
     /** Le decodifiche costano CPU: poche per volta, così lo scorrimento resta fluido. */
     private val gate = Semaphore(4)
 
+    /**
+     * Dimentica le copertine dopo una modifica di [track]. Si svuota tutto: la
+     * stessa immagine può stare sotto più chiavi (cartella, file, taglie), e
+     * le miniature si ricaricano da sole, solo quelle che si vedono.
+     */
+    fun invalidate(track: Track) {
+        synchronized(cache) { cache.clear() }
+        synchronized(folderCache) { folderCache.clear() }
+        ArtColorExtractor.forget(track)
+    }
+
     fun cached(track: Track, sizePx: Int): ImageBitmap? =
         synchronized(cache) { cache[key(track, sizePx)] }
 
@@ -126,6 +137,8 @@ data class ArtColors(val primary: Color, val secondary: Color, val accent: Color
 
 object ArtColorExtractor {
     private val cache = HashMap<String, ArtColors>()
+
+    fun forget(track: Track) { synchronized(cache) { cache.remove(track.path) } }
 
     suspend fun colors(track: Track): ArtColors {
         synchronized(cache) { cache[track.path]?.let { return it } }

@@ -43,9 +43,14 @@ data class SettingsData(
     /** Il dispositivo d'uscita audio; null = quello predefinito di Windows. */
     val outputDevice: String? = null,
     val fullscreenBackground: FullscreenBackground = FullscreenBackground.ANIMATED,
+    /** Dove finiscono i brani scaricati; null = "Xaos" dentro la prima cartella della libreria. */
+    val downloadFolder: String? = null,
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }
+
+    val effectiveDownloadFolder: String?
+        get() = downloadFolder ?: roots.firstOrNull()?.let { File(it, "Xaos").path }
 
     companion object {
         const val DEFAULT_PHONE_FOLDER = "/sdcard/Music/Xaos"

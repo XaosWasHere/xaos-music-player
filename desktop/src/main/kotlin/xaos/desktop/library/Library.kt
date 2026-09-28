@@ -36,6 +36,8 @@ data class Track(
     val genre: String? = null,
     val durationMs: Long,
     val hasEmbeddedArt: Boolean,
+    /** Se il file ha un testo incorporato (o la sua copia MP3 ne ha uno). */
+    val hasLyrics: Boolean = false,
     /**
      * La copia MP3 dello stesso brano, se la libreria ne ha una (nella
      * sottocartella `MP3` accanto ai FLAC). Sul PC si ascolta l'originale;
@@ -45,6 +47,10 @@ data class Track(
 ) {
     val file: File get() = File(path)
 }
+
+/** Se accanto al brano c'è un file .lrc con il testo. */
+fun Track.hasLyricsFile(): Boolean =
+    File(file.parentFile, file.nameWithoutExtension + ".lrc").isFile
 
 data class Album(
     val key: String,
@@ -180,7 +186,7 @@ class Library(private val indexFile: File) {
             if (group.size == 1) return@map group.first()
             val primary = group.minBy { FORMAT_RANK[File(it.path).extension.lowercase()] ?: 50 }
             val mp3 = group.firstOrNull { it !== primary && File(it.path).extension.equals("mp3", true) }
-            primary.copy(mobilePath = mp3?.path)
+            primary.copy(mobilePath = mp3?.path, hasLyrics = group.any { it.hasLyrics })
         }
 
     /**
@@ -212,6 +218,7 @@ class Library(private val indexFile: File) {
             genre = field(FieldKey.GENRE),
             durationMs = (audio.audioHeader?.preciseTrackLength ?: 0.0).times(1000).toLong(),
             hasEmbeddedArt = runCatching { tag?.firstArtwork != null }.getOrDefault(false),
+            hasLyrics = runCatching { tag?.getFirst(FieldKey.LYRICS)?.isNotBlank() == true }.getOrDefault(false),
         )
     }.getOrElse {
         // Un file illeggibile non deve sparire: lo si mostra col nome del file.

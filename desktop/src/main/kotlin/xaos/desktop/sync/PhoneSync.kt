@@ -10,8 +10,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
 import xaos.desktop.library.Library
+import xaos.desktop.library.TagEditor
 import xaos.desktop.library.Track
+import xaos.desktop.library.hasLyricsFile
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -40,7 +44,26 @@ data class SyncItem(
     val file: File,
     val remoteRel: String,
     val size: Long,
+    /** Era già stato mandato ma sul PC è cambiato (tag, testo, copertina). */
+    val isUpdate: Boolean = false,
 )
+
+/** Un brano il cui testo sul telefono manca o è diverso da quello del PC. */
+data class LyricsUpdate(
+    val track: Track,
+    val phonePath: String,
+    val lyrics: String,
+    /** Sul telefono il testo non c'è proprio (altrimenti c'è ma è diverso). */
+    val missingOnPhone: Boolean,
+)
+
+sealed interface LyricsCheck {
+    data object Idle : LyricsCheck
+    data class Checking(val done: Int, val total: Int) : LyricsCheck
+    data class Ready(val updates: List<LyricsUpdate>) : LyricsCheck
+    data class Updating(val done: Int, val total: Int, val name: String) : LyricsCheck
+    data class Updated(val ok: Int, val failed: Int) : LyricsCheck
+}
 
 /** Cosa manca sul telefono rispetto alla libreria del PC. */
 data class SyncPlan(
@@ -115,7 +138,12 @@ class PhoneSync(
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
 
+    private val _lyrics = MutableStateFlow<LyricsCheck>(LyricsCheck.Idle)
+    /** Il confronto dei testi fra PC e telefono, fatto dopo il piano. */
+    val lyrics: StateFlow<LyricsCheck> = _lyrics.asStateFlow()
+
     private var syncJob: Job? = null
+    private var lyricsJob: Job? = null
     @Volatile private var currentPush: Process? = null
 
     /** Controlla ogni due secondi se il telefono c'è: collegarlo basta. */
@@ -126,7 +154,11 @@ class PhoneSync(
                 val next = detect()
                 if (next != _state.value) {
                     _state.value = next
-                    if (next !is PhoneState.Connected) _plan.value = null
+                    if (next !is PhoneState.Connected) {
+                        _plan.value = null
+                        lyricsJob?.cancel()
+                        _lyrics.value = LyricsCheck.Idle
+                    }
                 }
                 delay(POLL_MS)
             }
@@ -152,13 +184,17 @@ class PhoneSync(
                 val items = tracks.mapNotNull { track ->
                     val file = File(if (preferMp3) track.mobilePath ?: track.path else track.path)
                     val rel = remoteRelative(roots, file) ?: return@mapNotNull null
-                    SyncItem(track, file, rel, file.length())
+                    SyncItem(track, file, rel, file.length(), isUpdate = remote.containsKey(rel))
                 }
-                // Già presente se Xaos l'ha mandato (stesso percorso e stessa
-                // dimensione), oppure se il telefono ha lo stesso brano altrove.
+                // Un brano che Xaos ha già mandato si riconosce dal percorso: se la
+                // dimensione è cambiata, sul PC è stato modificato e va rimandato.
+                // Per tutti gli altri conta se il telefono ha lo stesso brano,
+                // ovunque sia.
                 val missing = items.filter { item ->
-                    remote[item.remoteRel] != item.size && !matcher.isOnPhone(item.track)
+                    if (item.isUpdate) remote[item.remoteRel] != item.size
+                    else !matcher.isOnPhone(item.track)
                 }
+                checkLyrics(phone, roots, tracks, preferMp3, remote, matcher, missing.map { it.track.path }.toSet())
                 SyncPlan(
                     missing = missing,
                     alreadyThere = items.size - missing.size,
@@ -209,6 +245,103 @@ class PhoneSync(
             plan(roots, tracks, preferMp3)
         }
     }
+
+    /**
+     * Confronta i testi: per ogni brano che sul PC ha un testo, legge quello
+     * del file corrispondente sul telefono (solo l'intestazione) e segna i
+     * brani dove manca o è diverso. Vale solo per gli MP3: è l'unico formato
+     * da cui l'app Android legge i testi.
+     */
+    private fun checkLyrics(
+        phone: PhoneState.Connected,
+        roots: List<File>,
+        tracks: List<Track>,
+        preferMp3: Boolean,
+        remote: Map<String, Long>,
+        matcher: SongMatcher,
+        beingSent: Set<String>,
+    ) {
+        lyricsJob?.cancel()
+        lyricsJob = scope.launch(Dispatchers.IO) {
+            val candidates = tracks.filter { (it.hasLyrics || it.hasLyricsFile()) && it.path !in beingSent }
+            val updates = mutableListOf<LyricsUpdate>()
+            candidates.forEachIndexed { i, track ->
+                if (!isActive) return@launch
+                if (i % 5 == 0) _lyrics.value = LyricsCheck.Checking(i, candidates.size)
+                val file = File(if (preferMp3) track.mobilePath ?: track.path else track.path)
+                val rel = remoteRelative(roots, file)
+                val phonePath = when {
+                    rel != null && remote.containsKey(rel) -> "$remoteRoot/$rel"
+                    else -> matcher.find(track)?.path?.replace("/storage/emulated/0/", "/sdcard/")
+                } ?: return@forEachIndexed
+                if (!phonePath.endsWith(".mp3", ignoreCase = true)) return@forEachIndexed
+                val pcLyrics = TagEditor.readLyrics(track)?.let(::normalize)?.takeIf { it.isNotEmpty() } ?: return@forEachIndexed
+                val phoneLyrics = readPhoneLyrics(phone.serial, phonePath)?.let(::normalize).orEmpty()
+                if (phoneLyrics != pcLyrics) {
+                    updates += LyricsUpdate(track, phonePath, pcLyrics, missingOnPhone = phoneLyrics.isEmpty())
+                }
+            }
+            _lyrics.value = LyricsCheck.Ready(updates)
+        }
+    }
+
+    /**
+     * Scrive il testo nei file del telefono: si scarica il file, gli si
+     * aggiunge il testo e lo si rimette dov'era. Audio, nome e cartella restano
+     * quelli del telefono.
+     */
+    fun updateLyrics(selected: List<LyricsUpdate>) {
+        val phone = _state.value as? PhoneState.Connected ?: return
+        if (selected.isEmpty() || lyricsJob?.isActive == true && _lyrics.value is LyricsCheck.Updating) return
+        lyricsJob?.cancel()
+        lyricsJob = scope.launch(Dispatchers.IO) {
+            var ok = 0
+            var failed = 0
+            val touched = mutableListOf<String>()
+            selected.forEachIndexed { i, update ->
+                _lyrics.value = LyricsCheck.Updating(i, selected.size, update.track.title)
+                val tmp = File.createTempFile("xaos-lyrics-", ".mp3")
+                val done = runCatching {
+                    check(run(listOf("-s", phone.serial, "pull", update.phonePath, tmp.path), 120) != null && tmp.length() > 0)
+                    val audio = AudioFileIO.read(tmp)
+                    audio.tagOrCreateAndSetDefault.setField(FieldKey.LYRICS, update.lyrics)
+                    audio.commit()
+                    push(phone.serial, tmp, update.phonePath)
+                }.getOrDefault(false)
+                tmp.delete()
+                if (done) { ok++; touched += update.phonePath } else failed++
+            }
+            announce(phone.serial, touched)
+            _lyrics.value = LyricsCheck.Updated(ok, failed)
+        }
+    }
+
+    fun dismissLyricsResult() {
+        if (_lyrics.value is LyricsCheck.Updated) _lyrics.value = LyricsCheck.Ready(emptyList())
+    }
+
+    /** Il testo del file sul telefono, leggendo solo l'intestazione ID3. */
+    private fun readPhoneLyrics(serial: String, path: String): String? {
+        val head = readBytes(serial, path, HEAD_PROBE) ?: return null
+        val total = Id3Lyrics.tagLength(head) ?: return null
+        val bytes = if (head.size >= total) head else readBytes(serial, path, total) ?: return null
+        return Id3Lyrics.read(bytes)
+    }
+
+    /** I primi [count] byte di un file del telefono, senza passare dalla console. */
+    private fun readBytes(serial: String, path: String, count: Int): ByteArray? {
+        val adb = adb ?: return null
+        return runCatching {
+            val process = ProcessBuilder(adb.path, "-s", serial, "exec-out", "head -c $count ${q(path)}")
+                .redirectErrorStream(false).start()
+            val bytes = process.inputStream.readAllBytes()
+            process.waitFor(30, TimeUnit.SECONDS)
+            bytes
+        }.getOrNull()
+    }
+
+    private fun normalize(text: String) = text.replace("\r\n", "\n").replace('\r', '\n').lines()
+        .joinToString("\n") { it.trimEnd() }.trim()
 
     fun cancel() {
         syncJob?.cancel()
@@ -327,7 +460,7 @@ class PhoneSync(
         val out = shell(
             serial,
             "content query --uri content://media/external/audio/media " +
-                "--projection title:artist:duration --where \"is_music!=0\"",
+                "--projection title:artist:duration:_data --where \"is_music!=0\"",
             timeoutS = 60,
         ) ?: return emptyList()
         return SongMatcher.parseContentQuery(out)
@@ -398,6 +531,8 @@ class PhoneSync(
 
     private companion object {
         const val APP_PACKAGE = "com.example.xaosmusicplayer"
+        /** Quanto leggere al primo colpo: basta per quasi tutti i tag senza copertine enormi. */
+        const val HEAD_PROBE = 256 * 1024
         const val BUNDLED_APK = "xaos-android.apk"
         const val BUNDLED_ABI = "arm64-v8a"
         const val INSTALL_TIMEOUT_S = 180L

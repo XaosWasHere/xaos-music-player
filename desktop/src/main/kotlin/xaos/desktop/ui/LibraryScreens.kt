@@ -1,6 +1,18 @@
 package xaos.desktop.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +57,11 @@ import xaos.desktop.library.ScanState
 import xaos.desktop.library.Track
 import xaos.desktop.library.rememberArtwork
 import xaos.desktop.player.Player
+import xaos.desktop.online.DownloadState
+import xaos.desktop.online.OnlineSearch
+import xaos.desktop.online.OnlineTrack
+import xaos.desktop.online.YtDlp
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 import java.util.Locale
@@ -155,7 +172,7 @@ private fun BoxWithArtwork(track: Track?) {
 }
 
 @Composable
-fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> Unit) {
+fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> Unit, onEdit: (Album) -> Unit) {
     if (album == null) {
         EmptyMessage("ALBUM NON TROVATO")
         return
@@ -189,6 +206,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0) }, icon = XaosIcons.Play, filled = true)
                         PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
+                        PillButton("MODIFICA", onClick = { onEdit(album) }, icon = XaosIcons.Edit)
                     }
                 }
             }
@@ -255,6 +273,7 @@ private fun TrackHeader(showAlbum: Boolean) {
     }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun TrackRow(
     number: Int,
@@ -265,10 +284,20 @@ fun TrackRow(
     onClick: () -> Unit,
 ) {
     val colors = Xaos.colors
+    val actions = LocalTrackActions.current
+    var menuOpen by remember { mutableStateOf(false) }
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+
     Row(
         Modifier
             .fillMaxWidth()
+            .hoverable(hover)
             .hoverRow(isCurrent)
+            // Clic destro: lo stesso menu del bottone con i tre punti.
+            .onPointerEvent(PointerEventType.Press) { event ->
+                if (event.buttons.isSecondaryPressed && actions != null) menuOpen = true
+            }
             .pressable(onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -302,6 +331,56 @@ fun TrackRow(
             )
         }
         Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
+        if (actions != null) {
+            Box {
+                // Il bottone c'è sempre (così la riga non cambia larghezza) ma si
+                // vede solo col mouse sopra o a menu aperto.
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .pressable { menuOpen = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (hovered || menuOpen) {
+                        Icon(XaosIcons.More, "Altre azioni", tint = colors.inkSecondary, modifier = Modifier.size(18.dp))
+                    }
+                }
+                TrackMenu(
+                    expanded = menuOpen,
+                    onDismiss = { menuOpen = false },
+                    items = listOf(
+                        Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
+                        Triple(XaosIcons.Sort, "TESTO") { actions.onLyrics(track) },
+                        Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    items: List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>>,
+) {
+    val colors = Xaos.colors
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, colors.line),
+    ) {
+        items.forEach { (icon, label, action) ->
+            DropdownMenuItem(
+                text = { Text(label, style = MaterialTheme.typography.labelLarge, color = colors.ink) },
+                leadingIcon = { Icon(icon, null, tint = colors.inkSecondary, modifier = Modifier.size(16.dp)) },
+                onClick = { onDismiss(); action() },
+            )
+        }
     }
 }
 
@@ -370,6 +449,8 @@ fun SearchResults(
     query: String,
     snapshot: LibrarySnapshot,
     player: Player,
+    ytdlp: YtDlp,
+    onDownload: (OnlineTrack) -> Unit,
     onOpenAlbum: (Album) -> Unit,
     onOpenArtist: (Artist) -> Unit,
 ) {
@@ -382,10 +463,9 @@ fun SearchResults(
     val current by player.current.collectAsState()
     val colors = Xaos.colors
 
-    if (artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()) {
-        EmptyMessage("NESSUN RISULTATO", "Niente in libreria per \"$query\".")
-        return
-    }
+    val online by ytdlp.search.collectAsState()
+    val downloads by ytdlp.downloads.collectAsState()
+    val nothingLocal = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 28.dp)) {
         if (artists.isNotEmpty()) {
             item { SectionHeader("ARTISTI", count = artists.size, modifier = Modifier.padding(vertical = 10.dp)) }
@@ -416,6 +496,16 @@ fun SearchResults(
                 }
             }
         }
+        if (nothingLocal) {
+            item {
+                Text(
+                    "Niente in libreria per \"$query\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkTertiary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        }
         if (tracks.isNotEmpty()) {
             item { SectionHeader("BRANI", count = tracks.size, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp)) }
             itemsIndexed(tracks, key = { _, t -> "t-" + t.path }) { index, track ->
@@ -429,5 +519,120 @@ fun SearchResults(
                 )
             }
         }
+        // ---- in rete: si cerca solo a richiesta, ogni ricerca avvia yt-dlp.
+        item {
+            SectionHeader(
+                "IN RETE",
+                modifier = Modifier.padding(top = 28.dp, bottom = 10.dp),
+                count = (online as? OnlineSearch.Results)?.takeIf { it.query == query }?.tracks?.size,
+            )
+        }
+        item {
+            val current = online
+            when {
+                !ytdlp.available -> Text(
+                    "Per scaricare servono yt-dlp e ffmpeg. Si installano con winget: " +
+                        "\"winget install yt-dlp.yt-dlp\" e \"winget install Gyan.FFmpeg\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkTertiary,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                current is OnlineSearch.Searching -> Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DotSpinner(size = 20.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text("RICERCA IN CORSO…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                }
+                current is OnlineSearch.Results && current.query == query -> Unit
+                else -> Row(
+                    Modifier.fillMaxWidth().nothingCard().pressable { ytdlp.search(query) }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(36.dp).background(colors.accent, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(XaosIcons.Search, null, tint = colors.onAccent, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text("CERCA \"${query.uppercase()}\" IN RETE", style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                        Text(
+                            if (current is OnlineSearch.Failed) "Non è andata: ${current.message}. Clicca per riprovare."
+                            else "Scarica il brano in MP3 e aggiungilo alla libreria",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.inkTertiary,
+                        )
+                    }
+                }
+            }
+        }
+        val results = (online as? OnlineSearch.Results)?.takeIf { it.query == query }?.tracks.orEmpty()
+        items(results, key = { "o-" + it.id }) { t ->
+            OnlineRow(t, downloads[t.id], onDownload = { onDownload(t) }, onCancel = { ytdlp.cancel(t.id) })
+        }
+    }
+}
+
+@Composable
+private fun OnlineRow(track: OnlineTrack, state: DownloadState?, onDownload: () -> Unit, onCancel: () -> Unit) {
+    val colors = Xaos.colors
+    Column {
+        Row(
+            Modifier.fillMaxWidth().hoverRow().padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OnlineThumb(track.thumbnail)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.uploader, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
+            when (state) {
+                null -> PillButton("SCARICA", onClick = onDownload, icon = XaosIcons.Download)
+                DownloadState.Queued -> DotSpinner(size = 20.dp)
+                is DownloadState.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                    Spacer(Modifier.width(8.dp))
+                    CircleIconButton(XaosIcons.Close, "Annulla", onCancel, size = 30.dp)
+                }
+                DownloadState.Converting -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    DotSpinner(size = 18.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("CONVERSIONE", style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+                }
+                is DownloadState.Completed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    AccentDot(size = 6.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("IN LIBRERIA", style = MaterialTheme.typography.labelMedium, color = colors.ink)
+                }
+                is DownloadState.Failed -> PillButton("RIPROVA", onClick = onDownload, icon = XaosIcons.Repeat)
+            }
+        }
+        (state as? DownloadState.Running)?.let {
+            DotProgressLine(it.progress, modifier = Modifier.fillMaxWidth().height(6.dp).padding(start = 62.dp, end = 12.dp))
+        }
+        (state as? DownloadState.Failed)?.let {
+            Text(it.message, style = MaterialTheme.typography.labelSmall, color = colors.accentInk, modifier = Modifier.padding(start = 62.dp, bottom = 6.dp))
+        }
+    }
+}
+
+/** La miniatura di un risultato online, scaricata al volo e tenuta in memoria. */
+@Composable
+private fun OnlineThumb(url: String?) {
+    val colors = Xaos.colors
+    val image by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, url) {
+        value = url?.let { u -> OnlineThumbs.load(u) }
+    }
+    Box(Modifier.size(width = 64.dp, height = 38.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceHigh)) {
+        image?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+    }
+}
+
+private object OnlineThumbs {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, androidx.compose.ui.graphics.ImageBitmap>()
+    suspend fun load(url: String): androidx.compose.ui.graphics.ImageBitmap? = cache[url] ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val bytes = java.net.URI(url).toURL().openStream().use { it.readAllBytes() }
+            org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
+        }.getOrNull()?.also { cache[url] = it }
     }
 }

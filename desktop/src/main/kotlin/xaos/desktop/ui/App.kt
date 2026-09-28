@@ -41,6 +41,9 @@ import xaos.desktop.library.ScanState
 import xaos.desktop.player.Player
 import xaos.desktop.sync.PhoneState
 import xaos.desktop.sync.PhoneSync
+import xaos.desktop.online.OnlineTrack
+import xaos.desktop.online.YtDlp
+import androidx.compose.runtime.CompositionLocalProvider
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 
@@ -60,6 +63,9 @@ private val MainSections = listOf(Section.ALBUMS, Section.SONGS, Section.ARTISTS
 sealed interface Detail {
     data class AlbumDetail(val key: String) : Detail
     data class ArtistDetail(val name: String) : Detail
+    data class EditTrack(val path: String) : Detail
+    data class EditAlbum(val key: String) : Detail
+    data class Lyrics(val path: String) : Detail
 }
 
 @Composable
@@ -68,10 +74,13 @@ fun XaosDesktopApp(
     library: Library,
     player: Player,
     phone: PhoneSync,
+    ytdlp: YtDlp,
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
+    onPickDownloadFolder: () -> Unit,
+    onDownload: (OnlineTrack) -> Unit,
 ) {
     val prefs by settings.data.collectAsState()
     val snapshot by library.snapshot.collectAsState()
@@ -90,6 +99,22 @@ fun XaosDesktopApp(
         section = target
         details.clear()
         query = ""
+    }
+
+    // Le azioni del menu dei brani, uguali in ogni elenco.
+    val trackActions = remember {
+        TrackActions(
+            onEdit = { details += Detail.EditTrack(it.path) },
+            onLyrics = { details += Detail.Lyrics(it.path) },
+            onShowInFolder = { t ->
+                runCatching { ProcessBuilder("explorer.exe", "/select,", t.path).start() }
+            },
+        )
+    }
+    /** Dopo una modifica: si torna indietro e la libreria rilegge i file toccati. */
+    fun afterEdit() {
+        details.removeLastOrNull()
+        onRescan()
     }
 
     val colors = Xaos.colors
@@ -130,7 +155,23 @@ fun XaosDesktopApp(
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         val detail = details.lastOrNull()
+                        CompositionLocalProvider(LocalTrackActions provides trackActions) {
                         when {
+                            detail is Detail.EditTrack -> EditTrackScreen(
+                                track = snapshot.tracks.firstOrNull { it.path == detail.path },
+                                onSaved = ::afterEdit,
+                                onCancel = { details.removeLastOrNull() },
+                            )
+                            detail is Detail.EditAlbum -> EditAlbumScreen(
+                                album = snapshot.albums.firstOrNull { it.key == detail.key },
+                                onSaved = ::afterEdit,
+                                onCancel = { details.removeLastOrNull() },
+                            )
+                            detail is Detail.Lyrics -> LyricsScreen(
+                                track = snapshot.tracks.firstOrNull { it.path == detail.path },
+                                onSaved = ::afterEdit,
+                                onCancel = { details.removeLastOrNull() },
+                            )
                             section == Section.PHONE -> PhoneScreen(
                                 phone = phone,
                                 snapshot = snapshot,
@@ -145,13 +186,17 @@ fun XaosDesktopApp(
                                 library = library,
                                 player = player,
                                 phone = phone,
+                                ytdlp = ytdlp,
                                 onAddFolder = onAddFolder,
                                 onRescan = onRescan,
+                                onPickDownloadFolder = onPickDownloadFolder,
                             )
                             query.isNotBlank() -> SearchResults(
                                 query = query,
                                 snapshot = snapshot,
                                 player = player,
+                                ytdlp = ytdlp,
+                                onDownload = onDownload,
                                 onOpenAlbum = { details += Detail.AlbumDetail(it.key); query = "" },
                                 onOpenArtist = { details += Detail.ArtistDetail(it.name); query = "" },
                             )
@@ -159,6 +204,7 @@ fun XaosDesktopApp(
                                 album = snapshot.albums.firstOrNull { it.key == detail.key },
                                 player = player,
                                 onOpenArtist = { details += Detail.ArtistDetail(it) },
+                                onEdit = { details += Detail.EditAlbum(it.key) },
                             )
                             detail is Detail.ArtistDetail -> ArtistDetailScreen(
                                 artist = snapshot.artists.firstOrNull { it.name == detail.name },
@@ -172,6 +218,7 @@ fun XaosDesktopApp(
                             section == Section.ARTISTS -> ArtistsScreen(snapshot) {
                                 details += Detail.ArtistDetail(it.name)
                             }
+                        }
                         }
                     }
                 }

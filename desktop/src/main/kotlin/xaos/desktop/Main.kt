@@ -21,6 +21,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.launch
 import xaos.desktop.library.Library
+import xaos.desktop.online.YtDlp
 import xaos.desktop.player.Player
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.theme.XaosTheme
@@ -31,10 +32,16 @@ import javax.swing.UIManager
 
 fun main() = application {
     val settings = remember { Settings(File(Settings.appDir, "settings.json")) }
-    val library = remember { Library(File(Settings.appDir, "library.json")) }
+    // v2: l'indice registra anche quali brani hanno un testo. Cambiando nome si
+    // rilegge tutto una volta sola; il vecchio file non serve più.
+    val library = remember {
+        File(Settings.appDir, "library.json").delete()
+        Library(File(Settings.appDir, "library-v2.json"))
+    }
     val player = remember { Player().also { it.setVolume(settings.data.value.volume) } }
     val scope = rememberCoroutineScope()
     val phone = remember { PhoneSync(scope).also { it.startWatching() } }
+    val ytdlp = remember { YtDlp(scope) }
     val prefs by settings.data.collectAsState()
     // La stessa icona dell'app Android: barra del titolo e barra delle applicazioni.
     val appIcon = remember {
@@ -99,6 +106,7 @@ fun main() = application {
                 library = library,
                 player = player,
                 phone = phone,
+                ytdlp = ytdlp,
                 fullscreen = fullscreen,
                 onFullscreenChange = ::setFullscreen,
                 onAddFolder = {
@@ -109,8 +117,24 @@ fun main() = application {
                     }
                 },
                 onRescan = {
+                    scope.launch { library.load(prefs.roots.map { File(it) }.filter { it.isDirectory }) }
+                },
+                onPickDownloadFolder = {
                     scope.launch {
-                        library.load(prefs.roots.map { File(it) }.filter { it.isDirectory }, force = true)
+                        pickFolder(prefs.effectiveDownloadFolder)?.let { dir ->
+                            settings.update { it.copy(downloadFolder = dir.path) }
+                        }
+                    }
+                },
+                onDownload = { track ->
+                    val folder = prefs.effectiveDownloadFolder?.let(::File) ?: return@XaosDesktopApp
+                    // Se i download finiscono fuori dalla libreria, la cartella
+                    // entra fra quelle scansionate: un brano scaricato che non
+                    // compare da nessuna parte sarebbe un brano perso.
+                    val inLibrary = prefs.roots.any { folder.path.startsWith(it) }
+                    if (!inLibrary) settings.setRoots(prefs.roots + folder.path)
+                    ytdlp.download(track, folder) {
+                        scope.launch { library.load(settings.data.value.roots.map(::File).filter { it.isDirectory }) }
                     }
                 },
             )
