@@ -76,6 +76,9 @@ fun PhoneScreen(
     if (confirmInstall && connected != null) {
         ConfirmInstallDialog(
             phoneName = connected.name,
+            isUpdate = connected.appInstalled,
+            fromVersion = connected.appVersionName,
+            toVersion = phone.bundledVersion?.second,
             apkSize = phone.bundledApk?.length(),
             onConfirm = { confirmInstall = false; phone.installApp() },
             onDismiss = { confirmInstall = false },
@@ -111,6 +114,8 @@ fun PhoneScreen(
                         phone = s,
                         install = install,
                         canInstall = phone.canInstallOn(s),
+                        updateAvailable = phone.updateAvailable(s),
+                        bundledVersionName = phone.bundledVersion?.second,
                         apkSize = phone.bundledApk?.length(),
                         onInstall = { confirmInstall = true },
                         onLaunch = phone::launchApp,
@@ -470,6 +475,8 @@ private fun AppCard(
     phone: PhoneState.Connected,
     install: AppInstall,
     canInstall: Boolean,
+    updateAvailable: Boolean,
+    bundledVersionName: String?,
     apkSize: Long?,
     onInstall: () -> Unit,
     onLaunch: () -> Unit,
@@ -477,28 +484,46 @@ private fun AppCard(
 ) {
     val colors = Xaos.colors
     val justInstalled = install is AppInstall.Done
-    if (phone.appInstalled && !justInstalled) {
+    val busyOrFailed = install is AppInstall.Installing || install is AppInstall.Failed
+    if (phone.appInstalled && !justInstalled && !updateAvailable && !busyOrFailed) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             AccentDot(size = 6.dp)
             Spacer(Modifier.width(10.dp))
-            Text("XAOS PER ANDROID INSTALLATO SUL TELEFONO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f))
+            Text(
+                "XAOS PER ANDROID INSTALLATO SUL TELEFONO" + (phone.appVersionName?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.inkSecondary,
+                modifier = Modifier.weight(1f),
+            )
             PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone)
         }
         return
     }
+    val isUpdate = phone.appInstalled
     Row(
         Modifier.fillMaxWidth().nothingCard().padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Tag(if (justInstalled) "INSTALLATO" else "NON INSTALLATO")
+                Tag(
+                    when {
+                        justInstalled && isUpdate -> "AGGIORNATO"
+                        justInstalled -> "INSTALLATO"
+                        isUpdate -> "AGGIORNAMENTO DISPONIBILE"
+                        else -> "NON INSTALLATO"
+                    }
+                )
                 Spacer(Modifier.width(10.dp))
                 Text("XAOS PER ANDROID", style = MaterialTheme.typography.labelLarge, color = colors.ink)
             }
             Text(
                 text = when {
+                    justInstalled && isUpdate -> "Il telefono ha ora la versione ${bundledVersionName.orEmpty()}. Playlist e preferiti sono rimasti."
                     justInstalled -> "Pronto: aprilo sul telefono per dargli l'accesso alla musica."
+                    isUpdate && install !is AppInstall.Failed ->
+                        "Sul telefono c'è la ${phone.appVersionName ?: "versione precedente"}, qui la ${bundledVersionName.orEmpty()}. " +
+                            "L'aggiornamento mantiene playlist, preferiti e impostazioni del telefono."
                     install is AppInstall.Failed -> "Non è andata: ${install.message}"
                     !canInstall && apkSize == null -> "Questa versione di Xaos desktop non include l'app per il telefono."
                     !canInstall -> "L'app inclusa è per processori arm64, il telefono è ${phone.abi}."
@@ -521,7 +546,11 @@ private fun AppCard(
                 PillButton("OK", onClick = onDismiss)
             }
             canInstall -> PillButton(
-                text = if (install is AppInstall.Failed) "RIPROVA" else "INSTALLA XAOS",
+                text = when {
+                    install is AppInstall.Failed -> "RIPROVA"
+                    isUpdate -> "AGGIORNA XAOS"
+                    else -> "INSTALLA XAOS"
+                },
                 onClick = onInstall,
                 icon = XaosIcons.Download,
                 filled = true,
@@ -531,22 +560,42 @@ private fun AppCard(
 }
 
 @Composable
-private fun ConfirmInstallDialog(phoneName: String, apkSize: Long?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun ConfirmInstallDialog(
+    phoneName: String,
+    isUpdate: Boolean,
+    fromVersion: String?,
+    toVersion: String?,
+    apkSize: Long?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val colors = Xaos.colors
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
-        title = { Text("Installare Xaos sul telefono?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        title = {
+            Text(
+                if (isUpdate) "Aggiornare Xaos sul telefono?" else "Installare Xaos sul telefono?",
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.ink,
+            )
+        },
         text = {
             Text(
-                "Xaos Music Player per Android verrà installato su $phoneName" +
-                    (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
-                    ". Non tocca le altre app né la musica già presente.",
+                if (isUpdate) {
+                    "Xaos su $phoneName passa dalla ${fromVersion ?: "versione installata"} alla ${toVersion.orEmpty()}" +
+                        (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
+                        ". Playlist, preferiti e impostazioni restano come sono."
+                } else {
+                    "Xaos Music Player per Android verrà installato su $phoneName" +
+                        (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
+                        ". Non tocca le altre app né la musica già presente."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.inkSecondary,
             )
         },
-        confirmButton = { PillButton("INSTALLA", onClick = onConfirm, filled = true) },
+        confirmButton = { PillButton(if (isUpdate) "AGGIORNA" else "INSTALLA", onClick = onConfirm, filled = true) },
         dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
     )
 }

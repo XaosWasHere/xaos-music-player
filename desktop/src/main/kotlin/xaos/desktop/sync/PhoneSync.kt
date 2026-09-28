@@ -35,6 +35,9 @@ sealed interface PhoneState {
         val name: String,
         val appInstalled: Boolean,
         val abi: String,
+        /** La versione di Xaos installata sul telefono, se c'è. */
+        val appVersionCode: Int? = null,
+        val appVersionName: String? = null,
     ) : PhoneState
 }
 
@@ -358,6 +361,26 @@ class PhoneSync(
         ?.let { File(it, BUNDLED_APK) }
         ?.takeIf { it.isFile }
 
+    /** La versione dell'APK incluso (codice, nome), scritta accanto a lui in fase di build. */
+    val bundledVersion: Pair<Int, String>? = bundledApk?.let { apk ->
+        runCatching {
+            val props = java.util.Properties().apply {
+                File(apk.parentFile, BUNDLED_VERSION).inputStream().use { load(it) }
+            }
+            props.getProperty("versionCode").trim().toInt() to props.getProperty("versionName").trim()
+        }.getOrNull()
+    }
+
+    /**
+     * Se l'app sul telefono è più vecchia di quella inclusa. Mai il contrario:
+     * installare una versione precedente sopra una nuova non si propone.
+     */
+    fun updateAvailable(phone: PhoneState.Connected): Boolean {
+        val bundled = bundledVersion?.first ?: return false
+        val installed = phone.appVersionCode ?: return false
+        return phone.appInstalled && canInstallOn(phone) && bundled > installed
+    }
+
     private val _install = MutableStateFlow<AppInstall>(AppInstall.Idle)
     val install: StateFlow<AppInstall> = _install.asStateFlow()
 
@@ -374,13 +397,22 @@ class PhoneSync(
             _install.value = AppInstall.Installing
             val out = run(listOf("-s", phone.serial, "install", "-r", apk.path), timeoutS = INSTALL_TIMEOUT_S)
             val installed = isAppInstalled(phone.serial)
-            if (installed) {
-                _state.value = phone.copy(appInstalled = true)
+            val version = if (installed) installedVersion(phone.serial) else null
+            val reachedBundled = version != null && bundledVersion != null && version.first >= bundledVersion.first
+            if (installed && (reachedBundled || bundledVersion == null)) {
+                _state.value = phone.copy(appInstalled = true, appVersionCode = version?.first, appVersionName = version?.second)
                 _install.value = AppInstall.Done
             } else {
                 // adb scrive il motivo come "Failure [INSTALL_FAILED_...]".
-                val reason = out?.lineSequence()?.firstOrNull { it.contains("Failure") }?.trim()
-                _install.value = AppInstall.Failed(reason ?: "Installazione non riuscita")
+                val raw = out?.lineSequence()?.firstOrNull { it.contains("Failure") }?.trim()
+                val reason = when {
+                    raw?.contains("UPDATE_INCOMPATIBLE") == true ->
+                        "l'app sul telefono è firmata con un'altra chiave. Per passare a questa va " +
+                            "disinstallata prima, e si perdono playlist e preferiti del telefono."
+                    raw?.contains("VERSION_DOWNGRADE") == true -> "sul telefono c'è già una versione più nuova."
+                    else -> raw ?: "installazione non riuscita"
+                }
+                _install.value = AppInstall.Failed(reason)
             }
         }
     }
@@ -394,6 +426,14 @@ class PhoneSync(
     }
 
     fun dismissInstall() { _install.value = AppInstall.Idle }
+
+    /** Codice e nome della versione installata, da `dumpsys package`. */
+    private fun installedVersion(serial: String): Pair<Int, String>? {
+        val out = shell(serial, "dumpsys package $APP_PACKAGE") ?: return null
+        val code = Regex("versionCode=(\\d+)").find(out)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        val name = Regex("versionName=(\\S+)").find(out)?.groupValues?.get(1).orEmpty()
+        return code to name
+    }
 
     private fun isAppInstalled(serial: String): Boolean =
         shell(serial, "pm list packages $APP_PACKAGE")
@@ -416,12 +456,18 @@ class PhoneSync(
             "device" -> {
                 val known = _state.value
                 if (known is PhoneState.Connected && known.serial == serial) known
-                else PhoneState.Connected(
-                    serial = serial,
-                    name = deviceName(serial, parts),
-                    appInstalled = isAppInstalled(serial),
-                    abi = shell(serial, "getprop ro.product.cpu.abi")?.trim().orEmpty(),
-                )
+                else {
+                    val installed = isAppInstalled(serial)
+                    val version = if (installed) installedVersion(serial) else null
+                    PhoneState.Connected(
+                        serial = serial,
+                        name = deviceName(serial, parts),
+                        appInstalled = installed,
+                        abi = shell(serial, "getprop ro.product.cpu.abi")?.trim().orEmpty(),
+                        appVersionCode = version?.first,
+                        appVersionName = version?.second,
+                    )
+                }
             }
             "unauthorized" -> PhoneState.Unauthorized(serial)
             else -> PhoneState.Disconnected
@@ -534,6 +580,7 @@ class PhoneSync(
         /** Quanto leggere al primo colpo: basta per quasi tutti i tag senza copertine enormi. */
         const val HEAD_PROBE = 256 * 1024
         const val BUNDLED_APK = "xaos-android.apk"
+        const val BUNDLED_VERSION = "xaos-android.properties"
         const val BUNDLED_ABI = "arm64-v8a"
         const val INSTALL_TIMEOUT_S = 180L
         const val POLL_MS = 2_000L

@@ -29,10 +29,27 @@ dependencies {
  * l'app desktop funziona lo stesso e semplicemente non propone l'installazione.
  */
 val androidApk = file("../app/build/outputs/apk/debug/app-arm64-v8a-debug.apk")
+val androidApkMetadata = file("../app/build/outputs/apk/debug/output-metadata.json")
 val bundledResources = layout.buildDirectory.dir("bundled-resources")
 val prepareAndroidApk by tasks.registering(Copy::class) {
     from(androidApk) { rename { "xaos-android.apk" } }
     into(bundledResources.map { it.dir("common") })
+    // Accanto all'APK, la sua versione: l'app desktop la confronta con quella
+    // installata sul telefono per proporre l'aggiornamento, e leggerla dal
+    // metadato di Gradle evita di dover aprire l'APK sul PC dell'utente.
+    inputs.file(androidApkMetadata).optional()
+    doLast {
+        if (!androidApkMetadata.isFile) return@doLast
+        @Suppress("UNCHECKED_CAST")
+        val meta = groovy.json.JsonSlurper().parse(androidApkMetadata) as Map<String, Any?>
+        val elements = meta["elements"] as List<Map<String, Any?>>
+        val arm64 = elements.firstOrNull { e ->
+            (e["filters"] as List<Map<String, Any?>>).any { it["value"] == "arm64-v8a" }
+        } ?: elements.first()
+        bundledResources.get().file("common/xaos-android.properties").asFile.writeText(
+            "versionCode=${arm64["versionCode"]}\nversionName=${arm64["versionName"]}\n"
+        )
+    }
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareAndroidApk) }
 
