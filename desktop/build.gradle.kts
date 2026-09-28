@@ -1,7 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
-val appVersion = "1.1.0"
+val appVersion = "1.1.1"
 
 plugins {
     kotlin("jvm") version "2.4.20"
