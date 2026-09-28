@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La X di Xaos a matrice di punti: i punti crescono verso il centro
+     come i livelli di un misuratore audio, e il centro rosso e' l'accento
+     dell'app. I cerchi sono cubiche e non archi: la forma compatta degli
+     archi ha flag ambigui che alcuni parser rendono a mezzaluna. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 31.00,28.50 C 32.38,28.50 33.50,29.62 33.50,31.00 C 33.50,32.38 32.38,33.50 31.00,33.50 C 29.62,33.50 28.50,32.38 28.50,31.00 C 28.50,29.62 29.62,28.50 31.00,28.50 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 31.00,74.50 C 32.38,74.50 33.50,75.62 33.50,77.00 C 33.50,78.38 32.38,79.50 31.00,79.50 C 29.62,79.50 28.50,78.38 28.50,77.00 C 28.50,75.62 29.62,74.50 31.00,74.50 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 38.67,35.17 C 40.60,35.17 42.17,36.73 42.17,38.67 C 42.17,40.60 40.60,42.17 38.67,42.17 C 36.73,42.17 35.17,40.60 35.17,38.67 C 35.17,36.73 36.73,35.17 38.67,35.17 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 38.67,65.83 C 40.60,65.83 42.17,67.40 42.17,69.33 C 42.17,71.27 40.60,72.83 38.67,72.83 C 36.73,72.83 35.17,71.27 35.17,69.33 C 35.17,67.40 36.73,65.83 38.67,65.83 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 46.33,41.83 C 48.82,41.83 50.83,43.85 50.83,46.33 C 50.83,48.82 48.82,50.83 46.33,50.83 C 43.85,50.83 41.83,48.82 41.83,46.33 C 41.83,43.85 43.85,41.83 46.33,41.83 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 46.33,57.17 C 48.82,57.17 50.83,59.18 50.83,61.67 C 50.83,64.15 48.82,66.17 46.33,66.17 C 43.85,66.17 41.83,64.15 41.83,61.67 C 41.83,59.18 43.85,57.17 46.33,57.17 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 54.00,48.50 C 57.04,48.50 59.50,50.96 59.50,54.00 C 59.50,57.04 57.04,59.50 54.00,59.50 C 50.96,59.50 48.50,57.04 48.50,54.00 C 48.50,50.96 50.96,48.50 54.00,48.50 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 61.67,57.17 C 64.15,57.17 66.17,59.18 66.17,61.67 C 66.17,64.15 64.15,66.17 61.67,66.17 C 59.18,66.17 57.17,64.15 57.17,61.67 C 57.17,59.18 59.18,57.17 61.67,57.17 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 61.67,41.83 C 64.15,41.83 66.17,43.85 66.17,46.33 C 66.17,48.82 64.15,50.83 61.67,50.83 C 59.18,50.83 57.17,48.82 57.17,46.33 C 57.17,43.85 59.18,41.83 61.67,41.83 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 69.33,65.83 C 71.27,65.83 72.83,67.40 72.83,69.33 C 72.83,71.27 71.27,72.83 69.33,72.83 C 67.40,72.83 65.83,71.27 65.83,69.33 C 65.83,67.40 67.40,65.83 69.33,65.83 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 69.33,35.17 C 71.27,35.17 72.83,36.73 72.83,38.67 C 72.83,40.60 71.27,42.17 69.33,42.17 C 67.40,42.17 65.83,40.60 65.83,38.67 C 65.83,36.73 67.40,35.17 69.33,35.17 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 77.00,74.50 C 78.38,74.50 79.50,75.62 79.50,77.00 C 79.50,78.38 78.38,79.50 77.00,79.50 C 75.62,79.50 74.50,78.38 74.50,77.00 C 74.50,75.62 75.62,74.50 77.00,74.50 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 77.00,28.50 C 78.38,28.50 79.50,29.62 79.50,31.00 C 79.50,32.38 78.38,33.50 77.00,33.50 C 75.62,33.50 74.50,32.38 74.50,31.00 C 74.50,29.62 75.62,28.50 77.00,28.50 Z" />
+</vector>
