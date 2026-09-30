@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Xaos Music Player</string>
+    <string name="widget_name">Xaos</string>
+    <string name="widget_description">Copertina del brano in ascolto e, scorrendo, il testo in sincrono</string>
 </resources>

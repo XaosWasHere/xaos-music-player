@@ -18,6 +18,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.xaosmusicplayer.MainActivity
 import com.example.xaosmusicplayer.audio.AudioSessionHolder
+import com.example.xaosmusicplayer.widget.WidgetHub
 
 /**
  * Tiene in vita la riproduzione fuori dall'Activity e pubblica la MediaSession
@@ -76,6 +77,7 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         wireSleepTimer(player)
+        WidgetHub.attach(this, player)
     }
 
     /** Toccare la notifica riporta all'app invece di aprire una nuova istanza. */
@@ -145,6 +147,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        WidgetHub.detach()
         SleepTimer.release()
         AudioSessionHolder.clear()
         mediaSession?.run {
