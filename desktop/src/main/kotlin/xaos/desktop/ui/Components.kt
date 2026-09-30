@@ -57,6 +57,10 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.drawscope.translate
 
 /*
  * I mattoni dell'aspetto Nothing, gli stessi dell'app Android: griglia di
@@ -552,6 +556,54 @@ fun FavoriteButton(
                 tint = if (on) c.accentInk else c.inkSecondary,
                 modifier = Modifier.size(size * 0.56f),
             )
+        }
+    }
+}
+
+/**
+ * Il simbolo di play o pausa, al centro esatto del pulsante che lo contiene
+ * (lo riempie). Un'icona di misura fissa viene posata a pixel interi: quando
+ * pulsante e icona differiscono di un numero dispari di pixel finisce mezzo
+ * pixel a destra, e sulle due barre della pausa si vede. Qui le barre sono
+ * allineate ai pixel e simmetriche attorno al centro vero; il play, che ha già
+ * il suo spostamento ottico, è posato alla frazione di pixel.
+ */
+@Composable
+fun PlayPauseGlyph(
+    playing: Boolean,
+    contentDescription: String,
+    tint: Color,
+    glyphSize: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val play = androidx.compose.ui.graphics.vector.rememberVectorPainter(XaosIcons.Play)
+    androidx.compose.foundation.Canvas(
+        modifier
+            .fillMaxSize()
+            .semantics { this.contentDescription = contentDescription },
+    ) {
+        val g = glyphSize.toPx()
+        if (playing) {
+            // Le proporzioni dell'icona: barre larghe 4/24 e alte 14/24, a 4/24 l'una dall'altra.
+            val w = size.width.roundToInt()
+            val h = size.height.roundToInt()
+            val bar = (g * 4f / 24f).roundToInt().coerceAtLeast(1)
+            // Spazio fra le barre e altezza con la stessa parità del pulsante:
+            // così i bordi cadono su pixel interi e restano simmetrici.
+            var gap = (g * 4f / 24f).roundToInt().coerceAtLeast(1)
+            if ((w - gap) % 2 != 0) gap += 1
+            var tall = (g * 14f / 24f).roundToInt()
+            if ((h - tall) % 2 != 0) tall += 1
+            val top = (h - tall) / 2f
+            val barSize = androidx.compose.ui.geometry.Size(bar.toFloat(), tall.toFloat())
+            drawRect(tint, androidx.compose.ui.geometry.Offset((w - gap) / 2f - bar, top), barSize)
+            drawRect(tint, androidx.compose.ui.geometry.Offset((w + gap) / 2f, top), barSize)
+        } else {
+            translate((size.width - g) / 2f, (size.height - g) / 2f) {
+                with(play) {
+                    draw(androidx.compose.ui.geometry.Size(g, g), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tint))
+                }
+            }
         }
     }
 }

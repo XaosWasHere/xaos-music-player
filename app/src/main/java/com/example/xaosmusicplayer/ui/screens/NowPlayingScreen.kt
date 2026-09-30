@@ -86,6 +86,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.lerp as lerpColor
 import androidx.compose.ui.unit.lerp as lerpDp
 import androidx.compose.ui.unit.lerp as lerpSp
+import com.example.xaosmusicplayer.ui.components.PlayPauseGlyph
 
 /**
  * Il player a tutto schermo, con il testo del brano sotto.
@@ -919,12 +920,7 @@ private fun TransportControls(
                 .clickable(onClick = onPlayPause),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = if (isPlaying) XaosIcons.Pause else XaosIcons.Play,
-                contentDescription = if (isPlaying) "Pausa" else "Riproduci",
-                tint = palette.onAccent,
-                modifier = Modifier.size(34.dp),
-            )
+            PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", palette.onAccent, glyphSize = 34.dp)
         }
 
         IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {

@@ -114,12 +114,7 @@ fun MiniPlayer(
                                 .clickable(onClick = onPlayPause),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                imageVector = if (isPlaying) XaosIcons.Pause else XaosIcons.Play,
-                                contentDescription = if (isPlaying) "Pausa" else "Riproduci",
-                                tint = colors.onAccent,
-                                modifier = Modifier.size(20.dp),
-                            )
+                            PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 20.dp)
                         }
                         IconButton(onClick = onNext) {
                             Icon(

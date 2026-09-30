@@ -196,12 +196,7 @@ fun MiniPlayerCard(
                 Modifier.size(44.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { player.togglePlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    if (isPlaying) XaosIcons.Pause else XaosIcons.Play,
-                    if (isPlaying) "Pausa" else "Riproduci",
-                    tint = colors.onAccent,
-                    modifier = Modifier.size(22.dp),
-                )
+                PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 22.dp)
             }
             CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 34.dp, outlined = false)
             // Il cuore: lo stesso della barra, ma i preferiti arrivano da fuori

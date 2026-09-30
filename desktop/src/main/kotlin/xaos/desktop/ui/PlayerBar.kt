@@ -130,12 +130,7 @@ fun PlayerBar(
                             .pressable { player.togglePlayPause() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            if (isPlaying) XaosIcons.Pause else XaosIcons.Play,
-                            if (isPlaying) "Pausa" else "Riproduci",
-                            tint = colors.onAccent,
-                            modifier = Modifier.size(24.dp),
-                        )
+                        PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 24.dp)
                     }
                     CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, outlined = false)
                     ModeButton(

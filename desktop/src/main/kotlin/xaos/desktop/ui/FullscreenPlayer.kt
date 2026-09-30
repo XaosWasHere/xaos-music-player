@@ -287,12 +287,7 @@ fun FullscreenPlayer(
                         Modifier.size(76.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { player.togglePlayPause() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            if (isPlaying) XaosIcons.Pause else XaosIcons.Play,
-                            if (isPlaying) "Pausa (spazio)" else "Riproduci (spazio)",
-                            tint = colors.onAccent,
-                            modifier = Modifier.size(36.dp),
-                        )
+                        PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa (spazio)" else "Riproduci (spazio)", colors.onAccent, glyphSize = 36.dp)
                     }
                     CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 56.dp, outlined = false)
                     BigModeButton(
