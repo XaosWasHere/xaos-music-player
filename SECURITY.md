@@ -6,6 +6,7 @@ Make sure to always update Xaos to the latest version, so any bug and vulnerabil
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 1.5.x   | :white_check_mark: |
 | 1.4.x   | :white_check_mark: |
 | 1.2     | :white_check_mark: |
 | 1.1     | :x:                |
