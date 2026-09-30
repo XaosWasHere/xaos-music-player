@@ -29,12 +29,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xaos.desktop.player.Player
 import xaos.desktop.theme.Xaos
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * Il miniplayer: la stessa card degli album — copertina quadrata, titolo in
@@ -87,7 +90,7 @@ fun MiniPlayerCard(
                     change.consume()
                 }
             }
-            .shadow(18.dp, CardShape)
+            .softShadow()
             // La card del tema è velata, pensata per stare sullo sfondo dell'app:
             // qui sotto c'è il desktop, quindi prima un fondo pieno.
             .background(colors.background, CardShape)
@@ -236,5 +239,30 @@ private fun OverlayButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, tint = colors.ink, modifier = Modifier.size(15.dp))
+    }
+}
+
+/** Il margine trasparente attorno alla card, dove sta l'ombra. */
+val MiniShadowMargin = 16.dp
+
+/**
+ * L'ombra della card: una sagoma sfocata, poco spostata in basso. L'ombra di
+ * elevazione di Compose si allunga molto più di così e il bordo della finestra
+ * la tagliava di netto; questa svanisce del tutto entro [MiniShadowMargin]
+ * (tre volte la sfocatura più lo spostamento).
+ */
+private fun Modifier.softShadow(
+    blur: androidx.compose.ui.unit.Dp = 4.dp,
+    offsetY: androidx.compose.ui.unit.Dp = 3.dp,
+    corner: androidx.compose.ui.unit.Dp = 18.dp,
+    alpha: Float = 0.55f,
+): Modifier = drawBehind {
+    drawIntoCanvas { canvas ->
+        val paint = org.jetbrains.skia.Paint().apply {
+            color = androidx.compose.ui.graphics.Color.Black.copy(alpha = alpha).toArgb()
+            maskFilter = org.jetbrains.skia.MaskFilter.makeBlur(org.jetbrains.skia.FilterBlurMode.NORMAL, blur.toPx())
+        }
+        val r = corner.toPx()
+        canvas.nativeCanvas.drawRRect(org.jetbrains.skia.RRect.makeXYWH(0f, offsetY.toPx(), size.width, size.height, r), paint)
     }
 }

@@ -267,9 +267,9 @@ private fun MiniPlayerWindow(
     val track by player.current.collectAsState()
     val userState by userData.state.collectAsState()
     val isFavorite = track?.let { userData.isFavorite(it, userState) } ?: false
-    val width = 232.dp * prefs.uiScale
-    // Card quadrata più titolo e comandi, più il margine per l'ombra.
-    val height = 346.dp * prefs.uiScale
+    // La card (208 × 322) più il margine per l'ombra, da ogni lato.
+    val width = (208.dp + xaos.desktop.ui.MiniShadowMargin * 2) * prefs.uiScale
+    val height = (322.dp + xaos.desktop.ui.MiniShadowMargin * 2) * prefs.uiScale
     val state = rememberWindowState(
         size = DpSize(width, height),
         position = run {
@@ -308,7 +308,7 @@ private fun MiniPlayerWindow(
                         isFavorite = isFavorite,
                         onToggleFavorite = { track?.let(userData::toggleFavorite) },
                         onVolumeChange = { v -> settings.update { it.copy(volume = v) } },
-                        modifier = androidx.compose.ui.Modifier.padding(12.dp),
+                        modifier = androidx.compose.ui.Modifier.padding(xaos.desktop.ui.MiniShadowMargin),
                     )
                 }
             }
