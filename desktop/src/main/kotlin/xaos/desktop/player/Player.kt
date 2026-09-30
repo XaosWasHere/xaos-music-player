@@ -13,6 +13,14 @@ import java.net.URI
 enum class RepeatMode { OFF, ALL, ONE }
 
 /**
+ * Da dove arriva la coda in riproduzione: l'album, la playlist, i preferiti…
+ * È quello che mostra "In riproduzione da" e dove porta un clic lì sopra.
+ */
+data class PlaySource(val kind: Kind, val id: String, val label: String) {
+    enum class Kind { ALBUM, PLAYLIST, FAVORITES, SONGS, ARTIST, SEARCH, STATS }
+}
+
+/**
  * La riproduzione, affidata a VLC.
  *
  * VLC legge qualunque formato abbia la libreria (FLAC compreso, che le librerie
@@ -260,8 +268,12 @@ class Player {
         }
     }
 
-    fun play(tracks: List<Track>, startIndex: Int) {
+    private val _source = MutableStateFlow<PlaySource?>(null)
+    val source: StateFlow<PlaySource?> = _source.asStateFlow()
+
+    fun play(tracks: List<Track>, startIndex: Int, source: PlaySource? = null) {
         if (tracks.isEmpty()) return
+        _source.value = source
         _queue.value = tracks
         rebuildOrder(startIndex.coerceIn(tracks.indices))
         startCurrent()

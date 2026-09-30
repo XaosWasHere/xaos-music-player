@@ -135,6 +135,36 @@ fun XaosDesktopApp(
         query = ""
     }
 
+    // Portano all'album o all'artista di un brano, anche dallo schermo intero.
+    fun goToAlbum(t: xaos.desktop.library.Track) {
+        val album = library.snapshot.value.albums.firstOrNull { a -> a.tracks.any { it.path == t.path } } ?: return
+        onFullscreenChange(false)
+        select(Section.ALBUMS)
+        details += Detail.AlbumDetail(album.key)
+    }
+
+    fun goToArtist(t: xaos.desktop.library.Track) {
+        val snap = library.snapshot.value
+        val artist = snap.artists.firstOrNull { a -> a.albums.any { al -> al.tracks.any { it.path == t.path } } } ?: return
+        onFullscreenChange(false)
+        select(Section.ARTISTS)
+        details += Detail.ArtistDetail(artist.name)
+    }
+
+    /** "In riproduzione da": si torna dove la coda è partita. */
+    fun openSource(source: xaos.desktop.player.PlaySource?, current: xaos.desktop.library.Track?) {
+        when (source?.kind) {
+            xaos.desktop.player.PlaySource.Kind.ALBUM -> { onFullscreenChange(false); select(Section.ALBUMS); details += Detail.AlbumDetail(source.id) }
+            xaos.desktop.player.PlaySource.Kind.PLAYLIST -> { onFullscreenChange(false); select(Section.PLAYLISTS); details += Detail.PlaylistDetail(source.id) }
+            xaos.desktop.player.PlaySource.Kind.FAVORITES -> { onFullscreenChange(false); select(Section.FAVORITES) }
+            xaos.desktop.player.PlaySource.Kind.SONGS -> { onFullscreenChange(false); select(Section.SONGS) }
+            xaos.desktop.player.PlaySource.Kind.ARTIST -> { onFullscreenChange(false); select(Section.ARTISTS); details += Detail.ArtistDetail(source.id) }
+            xaos.desktop.player.PlaySource.Kind.STATS -> { onFullscreenChange(false); select(Section.STATS) }
+            xaos.desktop.player.PlaySource.Kind.SEARCH -> { onFullscreenChange(false); select(Section.SONGS); query = source.id }
+            null -> current?.let { goToAlbum(it) }
+        }
+    }
+
     // Le azioni del menu dei brani, uguali in ogni elenco.
     val trackActions = remember {
         TrackActions(
@@ -145,6 +175,8 @@ fun XaosDesktopApp(
             },
             onToggleFavorite = { userData.toggleFavorite(it) },
             onAddToPlaylist = { addToPlaylist = it },
+            onGoToAlbum = { t -> goToAlbum(t) },
+            onGoToArtist = { t -> goToArtist(t) },
         )
     }
     /** Dopo una modifica: si torna indietro e la libreria rilegge i file toccati. */
@@ -204,6 +236,7 @@ fun XaosDesktopApp(
                         lyricsOpen = lyricsOpen,
                         onToggleLyrics = { lyricsOpen = !lyricsOpen },
                         onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
+                        onOpenSource = { openSource(player.source.value, player.current.value) },
                     )
                 }
             }

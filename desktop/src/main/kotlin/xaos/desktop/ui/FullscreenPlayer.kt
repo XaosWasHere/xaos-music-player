@@ -84,6 +84,7 @@ fun FullscreenPlayer(
     lyricsOpen: Boolean,
     onToggleLyrics: () -> Unit,
     onEditLyrics: (Track) -> Unit,
+    onOpenSource: () -> Unit,
 ) {
     val colors = Xaos.colors
     val current by player.current.collectAsState()
@@ -94,6 +95,7 @@ fun FullscreenPlayer(
     val repeat by player.repeat.collectAsState()
     val volume by player.volume.collectAsState()
     val upNext by player.upNext.collectAsState()
+    val source by player.source.collectAsState()
 
     val track = current
 
@@ -110,17 +112,26 @@ fun FullscreenPlayer(
             // ---- testata
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircleIconButton(XaosIcons.ChevronDown, "Chiudi (Esc)", onClose, size = 44.dp)
+                // Un clic porta dove la coda è partita: l'album, la playlist, i preferiti.
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        Modifier
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                            .pressable(onOpenSource)
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                     Text("IN RIPRODUZIONE DA", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                     Text(
-                        track?.album?.uppercase() ?: "—",
+                        (source?.label ?: track?.album)?.uppercase() ?: "—",
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    }
                 }
-                // Lo sfondo si sceglie qui, fra le quattro modalità.
+                // Lo sfondo si sceglie qui, fra le tre modalità.
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FullscreenBackground.entries.forEach { mode ->
                         CircleIconButton(

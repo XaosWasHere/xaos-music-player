@@ -38,6 +38,7 @@ import xaos.desktop.library.Track
 import xaos.desktop.library.UserData
 import xaos.desktop.library.UserDataState
 import xaos.desktop.player.Player
+import xaos.desktop.player.PlaySource
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 import java.time.Instant
@@ -61,8 +62,8 @@ fun FavoritesScreen(snapshot: LibrarySnapshot, data: UserDataState, player: Play
                 trailing = if (tracks.isNotEmpty()) {
                     {
                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            PillButton("RIPRODUCI", onClick = { player.play(tracks, 0) }, icon = XaosIcons.Play, filled = true)
-                            PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
+                            PillButton("RIPRODUCI", onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) }, icon = XaosIcons.Play, filled = true)
+                            PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) }, icon = XaosIcons.Shuffle)
                         }
                     }
                 } else null,
@@ -79,7 +80,7 @@ fun FavoritesScreen(snapshot: LibrarySnapshot, data: UserDataState, player: Play
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(tracks, index) },
+                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) },
             )
         }
     }
@@ -209,8 +210,8 @@ fun PlaylistDetailScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillButton("RIPRODUCI", onClick = { player.play(tracks, 0) }, icon = XaosIcons.Play, filled = true, enabled = tracks.isNotEmpty())
-                        PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle, enabled = tracks.isNotEmpty())
+                        PillButton("RIPRODUCI", onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Play, filled = true, enabled = tracks.isNotEmpty())
+                        PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Shuffle, enabled = tracks.isNotEmpty())
                         PillButton("MODIFICA", onClick = { renaming = true }, icon = XaosIcons.Edit)
                         PillButton("COPERTINA", onClick = { pickImage()?.let { userData.setPlaylistCover(id, it) } }, icon = XaosIcons.Album)
                         if (pl.cover != null) PillButton("TOGLI COPERTINA", onClick = { userData.setPlaylistCover(id, null) })
@@ -231,7 +232,7 @@ fun PlaylistDetailScreen(
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(tracks, index) },
+                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) },
                 extraMenu = listOfNotNull(
                     Triple(XaosIcons.Close, "TOGLI DALLA PLAYLIST") { userData.removeFromPlaylist(id, position) },
                     entries.getOrNull(index - 1)?.let { (above, _) ->
@@ -446,7 +447,7 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
                     RankCard("BRANI PIÙ ASCOLTATI", Modifier.fillMaxWidth()) {
                         stats.topSongs.forEachIndexed { i, r ->
                             RankRow(i, r.item.title, r.item.artist, r.plays, track = r.item) {
-                                player.play(stats.topSongs.map { it.item }, i)
+                                player.play(stats.topSongs.map { it.item }, i, PlaySource(PlaySource.Kind.STATS, "", "Più ascoltati"))
                             }
                         }
                     }

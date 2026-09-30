@@ -520,6 +520,8 @@ class TrackActions(
     val onToggleFavorite: (xaos.desktop.library.Track) -> Unit,
     /** Apre la scelta della playlist per questi brani. */
     val onAddToPlaylist: (List<xaos.desktop.library.Track>) -> Unit,
+    val onGoToAlbum: (xaos.desktop.library.Track) -> Unit = {},
+    val onGoToArtist: (xaos.desktop.library.Track) -> Unit = {},
 )
 
 val LocalTrackActions = androidx.compose.runtime.staticCompositionLocalOf<TrackActions?> { null }

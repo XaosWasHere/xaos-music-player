@@ -59,6 +59,7 @@ import xaos.desktop.library.ScanState
 import xaos.desktop.library.Track
 import xaos.desktop.library.rememberArtwork
 import xaos.desktop.player.Player
+import xaos.desktop.player.PlaySource
 import xaos.desktop.online.DownloadState
 import xaos.desktop.online.OnlineSearch
 import xaos.desktop.online.OnlineTrack
@@ -207,8 +208,8 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                     )
                     Spacer(Modifier.height(6.dp))
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0) }, icon = XaosIcons.Play, filled = true)
-                        PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
+                        PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) }, icon = XaosIcons.Play, filled = true)
+                        PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) }, icon = XaosIcons.Shuffle)
                         PillButton("PLAYLIST", onClick = { actions?.onAddToPlaylist(album.tracks) }, icon = XaosIcons.PlaylistAdd)
                         PillButton("MODIFICA", onClick = { onEdit(album) }, icon = XaosIcons.Edit)
                     }
@@ -223,7 +224,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                 isCurrent = track.path == current?.path,
                 showAlbum = false,
                 showArtwork = false,
-                onClick = { player.play(album.tracks, index) },
+                onClick = { player.play(album.tracks, index, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) },
             )
         }
     }
@@ -244,7 +245,7 @@ fun SongsScreen(snapshot: LibrarySnapshot, player: Player) {
                 "BRANI",
                 caption = "[${snapshot.tracks.size}] BRANI · ${formatDuration(snapshot.tracks.sumOf { it.durationMs })}",
                 trailing = {
-                    PillButton("CASUALE", onClick = { player.play(snapshot.tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle, filled = true)
+                    PillButton("CASUALE", onClick = { player.play(snapshot.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) }, icon = XaosIcons.Shuffle, filled = true)
                 },
             )
         }
@@ -256,7 +257,7 @@ fun SongsScreen(snapshot: LibrarySnapshot, player: Player) {
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(snapshot.tracks, index) },
+                onClick = { player.play(snapshot.tracks, index, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) },
             )
         }
     }
@@ -380,6 +381,8 @@ fun trackMenuItems(
     ) { actions.onToggleFavorite(track) },
     Triple(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") { actions.onAddToPlaylist(listOf(track)) },
 ) + extraMenu + listOf(
+    Triple(XaosIcons.Album, "VAI ALL'ALBUM") { actions.onGoToAlbum(track) },
+    Triple(XaosIcons.Person, "VAI ALL'ARTISTA") { actions.onGoToArtist(track) },
     Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
     Triple(XaosIcons.Mic, "TESTO") { actions.onLyrics(track) },
     Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
@@ -458,8 +461,8 @@ fun ArtistDetailScreen(artist: Artist?, player: Player, onOpenAlbum: (Album) -> 
                 Text(artist.name, style = MaterialTheme.typography.headlineMedium, color = Xaos.colors.ink)
                 Text("[${artist.albums.size}] ALBUM · [${artist.trackCount}] BRANI", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkTertiary)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("RIPRODUCI", onClick = { player.play(all, 0) }, icon = XaosIcons.Play, filled = true)
-                    PillButton("CASUALE", onClick = { player.play(all.shuffled(), 0) }, icon = XaosIcons.Shuffle)
+                    PillButton("RIPRODUCI", onClick = { player.play(all, 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, artist.name)) }, icon = XaosIcons.Play, filled = true)
+                    PillButton("CASUALE", onClick = { player.play(all.shuffled(), 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, artist.name)) }, icon = XaosIcons.Shuffle)
                 }
             }
         }
@@ -540,7 +543,7 @@ fun SearchResults(
                     isCurrent = track.path == current?.path,
                     showAlbum = true,
                     showArtwork = true,
-                    onClick = { player.play(tracks, index) },
+                    onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SEARCH, query, "Ricerca: " + query)) },
                 )
             }
         }
