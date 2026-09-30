@@ -82,7 +82,7 @@ fun MiniPlayerCard(
                         .background(colors.surfaceHigh)
                         .padding(horizontal = 10.dp),
                 ) {
-                    LyricsView(player, track, Modifier.fillMaxSize(), compact = true)
+                    MiniLyrics(player, track, Modifier.fillMaxSize())
                 }
             } else {
                 ArtworkImage(track, size = maxWidth, corner = 12.dp)

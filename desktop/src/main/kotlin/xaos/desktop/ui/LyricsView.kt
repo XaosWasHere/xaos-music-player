@@ -1,6 +1,8 @@
 package xaos.desktop.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -223,3 +225,80 @@ fun LyricsSidePanel(player: Player, width: Dp, onClose: () -> Unit, onEdit: (Tra
 }
 
 private const val FOLLOW_PAUSE_MS = 4_000L
+
+/**
+ * Il testo nel miniplayer, come sul telefono: il verso in corso al centro,
+ * grande e acceso, con il precedente sopra e il successivo sotto, attenuati.
+ * Quando il verso cambia, le righe scorrono verso l'alto. Un testo senza tempi
+ * non ha un "verso in corso": lì resta la lista da scorrere.
+ */
+@Composable
+fun MiniLyrics(player: Player, track: Track?, modifier: Modifier = Modifier) {
+    val colors = Xaos.colors
+    val load by rememberLyrics(track)
+    val position by player.positionMs.collectAsState()
+    when (val l = load) {
+        LyricsLoad.Loading -> Box(modifier, contentAlignment = Alignment.Center) { DotSpinner(size = 16.dp) }
+        LyricsLoad.Missing -> Box(modifier, contentAlignment = Alignment.Center) {
+            Text(
+                if (track == null) "NIENTE IN RIPRODUZIONE" else "NESSUN TESTO",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.inkTertiary,
+            )
+        }
+        is LyricsLoad.Ready -> {
+            val lyrics = l.lyrics
+            if (!lyrics.synced) {
+                LyricsView(player, track, modifier, compact = true)
+                return
+            }
+            val index = lyrics.indexAt(position)
+            androidx.compose.animation.AnimatedContent(
+                targetState = index,
+                modifier = modifier,
+                transitionSpec = {
+                    val up = targetState > initialState
+                    (androidx.compose.animation.slideInVertically(tween(360)) { h -> if (up) h / 3 else -h / 3 } +
+                        androidx.compose.animation.fadeIn(tween(360))) togetherWith
+                        (androidx.compose.animation.slideOutVertically(tween(360)) { h -> if (up) -h / 3 else h / 3 } +
+                            androidx.compose.animation.fadeOut(tween(260)))
+                },
+                label = "mini-lyrics",
+            ) { i ->
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    // Prima del primo verso: il primo è "il successivo", e al centro un segnale d'attesa.
+                    val previous = lyrics.lines.getOrNull(i - 1)?.text
+                    val current = lyrics.lines.getOrNull(i)?.text?.ifBlank { "♪" } ?: "♪"
+                    val next = lyrics.lines.getOrNull(i + 1)?.text
+                    MiniLine(previous, MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp), colors.inkTertiary)
+                    Spacer(Modifier.height(10.dp))
+                    MiniLine(
+                        current,
+                        MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+                        colors.ink,
+                        maxLines = 4,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    MiniLine(next, MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp), colors.inkTertiary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniLine(text: String?, style: TextStyle, color: androidx.compose.ui.graphics.Color, maxLines: Int = 2) {
+    Text(
+        text?.takeIf { it.isNotBlank() } ?: "",
+        style = style,
+        color = color,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
