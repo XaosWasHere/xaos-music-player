@@ -3,7 +3,7 @@ import java.net.URI
 import java.util.zip.ZipFile
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
-val appVersion = "1.3.1"
+val appVersion = "1.4.0"
 
 plugins {
     kotlin("jvm") version "2.4.20"

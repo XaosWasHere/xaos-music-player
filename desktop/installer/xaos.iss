@@ -100,6 +100,41 @@ Filename: "{app}\Xaos.exe"; Description: "Avvia Xaos"; Flags: nowait postinstall
 const
   OldUpgradeCode = '{64F0ED55-26A1-43A7-8814-F7F5064C6442}';
 
+{ L'installer si porta davanti appena si apre: dopo la richiesta dei permessi
+  di amministratore Windows lo lascerebbe spesso dietro le altre finestre.
+  "Sempre in primo piano" per un istante, poi di nuovo normale, funziona anche
+  quando SetForegroundWindow da solo viene ignorato. }
+const
+  HWND_TOPMOST = -1;
+  HWND_NOTOPMOST = -2;
+  SWP_NOMOVE = $0002;
+  SWP_NOSIZE = $0001;
+  SWP_SHOWWINDOW = $0040;
+
+function SetWindowPos(hWnd: HWND; hWndInsertAfter: HWND; X, Y, cx, cy: Integer; uFlags: UINT): BOOL;
+  external 'SetWindowPos@user32.dll stdcall';
+function SetForegroundWindow(hWnd: HWND): BOOL;
+  external 'SetForegroundWindow@user32.dll stdcall';
+
+var
+  BroughtToFront: Boolean;
+
+procedure BringWizardToFront;
+begin
+  SetWindowPos(WizardForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_SHOWWINDOW);
+  SetWindowPos(WizardForm.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_SHOWWINDOW);
+  SetForegroundWindow(WizardForm.Handle);
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if not BroughtToFront then
+  begin
+    BroughtToFront := True;
+    BringWizardToFront;
+  end;
+end;
+
 function MsiEnumRelatedProducts(lpUpgradeCode: String; dwReserved: Cardinal; iProductIndex: Cardinal; lpProductBuf: String): Cardinal;
   external 'MsiEnumRelatedProductsW@msi.dll stdcall';
 
