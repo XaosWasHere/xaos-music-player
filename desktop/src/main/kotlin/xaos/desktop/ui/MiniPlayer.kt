@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xaos.desktop.player.Player
@@ -38,8 +40,15 @@ import xaos.desktop.theme.Xaos
  * Sulla copertina, col mouse sopra, i pulsanti per tornare alla finestra
  * intera o chiudere. Si trascina da qualunque punto.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-fun MiniPlayerCard(player: Player, onExpand: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayerCard(
+    player: Player,
+    onExpand: () -> Unit,
+    showLyrics: Boolean,
+    onToggleLyrics: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = Xaos.colors
     val track by player.current.collectAsState()
     val isPlaying by player.isPlaying.collectAsState()
@@ -50,6 +59,11 @@ fun MiniPlayerCard(player: Player, onExpand: () -> Unit, onClose: () -> Unit, mo
 
     Column(
         modifier
+            // Doppio clic ovunque: torna la finestra intera. Si legge dall'evento
+            // del sistema, così il trascinamento della card resta libero.
+            .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) { event: androidx.compose.ui.input.pointer.PointerEvent ->
+                if ((event.nativeEvent as? java.awt.event.MouseEvent)?.clickCount == 2) onExpand()
+            }
             .shadow(18.dp, CardShape)
             // La card del tema è velata, pensata per stare sullo sfondo dell'app:
             // qui sotto c'è il desktop, quindi prima un fondo pieno.
@@ -59,14 +73,31 @@ fun MiniPlayerCard(player: Player, onExpand: () -> Unit, onClose: () -> Unit, mo
             .padding(8.dp),
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            ArtworkImage(track, size = maxWidth, corner = 12.dp)
+            // Copertina o testo, a scelta.
+            if (showLyrics) {
+                Box(
+                    Modifier
+                        .size(maxWidth)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                        .background(colors.surfaceHigh)
+                        .padding(horizontal = 10.dp),
+                ) {
+                    LyricsView(player, track, Modifier.fillMaxSize(), compact = true)
+                }
+            } else {
+                ArtworkImage(track, size = maxWidth, corner = 12.dp)
+            }
             if (hovered) {
                 Row(
                     Modifier.align(Alignment.TopEnd).padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    OverlayButton(XaosIcons.Fullscreen, "Torna a Xaos", onExpand)
-                    OverlayButton(XaosIcons.Close, "Chiudi il miniplayer", onClose)
+                    OverlayButton(
+                        if (showLyrics) XaosIcons.Album else XaosIcons.Mic,
+                        if (showLyrics) "Mostra la copertina" else "Mostra il testo",
+                        onToggleLyrics,
+                    )
+                    OverlayButton(XaosIcons.Fullscreen, "Torna a Xaos (anche con doppio clic)", onExpand)
                 }
             }
         }

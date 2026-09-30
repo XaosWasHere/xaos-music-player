@@ -76,6 +76,8 @@ fun LyricsView(
     modifier: Modifier = Modifier,
     large: Boolean = false,
     onEdit: ((Track) -> Unit)? = null,
+    /** Per il miniplayer: testo piccolo e margini stretti. */
+    compact: Boolean = false,
 ) {
     val colors = Xaos.colors
     val load by rememberLyrics(track)
@@ -120,13 +122,16 @@ fun LyricsView(
             }
             LaunchedEffect(track?.path) { list.scrollToItem(0) }
 
-            val base = if (large) MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 34.sp)
-            else MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, lineHeight = 24.sp)
+            val base = when {
+                large -> MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 34.sp)
+                compact -> MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp)
+                else -> MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, lineHeight = 24.sp)
+            }
             LazyColumn(
                 modifier,
                 state = list,
-                contentPadding = PaddingValues(top = 12.dp, bottom = if (large) 160.dp else 80.dp),
-                verticalArrangement = Arrangement.spacedBy(if (large) 14.dp else 8.dp),
+                contentPadding = PaddingValues(top = if (compact) 6.dp else 12.dp, bottom = if (large) 160.dp else if (compact) 60.dp else 80.dp),
+                verticalArrangement = Arrangement.spacedBy(if (large) 14.dp else if (compact) 4.dp else 8.dp),
             ) {
                 if (!lyrics.synced) {
                     item {

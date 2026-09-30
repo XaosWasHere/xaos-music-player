@@ -26,6 +26,28 @@ data class EqualizerSettings(
     val bands: List<Float> = List(10) { 0f },
 )
 
+/**
+ * Il tema scelto dall'utente, sopra quello chiaro o scuro. Ogni colore è un
+ * ARGB; null lascia quello del tema di base. Da questi pochi colori si ricavano
+ * tutti gli altri (testo secondario, bordi, pallini…), così la tavolozza resta
+ * coerente qualunque cosa si scelga.
+ */
+@Serializable
+data class CustomTheme(
+    val enabled: Boolean = false,
+    val background: Long? = null,
+    /** Il secondo colore dello sfondo: se c'è, lo sfondo è una sfumatura. */
+    val background2: Long? = null,
+    val panels: Long? = null,
+    val ink: Long? = null,
+    val accent: Long? = null,
+    val dots: Boolean = true,
+)
+
+/** Come si ordinano i brani nella schermata Brani. */
+@Serializable
+enum class SongSort { LIBRARY, TITLE, ARTIST, ALBUM, DURATION }
+
 @Serializable
 data class SettingsData(
     /** Vecchio campo a cartella singola: letto solo per migrare le impostazioni. */
@@ -51,6 +73,13 @@ data class SettingsData(
     val importExcluded: Set<String> = emptySet(),
     /** Ingrandimento di tutta l'interfaccia, testo compreso. */
     val uiScale: Float = 1.1f,
+    val customTheme: CustomTheme = CustomTheme(),
+    val songSort: SongSort = SongSort.TITLE,
+    val songSortDescending: Boolean = false,
+    /** Il "riduci a icona" della finestra la trasforma nel miniplayer. */
+    val minimizeToMini: Boolean = false,
+    /** Il miniplayer mostra il testo al posto della copertina. */
+    val miniShowsLyrics: Boolean = false,
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }
@@ -79,13 +108,43 @@ class Settings(private val file: File) {
     private val _data = MutableStateFlow(read())
     val data: StateFlow<SettingsData> = _data.asStateFlow()
 
+    /**
+     * Cambia le impostazioni: l'app si aggiorna subito, il file si scrive poco
+     * dopo, in background e una volta sola anche se le modifiche sono tante
+     * (per esempio trascinando un colore nella tavolozza).
+     */
+    @Synchronized
     fun update(transform: (SettingsData) -> SettingsData) {
         val next = transform(_data.value)
+        if (next == _data.value) return
         _data.value = next
-        runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(next))
+        if (!writePending) {
+            writePending = true
+            writer.schedule({
+                synchronized(this) { writePending = false }
+                runCatching {
+                    file.parentFile?.mkdirs()
+                    val tmp = File(file.path + ".tmp")
+                    tmp.writeText(json.encodeToString(_data.value))
+                    java.nio.file.Files.move(
+                        tmp.toPath(), file.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    )
+                }
+            }, 300, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
+    }
+
+    private var writePending = false
+    private val writer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        // Non daemon: un salvataggio in coda deve finire anche se l'app si sta chiudendo.
+        Thread(r, "xaos-settings")
+    }
+
+    /** Scrive subito quello che è in coda: da chiamare prima di uscire. */
+    fun flush() {
+        writer.shutdown()
+        writer.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)
     }
 
     fun setRoots(roots: List<String>) = update { it.copy(libraryRoots = roots.distinct(), libraryRoot = null) }

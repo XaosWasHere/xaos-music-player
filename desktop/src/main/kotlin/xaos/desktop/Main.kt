@@ -104,13 +104,25 @@ private fun runApp() = application {
     var mini by remember { mutableStateOf(System.getenv("XAOS_START") == "MINI") }
     var mediaBridge by remember { mutableStateOf<MediaBridge?>(null) }
     val mainWindow = remember { arrayOfNulls<java.awt.Window>(1) }
-    // Riaprire Xaos dalla barra delle applicazioni chiude il miniplayer.
-    LaunchedEffect(windowState.isMinimized) { if (!windowState.isMinimized) mini = false }
-    // Chi prova ad aprire una seconda copia ritrova questa, in primo piano.
-    SingleInstance.onActivate = {
+    /**
+     * Il miniplayer non è una finestra in più: è Xaos che si rimpicciolisce.
+     * La finestra principale si nasconde (sparisce anche dalla barra delle
+     * applicazioni) e resta solo la card; tornando indietro riappare com'era.
+     */
+    fun expandFromMini() {
+        mini = false
         windowState.isMinimized = false
         mainWindow[0]?.let { it.toFront(); it.requestFocus() }
     }
+    // Con l'impostazione scelta, "riduci a icona" diventa "riduci a miniplayer".
+    LaunchedEffect(windowState.isMinimized) {
+        if (windowState.isMinimized && settings.data.value.minimizeToMini && !fullscreen) {
+            windowState.isMinimized = false
+            mini = true
+        }
+    }
+    // Chi prova ad aprire una seconda copia ritrova questa, in primo piano.
+    SingleInstance.onActivate = { expandFromMini() }
 
     // Il player a tutto schermo è una finestra sua (la apre XaosDesktopApp);
     // chiudendola si torna davanti alla finestra principale.
@@ -123,16 +135,17 @@ private fun runApp() = application {
     Window(
         onCloseRequest = {
             mediaBridge?.close()
+            settings.flush()
             player.release()
             exitApplication()
         },
         title = "Xaos",
         icon = appIcon,
         state = windowState,
+        visible = !mini,
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)
         mainWindow[0] = window
-        LaunchedEffect(Unit) { if (mini) windowState.isMinimized = true }
         // I controlli nella barra delle applicazioni e nel riquadro multimediale di Windows.
         LaunchedEffect(Unit) {
             TaskbarButtons.install(window, player, scope)
@@ -143,7 +156,7 @@ private fun runApp() = application {
         val base = androidx.compose.ui.platform.LocalDensity.current
         val scaled = androidx.compose.ui.unit.Density(base.density * prefs.uiScale, base.fontScale)
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
-        XaosTheme(dark = prefs.dark) {
+        XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
             XaosDesktopApp(
                 settings = settings,
                 library = library,
@@ -156,10 +169,7 @@ private fun runApp() = application {
                 onFullscreenChange = ::setFullscreen,
                 screenBounds = { mainWindow[0]?.graphicsConfiguration?.bounds },
                 appIcon = appIcon,
-                onOpenMini = {
-                    mini = true
-                    windowState.isMinimized = true
-                },
+                onOpenMini = { mini = true },
                 onAddFolder = {
                     scope.launch {
                         pickFolder(prefs.roots.firstOrNull())?.let { dir ->
@@ -202,8 +212,16 @@ private fun runApp() = application {
                     // compare da nessuna parte sarebbe un brano perso.
                     val inLibrary = prefs.roots.any { folder.path.startsWith(it) }
                     if (!inLibrary) settings.setRoots(prefs.roots + folder.path)
-                    ytdlp.download(track, folder) {
-                        scope.launch { library.load(settings.data.value.roots.map(::File).filter { it.isDirectory }) }
+                    ytdlp.download(track, folder) { file ->
+                        scope.launch {
+                            val roots = settings.data.value.roots.map(::File).filter { it.isDirectory }
+                            library.load(roots)
+                            // Il testo, se LRCLIB ne ha uno con la stessa durata.
+                            val added = library.snapshot.value.tracks
+                                .firstOrNull { it.path.equals(file.path, ignoreCase = true) }
+                                ?.let { xaos.desktop.online.AutoLyrics.fetchAndEmbed(it) } == true
+                            if (added) library.load(roots)
+                        }
                     }
                 },
             )
@@ -216,12 +234,8 @@ private fun runApp() = application {
             player = player,
             settings = settings,
             icon = appIcon,
-            onExpand = {
-                mini = false
-                windowState.isMinimized = false
-                mainWindow[0]?.toFront()
-            },
-            onClose = { mini = false },
+            onExpand = ::expandFromMini,
+            scope = scope,
         )
     }
 }
@@ -237,7 +251,7 @@ private fun MiniPlayerWindow(
     settings: Settings,
     icon: BitmapPainter,
     onExpand: () -> Unit,
-    onClose: () -> Unit,
+    scope: kotlinx.coroutines.CoroutineScope,
 ) {
     val prefs by settings.data.collectAsState()
     val width = 232.dp * prefs.uiScale
@@ -253,8 +267,10 @@ private fun MiniPlayerWindow(
             )
         },
     )
+    // Chiuderlo (anche con Alt+F4) riporta a Xaos: nascosta la finestra
+    // principale, chiudere questo lascerebbe l'app aperta ma invisibile.
     Window(
-        onCloseRequest = onClose,
+        onCloseRequest = onExpand,
         state = state,
         title = "Xaos",
         icon = icon,
@@ -266,13 +282,16 @@ private fun MiniPlayerWindow(
         val base = androidx.compose.ui.platform.LocalDensity.current
         val scaled = androidx.compose.ui.unit.Density(base.density * prefs.uiScale, base.fontScale)
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
-            XaosTheme(dark = prefs.dark) {
+            XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
                 // Il margine trasparente lascia spazio all'ombra della card.
+                // Anche il miniplayer ha i comandi nella miniatura della barra.
+                LaunchedEffect(Unit) { TaskbarButtons.install(window, player, scope) }
                 WindowDraggableArea {
                     MiniPlayerCard(
                         player = player,
                         onExpand = onExpand,
-                        onClose = onClose,
+                        showLyrics = prefs.miniShowsLyrics,
+                        onToggleLyrics = { settings.update { it.copy(miniShowsLyrics = !it.miniShowsLyrics) } },
                         modifier = androidx.compose.ui.Modifier.padding(12.dp),
                     )
                 }

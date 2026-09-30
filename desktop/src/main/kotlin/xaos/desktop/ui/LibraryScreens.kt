@@ -232,13 +232,25 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
 
 // ------------------------------------------------------------------ Brani
 
+/**
+ * Tutti i brani. Le intestazioni ordinano come in Esplora risorse: un clic
+ * ordina per quella colonna, un altro clic inverte. "#" torna all'ordine della
+ * libreria, per album.
+ */
 @Composable
-fun SongsScreen(snapshot: LibrarySnapshot, player: Player) {
+fun SongsScreen(
+    snapshot: LibrarySnapshot,
+    player: Player,
+    sort: xaos.desktop.SongSort,
+    descending: Boolean,
+    onSort: (xaos.desktop.SongSort) -> Unit,
+) {
     val current by player.current.collectAsState()
     if (snapshot.tracks.isEmpty()) {
         EmptyMessage("NESSUN BRANO")
         return
     }
+    val tracks = remember(snapshot.tracks, sort, descending) { sortTracks(snapshot.tracks, sort, descending) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
@@ -249,30 +261,63 @@ fun SongsScreen(snapshot: LibrarySnapshot, player: Player) {
                 },
             )
         }
-        item { TrackHeader(showAlbum = true) }
-        itemsIndexed(snapshot.tracks, key = { _, t -> t.path }) { index, track ->
+        item { TrackHeader(showAlbum = true, sort = sort, descending = descending, onSort = onSort) }
+        itemsIndexed(tracks, key = { _, t -> t.path }) { index, track ->
             TrackRow(
                 number = index + 1,
                 track = track,
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(snapshot.tracks, index, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) },
+                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) },
             )
         }
     }
 }
 
 @Composable
-fun TrackHeader(showAlbum: Boolean) {
+fun TrackHeader(
+    showAlbum: Boolean,
+    sort: xaos.desktop.SongSort? = null,
+    descending: Boolean = false,
+    onSort: ((xaos.desktop.SongSort) -> Unit)? = null,
+) {
     val colors = Xaos.colors
+    /** Un'intestazione: cliccabile se si può ordinare, con la freccia su quella attiva. */
+    @Composable
+    fun Head(label: String, key: xaos.desktop.SongSort?, modifier: Modifier) {
+        val active = key != null && key == sort
+        Row(
+            modifier.then(
+                if (onSort != null && key != null) Modifier.clip(RoundedCornerShape(6.dp)).pressable { onSort(key) } else Modifier
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = if (active) colors.ink else colors.inkTertiary)
+            if (active && key != xaos.desktop.SongSort.LIBRARY) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    if (descending) XaosIcons.ArrowDown else XaosIcons.ArrowUp,
+                    if (descending) "Decrescente" else "Crescente",
+                    tint = colors.accentInk,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
+    }
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("#", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(40.dp))
-            Text("TITOLO", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.weight(1f))
-            if (showAlbum) Text("ALBUM", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.weight(0.7f))
+            Head("#", xaos.desktop.SongSort.LIBRARY, Modifier.width(40.dp))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Head("TITOLO", xaos.desktop.SongSort.TITLE, Modifier)
+                if (onSort != null) {
+                    Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                    Head("ARTISTA", xaos.desktop.SongSort.ARTIST, Modifier)
+                }
+            }
+            if (showAlbum) Head("ALBUM", xaos.desktop.SongSort.ALBUM, Modifier.weight(0.7f))
             Spacer(Modifier.width(36.dp))
-            Text("DURATA", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
+            Head("DURATA", xaos.desktop.SongSort.DURATION, Modifier.width(64.dp))
         }
         Hairline()
         Spacer(Modifier.height(6.dp))
@@ -410,6 +455,25 @@ fun TrackMenu(
             )
         }
     }
+}
+
+/**
+ * L'ordine dei brani. I nomi si confrontano come li legge una persona:
+ * maiuscole e accenti non contano ("Été" sta con le E). A parità, il titolo.
+ */
+fun sortTracks(tracks: List<Track>, sort: xaos.desktop.SongSort, descending: Boolean): List<Track> {
+    val collator = java.text.Collator.getInstance(Locale.ITALIAN).apply { strength = java.text.Collator.PRIMARY }
+    val byTitle = Comparator<Track> { a, b -> collator.compare(a.title, b.title) }
+    val comparator: Comparator<Track>? = when (sort) {
+        xaos.desktop.SongSort.LIBRARY -> null
+        xaos.desktop.SongSort.TITLE -> byTitle.thenBy { it.artist.lowercase() }
+        xaos.desktop.SongSort.ARTIST -> Comparator<Track> { a, b -> collator.compare(a.artist, b.artist) }.then(byTitle)
+        xaos.desktop.SongSort.ALBUM -> Comparator<Track> { a, b -> collator.compare(a.album, b.album) }
+            .thenBy { it.discNumber }.thenBy { it.trackNumber }.then(byTitle)
+        xaos.desktop.SongSort.DURATION -> compareBy<Track> { it.durationMs }.then(byTitle)
+    }
+    val sorted = comparator?.let { tracks.sortedWith(it) } ?: tracks
+    return if (descending) sorted.asReversed() else sorted
 }
 
 // ------------------------------------------------------------------ Artisti

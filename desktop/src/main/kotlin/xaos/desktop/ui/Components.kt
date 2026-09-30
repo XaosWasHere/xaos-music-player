@@ -74,7 +74,8 @@ import kotlin.math.sin
  * "mezzi" si alternano a quelli pieni e compare una trama a scacchiera.
  */
 fun Modifier.dotGrid(color: Color, spacing: Dp = 16.dp, radius: Dp = 0.5.dp): Modifier =
-    drawWithCache {
+    // Pallini spenti dal tema personalizzato: niente da disegnare.
+    if (color.alpha == 0f) this else drawWithCache {
         val step = spacing.toPx().roundToInt().coerceAtLeast(2).toFloat()
         val diameter = (radius.toPx() * 2f).roundToInt().coerceAtLeast(1)
         // Diametro pari: centro sul bordo fra pixel; dispari: al centro del pixel.

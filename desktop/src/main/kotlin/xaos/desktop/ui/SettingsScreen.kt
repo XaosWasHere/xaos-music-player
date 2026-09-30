@@ -221,6 +221,24 @@ fun SettingsScreen(
                         )
                     }
                 }
+                Hairline()
+                ThemeEditor(prefs, settings)
+            }
+        }
+
+        item {
+            SettingsCard("FINESTRA") {
+                Text("RIDUCI A ICONA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton("NELLA BARRA DELLE APPLICAZIONI", onClick = { settings.update { it.copy(minimizeToMini = false) } }, filled = !prefs.minimizeToMini)
+                    PillButton("DIVENTA MINIPLAYER", onClick = { settings.update { it.copy(minimizeToMini = true) } }, filled = prefs.minimizeToMini)
+                }
+                Text(
+                    if (prefs.minimizeToMini) "Riducendo Xaos a icona, la finestra diventa il miniplayer: resta in primo piano con copertina o testo e i comandi. Un doppio clic lo riporta a finestra intera."
+                    else "Riducendo Xaos a icona, finisce nella barra delle applicazioni come ogni programma. Il miniplayer si apre dal suo pulsante nella barra del player.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Xaos.colors.inkTertiary,
+                )
             }
         }
 

@@ -52,6 +52,7 @@ import xaos.desktop.sync.DataSync
 import androidx.compose.runtime.CompositionLocalProvider
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
+import xaos.desktop.theme.appBackground
 
 /** Le sezioni della barra laterale. */
 enum class Section(val label: String, val icon: ImageVector) {
@@ -227,7 +228,7 @@ fun XaosDesktopApp(
                 LocalTrackActions provides trackActions,
                 LocalFavorites provides favorites,
             ) {
-                xaos.desktop.theme.XaosTheme(dark = prefs.dark) {
+                xaos.desktop.theme.XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
                     FullscreenPlayer(
                         player = player,
                         background = prefs.fullscreenBackground,
@@ -244,7 +245,7 @@ fun XaosDesktopApp(
     }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
     val windowWidth = maxWidth
-    Column(Modifier.fillMaxSize().background(colors.background)) {
+    Column(Modifier.fillMaxSize().appBackground()) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Sidebar(
                 latest = latest,
@@ -259,7 +260,6 @@ fun XaosDesktopApp(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .background(colors.background)
                     .dotGrid(colors.dot),
             ) {
                 Column(Modifier.fillMaxSize()) {
@@ -346,7 +346,18 @@ fun XaosDesktopApp(
                             section == Section.ALBUMS -> AlbumsScreen(snapshot, scan) {
                                 details += Detail.AlbumDetail(it.key)
                             }
-                            section == Section.SONGS -> SongsScreen(snapshot, player)
+                            section == Section.SONGS -> SongsScreen(
+                                snapshot, player,
+                                sort = prefs.songSort,
+                                descending = prefs.songSortDescending,
+                                // Un clic ordina, il secondo sulla stessa colonna inverte.
+                                onSort = { key ->
+                                    settings.update {
+                                        if (it.songSort == key) it.copy(songSortDescending = !it.songSortDescending)
+                                        else it.copy(songSort = key, songSortDescending = false)
+                                    }
+                                },
+                            )
                             section == Section.ARTISTS -> ArtistsScreen(snapshot) {
                                 details += Detail.ArtistDetail(it.name)
                             }

@@ -60,6 +60,7 @@ import xaos.desktop.library.rememberArtwork
 import xaos.desktop.player.Player
 import xaos.desktop.player.RepeatMode
 import xaos.desktop.theme.Xaos
+import xaos.desktop.theme.appBackground
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
@@ -99,7 +100,7 @@ fun FullscreenPlayer(
 
     val track = current
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(colors.background)) {
+    BoxWithConstraints(Modifier.fillMaxSize().appBackground()) {
         val wideScreen = maxWidth > 1250.dp
         when (background) {
             FullscreenBackground.ARTWORK -> ArtworkWash(track, colors.background)

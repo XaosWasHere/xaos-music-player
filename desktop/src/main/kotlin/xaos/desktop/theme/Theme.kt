@@ -13,6 +13,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.background
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +63,8 @@ data class XaosPalette(
     val accentInk: Color,
     val dot: Color,
     val track: Color,
+    /** Il secondo colore dello sfondo, se l'utente ha scelto una sfumatura. */
+    val background2: Color? = null,
 )
 
 val DarkPalette = XaosPalette(
@@ -156,10 +160,48 @@ private fun buildTypography(): Typography {
 
 private val XaosTypography by lazy { buildTypography() }
 
+/**
+ * La tavolozza con i colori scelti dall'utente. Si scelgono sfondo, pannelli,
+ * testo e accento; tutto il resto se ne ricava: il testo secondario è il testo
+ * sfumato verso lo sfondo, i bordi sono i pannelli verso il testo, e così via.
+ */
+fun XaosPalette.customized(t: xaos.desktop.CustomTheme): XaosPalette {
+    if (!t.enabled) return this
+    fun c(v: Long?, fallback: Color) = v?.let { Color(it.toInt()) } ?: fallback
+    fun mix(a: Color, b: Color, f: Float) = androidx.compose.ui.graphics.lerp(a, b, f)
+    val bg = c(t.background, background)
+    val panel = c(t.panels, surface)
+    val text = c(t.ink, ink)
+    val acc = c(t.accent, accent)
+    val darkBg = bg.luminance() < 0.4f
+    // Il testo sull'accento: nero o bianco, quello che si legge meglio.
+    val onAcc = if (acc.luminance() > 0.45f) Color(0xFF111111) else Color.White
+    // L'accento come testo solo se sul fondo si legge; altrimenti il testo.
+    val contrast = (maxOf(acc.luminance(), bg.luminance()) + 0.05f) / (minOf(acc.luminance(), bg.luminance()) + 0.05f)
+    return copy(
+        isDark = darkBg,
+        background = bg,
+        background2 = t.background2?.let { Color(it.toInt()) },
+        sidebar = mix(bg, text, 0.035f),
+        card = panel.copy(alpha = card.alpha),
+        surface = panel,
+        surfaceHigh = mix(panel, text, 0.08f),
+        line = mix(panel, text, 0.14f),
+        ink = text,
+        inkSecondary = mix(bg, text, 0.62f),
+        inkTertiary = mix(bg, text, 0.42f),
+        accent = acc,
+        onAccent = onAcc,
+        accentInk = if (contrast >= 3f) acc else text,
+        dot = if (t.dots) text.copy(alpha = if (darkBg) 0.20f else 0.30f) else Color.Transparent,
+        track = mix(bg, text, 0.2f),
+    )
+}
+
 /** Il tema, con la dissolvenza fra chiaro e scuro come sul telefono. */
 @Composable
-fun XaosTheme(dark: Boolean, content: @Composable () -> Unit) {
-    val palette = (if (dark) DarkPalette else LightPalette).animated()
+fun XaosTheme(dark: Boolean, custom: xaos.desktop.CustomTheme = xaos.desktop.CustomTheme(), content: @Composable () -> Unit) {
+    val palette = (if (dark) DarkPalette else LightPalette).customized(custom).animated()
     val scheme = if (palette.isDark) {
         darkColorScheme(
             primary = palette.accent, onPrimary = palette.onAccent,
@@ -207,5 +249,15 @@ private fun XaosPalette.animated(): XaosPalette {
         accentInk = accentInk.follow("accentInk"),
         dot = dot.follow("dot"),
         track = track.follow("track"),
+        background2 = background2?.follow("background2"),
     )
+}
+
+/** Lo sfondo dell'app: il colore, o la sfumatura se l'utente l'ha scelta. */
+@Composable
+fun androidx.compose.ui.Modifier.appBackground(): androidx.compose.ui.Modifier {
+    val c = Xaos.colors
+    val second = c.background2
+    return if (second == null) this.background(c.background)
+    else this.background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(c.background, second)))
 }
