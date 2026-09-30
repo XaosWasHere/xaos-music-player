@@ -21,6 +21,7 @@ import xaos.desktop.library.UserData
 import xaos.desktop.sync.DataSync
 import xaos.desktop.system.MediaBridge
 import xaos.desktop.system.TaskbarButtons
+import xaos.desktop.system.SingleInstance
 import xaos.desktop.ui.MiniPlayerCard
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.foundation.layout.padding
@@ -33,7 +34,16 @@ import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.UIManager
 
-fun main() = application {
+fun main() {
+    // Una sola copia alla volta: una seconda richiama la prima e si chiude.
+    if (!Settings.isTestInstance && !SingleInstance.acquire()) {
+        SingleInstance.activateExisting()
+        return
+    }
+    runApp()
+}
+
+private fun runApp() = application {
     remember { StartupLog.mark("main") }
     val settings = remember { Settings(File(Settings.appDir, "settings.json")) }
     // v2: l'indice registra anche quali brani hanno un testo. Cambiando nome si
@@ -96,6 +106,11 @@ fun main() = application {
     val mainWindow = remember { arrayOfNulls<java.awt.Window>(1) }
     // Riaprire Xaos dalla barra delle applicazioni chiude il miniplayer.
     LaunchedEffect(windowState.isMinimized) { if (!windowState.isMinimized) mini = false }
+    // Chi prova ad aprire una seconda copia ritrova questa, in primo piano.
+    SingleInstance.onActivate = {
+        windowState.isMinimized = false
+        mainWindow[0]?.let { it.toFront(); it.requestFocus() }
+    }
 
     // Il player a tutto schermo è una finestra sua (la apre XaosDesktopApp);
     // chiudendola si torna davanti alla finestra principale.

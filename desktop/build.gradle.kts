@@ -161,6 +161,37 @@ tasks.matching { it.name == "prepareAppResources" }.configureEach {
     dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses, buildMediaBridge)
 }
 
+/*
+ * L'installer vero, con Inno Setup (installer/xaos.iss): aspetto coerente con
+ * l'app, tema chiaro o scuro come Windows, "Avvia Xaos" alla fine. Prende la
+ * cartella dell'app prodotta da createDistributable, VLC e adb compresi.
+ * Inno Setup si installa con: winget install JRSoftware.InnoSetup
+ */
+val packageInstaller by tasks.registering(Exec::class) {
+    group = "compose desktop"
+    description = "Costruisce l'installer Inno Setup di Xaos"
+    dependsOn("createDistributable")
+    val iscc = providers.gradleProperty("iscc").orNull?.let(::File)
+        ?: listOf(
+            File(System.getenv("LOCALAPPDATA") ?: "", "Programs/Inno Setup 6/ISCC.exe"),
+            File("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
+            File("C:/Program Files/Inno Setup 6/ISCC.exe"),
+        ).firstOrNull { it.isFile }
+    val appImage = layout.buildDirectory.dir("compose/binaries/main/app/Xaos")
+    val output = layout.buildDirectory.dir("installer")
+    onlyIf { iscc != null }
+    workingDir = file("installer")
+    executable = iscc?.path ?: "ISCC.exe"
+    args(
+        "/Q",
+        "/DAppVersion=$appVersion",
+        "/DSourceDir=" + appImage.get().asFile.path,
+        "/DOutputDir=" + output.get().asFile.path,
+        "xaos.iss",
+    )
+    doLast { logger.lifecycle("Installer: " + output.get().file("Xaos-$appVersion.exe").asFile.path) }
+}
+
 compose.desktop {
     application {
         mainClass = "xaos.desktop.MainKt"
