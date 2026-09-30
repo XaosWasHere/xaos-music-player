@@ -49,6 +49,8 @@ data class SettingsData(
     val importFolder: String? = null,
     /** I brani del telefono da non importare: le spunte si ricordano anche qui. */
     val importExcluded: Set<String> = emptySet(),
+    /** Ingrandimento di tutta l'interfaccia, testo compreso. */
+    val uiScale: Float = 1.1f,
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }

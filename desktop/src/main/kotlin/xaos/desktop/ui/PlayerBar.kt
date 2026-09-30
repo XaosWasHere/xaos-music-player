@@ -139,6 +139,12 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: (
                     color = colors.ink,
                     onChange = { player.setVolume((it * 100).toInt()) },
                     onChangeFinished = { onVolumeChange((it * 100).toInt()) },
+                    // La rotella sopra il cursore: cinque punti per scatto.
+                    onScroll = { dy ->
+                        val v = (volume - (dy * 5).toInt()).coerceIn(0, 100)
+                        player.setVolume(v)
+                        onVolumeChange(v)
+                    },
                 )
                 Spacer(Modifier.width(14.dp))
                 CircleIconButton(XaosIcons.Fullscreen, "Schermo intero", onOpenFullscreen, size = 34.dp)

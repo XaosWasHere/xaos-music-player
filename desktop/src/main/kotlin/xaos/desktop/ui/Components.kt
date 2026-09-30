@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import xaos.desktop.theme.Xaos
@@ -72,7 +73,7 @@ import kotlin.math.sin
  * zoom di Windows, o semplicemente con la larghezza della finestra, i puntini
  * "mezzi" si alternano a quelli pieni e compare una trama a scacchiera.
  */
-fun Modifier.dotGrid(color: Color, spacing: Dp = 14.dp, radius: Dp = 0.9.dp): Modifier =
+fun Modifier.dotGrid(color: Color, spacing: Dp = 16.dp, radius: Dp = 0.5.dp): Modifier =
     drawWithCache {
         val step = spacing.toPx().roundToInt().coerceAtLeast(2).toFloat()
         val diameter = (radius.toPx() * 2f).roundToInt().coerceAtLeast(1)
@@ -283,6 +284,7 @@ fun DotProgressLine(
  * mostra la posizione del mouse, e comunica il valore solo al rilascio
  * ([onChangeFinished]) oppure di continuo ([onChange]) se serve.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun DotSlider(
     value: Float,
@@ -294,6 +296,8 @@ fun DotSlider(
     radius: Dp = 1.4.dp,
     onChange: ((Float) -> Unit)? = null,
     onChangeFinished: ((Float) -> Unit)? = null,
+    /** La rotella del mouse sopra il cursore: riceve di quanto è girata (su = negativo). */
+    onScroll: ((Float) -> Unit)? = null,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
@@ -306,6 +310,16 @@ fun DotSlider(
             .height(18.dp)
             .hoverable(source)
             .pointerHoverIcon(PointerIcon.Hand)
+            .then(
+                if (onScroll == null) Modifier
+                else Modifier.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Scroll) { event ->
+                    val dy = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                    if (dy != 0f) {
+                        onScroll(dy)
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            )
             .pointerInput(Unit) {
                 detectTapGestures { pos ->
                     val v = (pos.x / size.width).coerceIn(0f, 1f)

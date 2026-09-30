@@ -110,6 +110,11 @@ fun main() = application {
         },
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)
+        // L'ingrandimento vale per tutto: testo, spazi, icone. Si ottiene
+        // dichiarando allo strato di Compose uno schermo un po' più denso.
+        val base = androidx.compose.ui.platform.LocalDensity.current
+        val scaled = androidx.compose.ui.unit.Density(base.density * prefs.uiScale, base.fontScale)
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
         XaosTheme(dark = prefs.dark) {
             XaosDesktopApp(
                 settings = settings,
@@ -166,6 +171,7 @@ fun main() = application {
                     }
                 },
             )
+        }
         }
     }
 }

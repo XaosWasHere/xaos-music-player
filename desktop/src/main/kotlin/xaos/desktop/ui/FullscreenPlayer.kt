@@ -92,7 +92,7 @@ fun FullscreenPlayer(
     Box(Modifier.fillMaxSize().background(colors.background)) {
         when (background) {
             FullscreenBackground.ARTWORK -> ArtworkWash(track, colors.background)
-            FullscreenBackground.OFF -> Box(Modifier.fillMaxSize().dotGrid(colors.dot, spacing = 16.dp))
+            FullscreenBackground.OFF -> Box(Modifier.fillMaxSize().dotGrid(colors.dot.copy(alpha = colors.dot.alpha * 0.6f), spacing = 20.dp))
             else -> DotMatrix(
                 colors = artColors,
                 animated = background == FullscreenBackground.ANIMATED,
@@ -230,7 +230,13 @@ fun FullscreenPlayer(
                 Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume, "Volume", tint = colors.inkSecondary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    DotSlider(value = volume / 100f, modifier = Modifier.width(150.dp), color = colors.ink, onChange = { player.setVolume((it * 100).toInt()) })
+                    DotSlider(
+                        value = volume / 100f,
+                        modifier = Modifier.width(150.dp),
+                        color = colors.ink,
+                        onChange = { player.setVolume((it * 100).toInt()) },
+                        onScroll = { dy -> player.setVolume(volume - (dy * VOLUME_STEP).toInt()) },
+                    )
                 }
                 Text(
                     "ESC CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
@@ -242,6 +248,9 @@ fun FullscreenPlayer(
         }
     }
 }
+
+/** Punti di volume per ogni scatto della rotella. */
+private const val VOLUME_STEP = 5
 
 private val FullscreenBackground.icon: ImageVector
     get() = when (this) {
@@ -357,9 +366,11 @@ private fun DrawScope.drawMatrix(
     backdrop: Color,
     mono: Color?,
 ) {
-    val step = 16.dp.toPx().let { kotlin.math.round(it) }
-    val minR = 1.dp.toPx()
-    val maxR = step * 0.26f
+    // Punti radi e piccoli: la matrice deve fare da atmosfera, non da trama
+    // sotto il titolo. Anche al massimo un punto occupa meno di un quinto del passo.
+    val step = 20.dp.toPx().let { kotlin.math.round(it) }
+    val minR = 0.6.dp.toPx()
+    val maxR = step * 0.17f
     val startX = kotlin.math.floor((size.width % step) / 2f + step / 2f)
     // La matrice si spegne verso il basso: i comandi stanno sul fondo pulito.
     val fadeFrom = size.height * 0.62f
@@ -386,11 +397,11 @@ private fun DrawScope.drawMatrix(
             val intensity = (weight * 1.25f * mask).coerceIn(0f, 1f)
             val center = Offset(x, y)
             if (intensity < 0.06f) {
-                drawCircle(baseDot.copy(alpha = baseDot.alpha * mask), minR, center)
+                drawCircle(baseDot.copy(alpha = baseDot.alpha * 0.6f * mask), minR, center)
             } else {
                 val radius = minR + (maxR - minR) * intensity
-                val color = mono?.copy(alpha = 0.10f + intensity * 0.30f)
-                    ?: Color(r / weight, g / weight, b / weight, alpha = 0.16f + intensity * 0.40f)
+                val color = mono?.copy(alpha = 0.05f + intensity * 0.16f)
+                    ?: Color(r / weight, g / weight, b / weight, alpha = 0.08f + intensity * 0.24f)
                 drawCircle(color, radius, center)
             }
             x += step

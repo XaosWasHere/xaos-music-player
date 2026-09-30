@@ -199,9 +199,20 @@ fun SettingsScreen(
 
         item {
             SettingsCard("ASPETTO") {
+                Text("TEMA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton("SCURO", onClick = { settings.update { it.copy(dark = true) } }, filled = prefs.dark)
                     PillButton("CHIARO", onClick = { settings.update { it.copy(dark = false) } }, filled = !prefs.dark)
+                }
+                Text("DIMENSIONE INTERFACCIA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1.0f to "100%", 1.1f to "110%", 1.25f to "125%").forEach { (scale, label) ->
+                        PillButton(
+                            label,
+                            onClick = { settings.update { it.copy(uiScale = scale) } },
+                            filled = kotlin.math.abs(prefs.uiScale - scale) < 0.01f,
+                        )
+                    }
                 }
             }
         }
