@@ -209,7 +209,7 @@ fun SettingsScreen(
         item {
             SettingsCard("INFORMAZIONI") {
                 InfoLine("VERSIONE", "Xaos desktop " + (System.getProperty("xaos.version") ?: "in sviluppo"))
-                InfoLine("VLC", player.vlcVersion ?: "non trovato — serve VLC 3 per la riproduzione")
+                InfoLine("VLC", player.vlcVersion?.let { v -> "$v — ${player.vlcPath.orEmpty()}" } ?: "non ancora caricato")
                 InfoLine("ADB", phone.adbPath ?: "non trovato — serve per la sincronizzazione")
                 InfoLine("DATI", Settings.appDir.path)
                 InfoLine("PROGETTO", "github.com/XaosWasHere/xaos-music-player")

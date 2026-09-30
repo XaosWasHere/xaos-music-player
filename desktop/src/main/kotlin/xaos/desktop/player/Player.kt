@@ -13,12 +13,17 @@ import java.net.URI
 enum class RepeatMode { OFF, ALL, ONE }
 
 /**
- * La riproduzione, affidata al VLC installato sul PC.
+ * La riproduzione, affidata a VLC.
  *
  * VLC legge qualunque formato abbia la libreria (FLAC compreso, che le librerie
- * Java pure non gestiscono), e vlcj lo pilota senza finestre. Se VLC manca il
- * player resta [available] = false e l'interfaccia lo dice, invece di fallire
- * in silenzio al primo play.
+ * Java pure non gestiscono), e vlcj lo pilota senza finestre. Di norma si usa
+ * il VLC che viaggia dentro Xaos; se sul PC ce n'è uno installato e quello
+ * incluso manca, si usa quello.
+ *
+ * Il motore si avvia con [start], su un thread a parte: caricare VLC può
+ * richiedere qualche secondo, e la finestra non deve aspettarlo. Finché non è
+ * pronto [engine] vale [Engine.Starting]; volume, equalizzatore e uscita audio
+ * chiesti nel frattempo si applicano appena arriva.
  *
  * Gli eventi di VLC arrivano su un suo thread: da lì non si può comandare il
  * player direttamente, quindi il passaggio al brano successivo passa da
@@ -26,24 +31,89 @@ enum class RepeatMode { OFF, ALL, ONE }
  */
 class Player {
 
-    val available: Boolean = runCatching { NativeDiscovery().discover() }.getOrDefault(false)
+    enum class Engine { Starting, Ready, Missing }
 
-    private val factory: MediaPlayerFactory? =
-        if (available) runCatching { MediaPlayerFactory("--no-video", "--quiet") }.getOrNull() else null
-    private val mp: MediaPlayer? = factory?.mediaPlayers()?.newMediaPlayer()
+    private val _engine = MutableStateFlow(Engine.Starting)
+    val engine: StateFlow<Engine> = _engine.asStateFlow()
+
+    /** true quando VLC è carico e pronto a suonare. */
+    val available: Boolean get() = _engine.value == Engine.Ready
+
+    @Volatile private var factory: MediaPlayerFactory? = null
+    @Volatile private var mp: MediaPlayer? = null
+    @Volatile private var equalizer: uk.co.caprica.vlcj.player.base.Equalizer? = null
 
     /** La versione di VLC in uso, per la schermata Informazioni. */
-    val vlcVersion: String? = runCatching { factory?.application()?.version() }.getOrNull()
+    @Volatile var vlcVersion: String? = null
+        private set
+
+    /** Da dove è stato caricato VLC: quello di Xaos o quello installato. */
+    @Volatile var vlcPath: String? = null
+        private set
+
+    /**
+     * Carica VLC su un thread a parte. [bundledDir] è la cartella del VLC incluso
+     * in Xaos: se c'è, ha la precedenza su quello installato.
+     */
+    fun start(bundledDir: java.io.File?) {
+        Thread({
+            val found = runCatching {
+                val discovery = NativeDiscovery(*strategies(bundledDir))
+                val ok = discovery.discover()
+                if (ok) vlcPath = discovery.discoveredPath()
+                ok
+            }.getOrDefault(false)
+            val f = if (found) runCatching { MediaPlayerFactory("--no-video", "--quiet") }.getOrNull() else null
+            val player = f?.mediaPlayers()?.newMediaPlayer()
+            if (f == null || player == null) {
+                _engine.value = Engine.Missing
+                return@Thread
+            }
+            factory = f
+            vlcVersion = runCatching { f.application().version() }.getOrNull()
+            eqBands = runCatching { f.equalizer().bands() }.getOrNull().orEmpty()
+            eqPresets = runCatching { f.equalizer().presets() }.getOrNull().orEmpty()
+            equalizer = runCatching { f.equalizer().newEqualizer() }.getOrNull()
+            player.events().addMediaPlayerEventListener(listener)
+            mp = player
+            player.audio().setVolume(_volume.value)
+            pendingEq?.let { (on, pre, bands) -> applyEqualizer(on, pre, bands) }
+            outputDevice?.let { player.audio().setOutputDevice(null, it) }
+            _engine.value = Engine.Ready
+        }, "xaos-vlc-init").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Prima il VLC incluso, cercato solo nella sua cartella; poi la ricerca
+     * normale di vlcj (registro di Windows, Program Files, PATH).
+     */
+    private fun strategies(bundledDir: java.io.File?): Array<uk.co.caprica.vlcj.factory.discovery.strategy.NativeDiscoveryStrategy> {
+        val bundled = bundledDir?.takeIf { java.io.File(it, "libvlc.dll").isFile }?.let { dir ->
+            object : uk.co.caprica.vlcj.factory.discovery.strategy.NativeDiscoveryStrategy {
+                override fun supported() = true
+                override fun discover(): String = dir.absolutePath
+                override fun onFound(path: String) = true
+                // VLC trova i plugin tramite questa variabile, letta quando la
+                // libreria si carica: va impostata nel processo prima di allora.
+                override fun onSetPluginPath(path: String): Boolean =
+                    uk.co.caprica.vlcj.binding.lib.LibC.INSTANCE._putenv("VLC_PLUGIN_PATH=" + java.io.File(path, "plugins").path) == 0
+            }
+        }
+        return listOfNotNull(bundled, uk.co.caprica.vlcj.factory.discovery.strategy.WindowsNativeDiscoveryStrategy())
+            .toTypedArray()
+    }
 
     // ---------------------------------------------------------- equalizzatore
 
     /** Le frequenze centrali delle bande, in Hz, come le espone VLC. */
-    val eqBands: List<Float> = runCatching { factory?.equalizer()?.bands() }.getOrNull().orEmpty()
+    @Volatile var eqBands: List<Float> = emptyList()
+        private set
 
     /** I preset di VLC ("Flat", "Rock", "Classical"…). */
-    val eqPresets: List<String> = runCatching { factory?.equalizer()?.presets() }.getOrNull().orEmpty()
+    @Volatile var eqPresets: List<String> = emptyList()
+        private set
 
-    private val equalizer = runCatching { factory?.equalizer()?.newEqualizer() }.getOrNull()
+    @Volatile private var pendingEq: Triple<Boolean, Float, List<Float>>? = null
 
     /** Preamp e bande di un preset, per mostrarli e poi ritoccarli a mano. */
     fun presetValues(name: String): Pair<Float, List<Float>>? = runCatching {
@@ -54,8 +124,10 @@ class Player {
     /**
      * Applica l'equalizzatore. vlcj ricalcola il filtro a ogni modifica
      * dell'oggetto, quindi basta aggiornarne i valori; spento, lo si stacca.
+     * Prima che VLC sia pronto la richiesta si conserva e si applica dopo.
      */
     fun applyEqualizer(enabled: Boolean, preamp: Float, bands: List<Float>) {
+        pendingEq = Triple(enabled, preamp, bands)
         val eq = equalizer ?: return
         val player = mp ?: return
         eq.setPreamp(preamp.coerceIn(-20f, 20f))
@@ -70,7 +142,7 @@ class Player {
         mp?.audio()?.outputDevices()?.map { it.deviceId to it.longName }
     }.getOrNull().orEmpty().filter { it.first.isNotBlank() }
 
-    private var outputDevice: String? = null
+    @Volatile private var outputDevice: String? = null
 
     /** null = l'uscita predefinita di Windows. Vale dal brano in corso in poi. */
     fun setOutputDevice(id: String?) {
@@ -110,24 +182,22 @@ class Player {
     private var order: List<Int> = emptyList()
     private var cursor = -1
 
-    init {
-        mp?.events()?.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-            override fun playing(mediaPlayer: MediaPlayer) { _isPlaying.value = true }
-            override fun paused(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
-            override fun stopped(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
-            override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) { _positionMs.value = newTime }
-            override fun lengthChanged(mediaPlayer: MediaPlayer, newLength: Long) {
-                if (newLength > 0) _durationMs.value = newLength
-            }
-            override fun finished(mediaPlayer: MediaPlayer) {
-                mediaPlayer.submit { advance(automatic = true) }
-            }
-            override fun error(mediaPlayer: MediaPlayer) {
-                // Un file che VLC non riesce ad aprire si salta, come farebbe
-                // qualunque player: fermarsi lì lascerebbe la coda appesa.
-                mediaPlayer.submit { advance(automatic = true) }
-            }
-        })
+    private val listener = object : MediaPlayerEventAdapter() {
+        override fun playing(mediaPlayer: MediaPlayer) { _isPlaying.value = true }
+        override fun paused(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
+        override fun stopped(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
+        override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) { _positionMs.value = newTime }
+        override fun lengthChanged(mediaPlayer: MediaPlayer, newLength: Long) {
+            if (newLength > 0) _durationMs.value = newLength
+        }
+        override fun finished(mediaPlayer: MediaPlayer) {
+            mediaPlayer.submit { advance(automatic = true) }
+        }
+        override fun error(mediaPlayer: MediaPlayer) {
+            // Un file che VLC non riesce ad aprire si salta, come farebbe
+            // qualunque player: fermarsi lì lascerebbe la coda appesa.
+            mediaPlayer.submit { advance(automatic = true) }
+        }
     }
 
     fun play(tracks: List<Track>, startIndex: Int) {

@@ -55,9 +55,19 @@ sealed interface DownloadState {
  */
 class YtDlp(private val scope: CoroutineScope) {
 
-    val exe: File? = locate("yt-dlp.exe")
-    val ffmpeg: File? = locate("ffmpeg.exe")
+    /** Trovati in background: all'avvio non si aspetta nessuna ricerca su disco. */
+    @Volatile var exe: File? = null
+        private set
+    @Volatile var ffmpeg: File? = null
+        private set
     val available: Boolean get() = exe != null && ffmpeg != null
+
+    init {
+        Thread({
+            exe = locate("yt-dlp.exe", "yt-dlp.yt-dlp")
+            ffmpeg = locate("ffmpeg.exe", "Gyan.FFmpeg", "yt-dlp.FFmpeg")
+        }, "xaos-tools").apply { isDaemon = true }.start()
+    }
 
     private val _search = MutableStateFlow<OnlineSearch>(OnlineSearch.Idle)
     val search: StateFlow<OnlineSearch> = _search.asStateFlow()
@@ -180,13 +190,21 @@ class YtDlp(private val scope: CoroutineScope) {
     }.getOrNull()
 
     private companion object {
-        /** Nel PATH, poi fra i collegamenti e i pacchetti di winget. */
-        fun locate(name: String): File? {
+        /**
+         * Nel PATH, poi fra i collegamenti di winget, poi nelle cartelle dei
+         * soli pacchetti che ci interessano ([packages], per prefisso del
+         * nome). Mai una scansione di tutti i pacchetti: su certi PC sono
+         * decine di migliaia di file.
+         */
+        fun locate(name: String, vararg packages: String): File? {
             System.getenv("PATH")?.split(File.pathSeparator)
                 ?.map { File(it, name) }?.firstOrNull { it.isFile }?.let { return it }
             val local = System.getenv("LOCALAPPDATA") ?: return null
             File(local, "Microsoft/WinGet/Links/$name").takeIf { it.isFile }?.let { return it }
-            return File(local, "Microsoft/WinGet/Packages").walkTopDown().maxDepth(5)
+            val root = File(local, "Microsoft/WinGet/Packages")
+            val dirs = root.listFiles()?.filter { d -> packages.any { d.name.startsWith(it + "_") } }.orEmpty()
+            return dirs.asSequence()
+                .flatMap { it.walkTopDown().maxDepth(3) }
                 .firstOrNull { it.isFile && it.name.equals(name, ignoreCase = true) }
         }
     }

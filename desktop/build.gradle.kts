@@ -1,7 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
-val appVersion = "1.2.0"
+val appVersion = "1.2.1"
 
 plugins {
     kotlin("jvm") version "2.4.20"
@@ -55,7 +55,73 @@ val prepareAndroidApk by tasks.registering(Copy::class) {
         )
     }
 }
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareAndroidApk) }
+/*
+ * VLC e adb viaggiano con l'app, così chi la installa non deve procurarseli.
+ *
+ * Di VLC si prende solo quello che serve all'audio da file locali: il motore,
+ * l'accesso ai file, i demuxer, i decoder audio, i filtri (equalizzatore
+ * compreso) e le uscite audio. Tutta la parte video resta fuori: sono oltre
+ * cento megabyte che un player musicale non usa. La cache dei plugin si genera
+ * qui, sul sottoinsieme incluso: senza, VLC riesamina ogni plugin a ogni avvio.
+ */
+val vlcDir = providers.gradleProperty("vlcDir").orElse("C:/Program Files/VideoLAN/VLC").get()
+val platformToolsDir = providers.gradleProperty("platformToolsDir")
+    .orElse((System.getenv("LOCALAPPDATA") ?: "") + "/Android/Sdk/platform-tools").get()
+val vlcAudioPluginDirs = listOf("demux", "packetizer", "audio_filter", "audio_mixer", "audio_output", "stream_filter")
+val vlcAudioCodecs = listOf(
+    "avcodec", "mpg123", "flac", "vorbis", "opus", "araw", "lpcm", "adpcm", "faad", "a52", "dca", "speex", "mpeg_audio",
+)
+
+val prepareVlc by tasks.registering(Copy::class) {
+    from(vlcDir) { include("libvlc.dll", "libvlccore.dll") }
+    from("$vlcDir/plugins") {
+        vlcAudioPluginDirs.forEach { include("$it/**") }
+        include("access/libfilesystem_plugin.dll")
+        vlcAudioCodecs.forEach { include("codec/lib${it}_plugin.dll") }
+        exclude("**/plugins.dat")
+        into("plugins")
+    }
+    into(bundledResources.map { it.dir("common/vlc") })
+    doLast {
+        val cacheGen = File(vlcDir, "vlc-cache-gen.exe")
+        val plugins = bundledResources.get().dir("common/vlc/plugins").asFile
+        if (cacheGen.isFile) {
+            val code = ProcessBuilder(cacheGen.path, plugins.path).inheritIO().start().waitFor()
+            if (code != 0) logger.warn("vlc-cache-gen ha restituito $code: VLC partirà senza cache dei plugin")
+        }
+    }
+}
+
+val prepareAdb by tasks.registering(Copy::class) {
+    from(platformToolsDir) { include("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll", "libwinpthread-1.dll") }
+    into(bundledResources.map { it.dir("common/adb") })
+}
+
+val prepareLicenses by tasks.registering {
+    val out = bundledResources.map { it.file("common/THIRD-PARTY-NOTICES.txt") }
+    outputs.file(out)
+    doLast {
+        out.get().asFile.writeText(
+            """
+            Xaos includes the following third-party components.
+
+            VLC media player libraries (libvlc, libvlccore and a subset of plugins)
+              Copyright (C) VideoLAN and the VLC authors
+              License: GNU Lesser General Public License, version 2.1 or later
+              Source code: https://www.videolan.org/vlc/download-sources.html
+
+            Android Debug Bridge (adb) from the Android SDK Platform-Tools
+              Copyright (C) The Android Open Source Project
+              License: Apache License, version 2.0
+              Source code: https://android.googlesource.com/platform/packages/modules/adb/
+            """.trimIndent() + "\n"
+        )
+    }
+}
+
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses)
+}
 
 compose.desktop {
     application {
@@ -83,5 +149,6 @@ compose.desktop {
         }
     }
 }
+
 
 

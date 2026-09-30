@@ -31,6 +31,7 @@ import javax.swing.JFileChooser
 import javax.swing.UIManager
 
 fun main() = application {
+    StartupLog.mark("main")
     val settings = remember { Settings(File(Settings.appDir, "settings.json")) }
     // v2: l'indice registra anche quali brani hanno un testo. Cambiando nome si
     // rilegge tutto una volta sola; il vecchio file non serve più.
@@ -51,9 +52,18 @@ fun main() = application {
         BitmapPainter(bytes.decodeToImageBitmap())
     }
 
+    // Il motore audio parte dopo la finestra, su un thread suo: caricare VLC
+    // può richiedere qualche secondo e l'app non deve aspettarlo per aprirsi.
+    LaunchedEffect(Unit) {
+        StartupLog.mark("finestra composta")
+        player.start(appResourcesDir?.let { File(it, "vlc") })
+        player.engine.collect { if (it != xaos.desktop.player.Player.Engine.Starting) StartupLog.mark("motore audio: $it (${player.vlcPath})") }
+    }
+
     // Le impostazioni si applicano man mano che cambiano, e una volta all'avvio.
     LaunchedEffect(prefs.roots) {
         library.load(prefs.roots.map { File(it) }.filter { it.isDirectory })
+        StartupLog.mark("libreria letta: ${library.snapshot.value.tracks.size} brani")
     }
     LaunchedEffect(prefs.equalizer) {
         player.applyEqualizer(prefs.equalizer.enabled, prefs.equalizer.preamp, prefs.equalizer.bands)

@@ -44,6 +44,7 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: (
     val volume by player.volume.collectAsState()
     val shuffle by player.shuffle.collectAsState()
     val repeat by player.repeat.collectAsState()
+    val engine by player.engine.collectAsState()
 
     Column(Modifier.fillMaxWidth().background(colors.sidebar)) {
         Hairline()
@@ -62,10 +63,16 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: (
                         Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                } else if (!player.available) {
+                } else if (engine == Player.Engine.Starting) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DotSpinner(size = 16.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("AVVIO DEL MOTORE AUDIO…", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                    }
+                } else if (engine == Player.Engine.Missing) {
                     Column {
-                        Text("VLC NON TROVATO", style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
-                        Text("Serve VLC 3 installato per la riproduzione", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                        Text("MOTORE AUDIO NON TROVATO", style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
+                        Text("Reinstalla Xaos, oppure installa VLC 3", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
                     }
                 } else {
                     Text("NIENTE IN RIPRODUZIONE", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)

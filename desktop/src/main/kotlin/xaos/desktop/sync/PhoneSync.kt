@@ -741,6 +741,11 @@ class PhoneSync(
                 System.getenv("ANDROID_SDK_ROOT")?.let { add(File(it, "platform-tools/adb.exe")) }
                 System.getenv("LOCALAPPDATA")?.let { add(File(it, "Android/Sdk/platform-tools/adb.exe")) }
                 System.getenv("PATH")?.split(File.pathSeparator)?.forEach { add(File(it, "adb.exe")) }
+                // Per ultimo quello che viaggia con Xaos. Viene dopo gli altri
+                // di proposito: due adb di versioni diverse si contendono il
+                // server e si spengono a vicenda, quindi se il PC ne ha già uno
+                // si usa quello.
+                xaos.desktop.appResourcesDir?.let { add(File(it, "adb/adb.exe")) }
             }
             return candidates.firstOrNull { it.isFile }
         }
