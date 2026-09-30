@@ -16,6 +16,7 @@ The phone app plays your local library. The desktop app is where the library liv
 - Playlists with custom cover and a short description.
 - Now playing screen with four backgrounds, including a dot-matrix glow that reacts to the music and the album art in full screen.
 - Synced lyrics read from the files (ID3 USLT, LRC timestamps).
+- Square home screen widget in the Nothing OS style: the cover of the song playing (tap to play or pause), and scrolling down, the lyrics in sync.
 - Equalizer, bass boost, virtualizer, preamp and a sleep timer.
 - Search and download from YouTube with yt-dlp, saved as tagged MP3 with cover art.
 - Metadata editing inside the app.
