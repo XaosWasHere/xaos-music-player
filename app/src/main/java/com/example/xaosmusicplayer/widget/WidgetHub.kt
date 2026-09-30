@@ -8,9 +8,12 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.widget.RemoteViews
+import androidx.annotation.RequiresApi
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.example.xaosmusicplayer.MainActivity
@@ -41,7 +44,10 @@ import kotlin.math.min
  * pausa, il verso successivo). Senza widget sulla schermata non fa niente.
  *
  * Il widget ha due pagine che si scorrono in verticale, copertina e testo; se
- * il brano non ha un testo sincronizzato ne ha una sola, e non scorre.
+ * il brano non ha un testo sincronizzato ne ha una sola, e non scorre. Le
+ * pagine viaggiano dentro l'aggiornamento stesso: con una lista affidata a un
+ * servizio Android si limita ad avvisare il launcher, e quello di Nothing non
+ * le ricaricava.
  */
 object WidgetHub {
 
@@ -192,46 +198,78 @@ object WidgetHub {
     /**
      * Ridisegna le pagine e le manda al launcher. Con [pushLayout] si rimanda
      * tutta la vista (serve quando cambia il numero di pagine); altrimenti si
-     * aggiornano solo le pagine, e lo scorrimento resta dov'è.
+     * aggiornano solo le pagine della lista, e lo scorrimento resta dov'è.
      */
     private fun render(pushLayout: Boolean) {
         val ctx = context ?: return
         val manager = AppWidgetManager.getInstance(ctx)
         val ids = manager.getAppWidgetIds(ComponentName(ctx, XaosWidget::class.java))
         if (ids.isEmpty()) return
-        val side = sidePx(ctx, manager, ids)
+        val sideDp = sideDp(manager, ids)
+        val side = (sideDp * ctx.resources.displayMetrics.density).toInt().coerceIn(160, MAX_SIDE_PX)
         val palette = palette(ctx)
         val l = lyrics
+        // Due pagine solo da Android 12: prima i widget non possono ricevere
+        // una lista già pronta, e resta la sola copertina.
+        val paged = songId != null && l != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         pages = when {
             songId == null -> listOf(WidgetRenderer.idle(side, palette))
-            l == null -> listOf(WidgetRenderer.cover(side, artwork, title, playing, 1, palette))
+            !paged -> listOf(WidgetRenderer.cover(side, artwork, title, playing, 1, palette))
             else -> listOf(
                 WidgetRenderer.cover(side, artwork, title, playing, 2, palette),
-                WidgetRenderer.lyrics(side, l, lineIndex, palette),
+                WidgetRenderer.lyrics(side, l!!, lineIndex, palette),
             )
         }
-        val nowStacked = pages.size > 1
-        if (pushLayout || nowStacked != stacked || !nowStacked) {
-            stacked = nowStacked
-            manager.updateAppWidget(ids, views(ctx))
-        }
-        if (nowStacked) manager.notifyAppWidgetViewDataChanged(ids, R.id.widget_stack)
-    }
-
-    private fun views(ctx: Context): RemoteViews =
-        if (stacked) {
-            RemoteViews(ctx.packageName, R.layout.widget_xaos_stack).apply {
-                setRemoteAdapter(R.id.widget_stack, Intent(ctx, XaosWidgetService::class.java).apply { data = Uri.parse("xaos://widget/pages") })
-                setPendingIntentTemplate(R.id.widget_stack, tapIntent(ctx))
+        if (paged && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (pushLayout || !stacked) {
+                stacked = true
+                manager.updateAppWidget(ids, pagedViews(ctx, sideDp, full = true))
+            } else {
+                // Solo le pagine: la lista resta dov'è stata scorsa.
+                manager.partiallyUpdateAppWidget(ids, pagedViews(ctx, sideDp, full = false))
             }
         } else {
-            RemoteViews(ctx.packageName, R.layout.widget_xaos_single).apply {
-                pages.firstOrNull()?.let { setImageViewBitmap(R.id.widget_image, it) }
-                setOnClickPendingIntent(
-                    R.id.widget_image,
-                    if (player != null && songId != null) tapIntent(ctx, Intent().putExtra(XaosWidget.EXTRA_PAGE, 0)) else openApp(ctx),
+            stacked = false
+            manager.updateAppWidget(ids, singleView(ctx))
+        }
+    }
+
+    /**
+     * La lista delle due pagine, alta e larga esattamente un quadrato: così
+     * lo scorrimento è di una pagina sola, e un gesto finisce su una delle due.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun pagedViews(ctx: Context, sideDp: Int, full: Boolean): RemoteViews =
+        RemoteViews(ctx.packageName, R.layout.widget_xaos_pages).apply {
+            val items = RemoteViews.RemoteCollectionItems.Builder()
+                .setHasStableIds(true)
+                .setViewTypeCount(1)
+            pages.forEachIndexed { i, page ->
+                items.addItem(
+                    i.toLong(),
+                    RemoteViews(ctx.packageName, R.layout.widget_xaos_page).apply {
+                        setImageViewBitmap(R.id.widget_page_image, page)
+                        setViewLayoutWidth(R.id.widget_page_image, sideDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+                        setViewLayoutHeight(R.id.widget_page_image, sideDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+                        setOnClickFillInIntent(R.id.widget_page_image, Intent().putExtra(XaosWidget.EXTRA_PAGE, i))
+                    },
                 )
             }
+            setRemoteAdapter(R.id.widget_pages, items.build())
+            if (full) {
+                setViewLayoutWidth(R.id.widget_pages, sideDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+                setViewLayoutHeight(R.id.widget_pages, sideDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+                setPendingIntentTemplate(R.id.widget_pages, tapIntent(ctx))
+            }
+        }
+
+    private fun singleView(ctx: Context): RemoteViews =
+        RemoteViews(ctx.packageName, R.layout.widget_xaos_single).apply {
+            pages.firstOrNull()?.let { setImageViewBitmap(R.id.widget_image, it) }
+            setOnClickPendingIntent(
+                R.id.widget_image,
+                if (player != null && songId != null) tapIntent(ctx, Intent().putExtra(XaosWidget.EXTRA_PAGE, 0)) else openApp(ctx),
+            )
         }
 
     /** Il tocco arriva al provider, che mette in pausa o riprende (o apre l'app). */
@@ -266,26 +304,23 @@ object WidgetHub {
     }
 
     /**
-     * Il lato del quadrato in pixel: il più piccolo fra larghezza e altezza del
-     * widget più grande, con un tetto (le immagini passano per il launcher, e
-     * troppo grandi non ci passerebbero).
+     * Il lato del quadrato in dp: il più piccolo fra larghezza e altezza del
+     * riquadro (in verticale valgono larghezza minima e altezza massima), e fra
+     * più widget il più piccolo, perché ci stia in tutti.
      */
-    private fun sidePx(ctx: Context, manager: AppWidgetManager, ids: IntArray): Int {
-        val density = ctx.resources.displayMetrics.density
-        val dp = ids.maxOf { id ->
+    private fun sideDp(manager: AppWidgetManager, ids: IntArray): Int =
+        ids.minOf { id ->
             val o = manager.getAppWidgetOptions(id)
-            val w = max(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH))
-            val h = max(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT))
+            val w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+            val h = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
             if (w > 0 && h > 0) min(w, h) else DEFAULT_SIDE_DP
         }
-        return (dp * density).toInt().coerceIn(160, MAX_SIDE_PX)
-    }
 
     private fun hasWidgets(ctx: Context): Boolean =
         AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, XaosWidget::class.java)).isNotEmpty()
 
     private const val TICK_MS = 250L
     private const val DEFAULT_SIDE_DP = 170
-    /** 420 × 420 in ARGB sono circa 700 KB: sotto il limite di un passaggio fra processi. */
+    /** Il tetto delle immagini delle pagine: nitide su un 2x2, leggere da mandare al launcher. */
     private const val MAX_SIDE_PX = 420
 }

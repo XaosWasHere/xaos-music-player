@@ -5,9 +5,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.widget.RemoteViews
-import android.widget.RemoteViewsService
-import com.example.xaosmusicplayer.R
 
 /**
  * Il widget quadrato: copertina e, scorrendo in verticale, il testo in
@@ -39,29 +36,5 @@ class XaosWidget : AppWidgetProvider() {
     companion object {
         const val ACTION_TAP = "com.example.xaosmusicplayer.widget.TAP"
         const val EXTRA_PAGE = "page"
-    }
-}
-
-/** Le pagine della pila, per il launcher. */
-class XaosWidgetService : RemoteViewsService() {
-
-    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = object : RemoteViewsFactory {
-        private var pages = WidgetHub.pages
-
-        override fun onCreate() = Unit
-        override fun onDataSetChanged() {
-            pages = WidgetHub.pages
-        }
-        override fun onDestroy() = Unit
-        override fun getCount(): Int = pages.size
-        override fun getViewAt(position: Int): RemoteViews =
-            RemoteViews(packageName, R.layout.widget_xaos_page).apply {
-                pages.getOrNull(position)?.let { setImageViewBitmap(R.id.widget_page_image, it) }
-                setOnClickFillInIntent(R.id.widget_page_image, Intent().putExtra(XaosWidget.EXTRA_PAGE, position))
-            }
-        override fun getLoadingView(): RemoteViews? = null
-        override fun getViewTypeCount(): Int = 1
-        override fun getItemId(position: Int): Long = position.toLong()
-        override fun hasStableIds(): Boolean = true
     }
 }

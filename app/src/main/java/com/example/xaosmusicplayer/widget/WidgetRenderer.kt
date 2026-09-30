@@ -44,8 +44,8 @@ internal object WidgetRenderer {
     }
 
     /**
-     * La copertina a tutto quadrato. In pausa si vela e compare il play nel
-     * colore d'accento; mentre suona c'è solo il punto d'accento in alto.
+     * La copertina a tutto quadrato, pulita: mentre suona c'è solo il punto
+     * d'accento in alto a sinistra, in pausa neanche quello.
      */
     fun cover(side: Int, art: Bitmap?, title: String?, playing: Boolean, pages: Int, palette: XaosPalette): Bitmap =
         page(side, palette) { canvas ->
@@ -60,26 +60,14 @@ internal object WidgetRenderer {
                 drawBlock(canvas, (title ?: "XAOS").uppercase(), paint, side * 0.12f, side * 0.5f, side - side * 0.24f, 3, center = true)
             }
             if (playing) {
-                // Il punto "in registrazione" di Nothing, con un alone scuro che
-                // lo stacca anche da una copertina rossa.
+                // Il punto "in registrazione" di Nothing, in alto a sinistra: c'è
+                // mentre suona, sparisce in pausa. Un alone scuro lo stacca anche
+                // da una copertina rossa.
                 val r = side * 0.03f
-                val cx = side - side * 0.1f
+                val cx = side * 0.1f
                 val cy = side * 0.1f
                 canvas.drawCircle(cx, cy, r * 1.7f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66000000 })
                 canvas.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accent.toArgb() })
-            } else {
-                canvas.drawColor(if (art != null) 0x73000000 else 0x00000000)
-                val r = side * 0.13f
-                val c = side / 2f
-                canvas.drawCircle(c, c, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accent.toArgb() })
-                val t = r * 0.42f
-                val path = Path().apply {
-                    moveTo(c - t * 0.75f, c - t)
-                    lineTo(c + t * 1.05f, c)
-                    lineTo(c - t * 0.75f, c + t)
-                    close()
-                }
-                canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.onAccent.toArgb() })
             }
             if (pages > 1) pager(canvas, side, 0, pages, onImage = art != null, palette = palette)
         }

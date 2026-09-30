@@ -82,11 +82,6 @@
         </receiver>
 
         <service
-            android:name=".widget.XaosWidgetService"
-            android:exported="false"
-            android:permission="android.permission.BIND_REMOTEVIEWS" />
-
-        <service
             android:name=".playback.PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
