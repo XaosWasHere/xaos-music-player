@@ -1,6 +1,9 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package xaos.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.Track
 import xaos.desktop.library.UserData
@@ -55,7 +60,7 @@ fun FavoritesScreen(snapshot: LibrarySnapshot, data: UserDataState, player: Play
                 caption = "[${tracks.size}] BRANI · ${formatDuration(tracks.sumOf { it.durationMs })} · SI SINCRONIZZANO COL TELEFONO",
                 trailing = if (tracks.isNotEmpty()) {
                     {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             PillButton("RIPRODUCI", onClick = { player.play(tracks, 0) }, icon = XaosIcons.Play, filled = true)
                             PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
                         }
@@ -116,7 +121,7 @@ fun PlaylistsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: Us
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ArtworkImage(tracks.firstOrNull(), size = 48.dp, corner = 8.dp)
+                PlaylistCoverImage(pl, tracks.firstOrNull(), size = 48.dp, corner = 8.dp)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(pl.name, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -156,7 +161,12 @@ fun PlaylistDetailScreen(
     val tracks = entries.map { it.second }
 
     if (renaming) {
-        NameDialog("Rinomina playlist", pl.name, "SALVA", { userData.renamePlaylist(id, it); renaming = false }, { renaming = false })
+        PlaylistInfoDialog(
+            name = pl.name,
+            description = pl.description,
+            onConfirm = { name, description -> userData.setPlaylistInfo(id, name, description); renaming = false },
+            onDismiss = { renaming = false },
+        )
     }
     if (deleting) {
         AlertDialog(
@@ -177,10 +187,18 @@ fun PlaylistDetailScreen(
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp), verticalAlignment = Alignment.Bottom) {
-                ArtworkImage(tracks.firstOrNull(), size = 200.dp, corner = 20.dp)
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp), verticalAlignment = Alignment.Top) {
+                // La copertina, e sotto la descrizione; un clic sulla copertina la cambia.
+                Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.pressable { pickImage()?.let { userData.setPlaylistCover(id, it) } }) {
+                        PlaylistCoverImage(pl, tracks.firstOrNull(), size = 200.dp, corner = 20.dp)
+                    }
+                    if (pl.description.isNotBlank()) {
+                        Text(pl.description, style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
+                    }
+                }
                 Spacer(Modifier.width(28.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(top = 60.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Tag("PLAYLIST")
                     Text(pl.name, style = MaterialTheme.typography.headlineMedium, color = colors.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
@@ -190,10 +208,12 @@ fun PlaylistDetailScreen(
                         color = colors.inkTertiary,
                     )
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillButton("RIPRODUCI", onClick = { player.play(tracks, 0) }, icon = XaosIcons.Play, filled = true, enabled = tracks.isNotEmpty())
                         PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle, enabled = tracks.isNotEmpty())
-                        PillButton("RINOMINA", onClick = { renaming = true }, icon = XaosIcons.Edit)
+                        PillButton("MODIFICA", onClick = { renaming = true }, icon = XaosIcons.Edit)
+                        PillButton("COPERTINA", onClick = { pickImage()?.let { userData.setPlaylistCover(id, it) } }, icon = XaosIcons.Album)
+                        if (pl.cover != null) PillButton("TOGLI COPERTINA", onClick = { userData.setPlaylistCover(id, null) })
                         PillButton("ELIMINA", onClick = { deleting = true }, icon = XaosIcons.Delete)
                     }
                 }
@@ -281,6 +301,55 @@ fun AddToPlaylistDialog(tracks: List<Track>, data: UserDataState, userData: User
     )
 }
 
+/**
+ * La copertina di una playlist: quella scelta dall'utente se c'è, altrimenti
+ * quella del primo brano.
+ */
+@Composable
+fun PlaylistCoverImage(playlist: xaos.desktop.library.Playlist, fallback: Track?, size: androidx.compose.ui.unit.Dp, corner: androidx.compose.ui.unit.Dp) {
+    val image by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, playlist.cover) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            xaos.desktop.library.PlaylistCovers.fileOf(playlist.cover)?.let { f ->
+                runCatching {
+                    org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
+                }.getOrNull()
+            }
+        }
+    }
+    val bitmap = image
+    if (bitmap == null) {
+        ArtworkImage(fallback, size = size, corner = corner)
+    } else {
+        androidx.compose.foundation.Image(
+            bitmap,
+            null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.size(size).clip(androidx.compose.foundation.shape.RoundedCornerShape(corner)),
+        )
+    }
+}
+
+@Composable
+private fun PlaylistInfoDialog(name: String, description: String, onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
+    val colors = Xaos.colors
+    var n by remember { mutableStateOf(name) }
+    var d by remember { mutableStateOf(description) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text("Modifica playlist", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                XaosTextField("NOME", n, { n = it }, placeholder = "Nome della playlist")
+                XaosTextField("DESCRIZIONE", d, { d = it.take(160) }, placeholder = "Due righe, sotto la copertina")
+                Text("${d.length}/160", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+            }
+        },
+        confirmButton = { PillButton("SALVA", onClick = { onConfirm(n, d) }, filled = true, enabled = n.isNotBlank()) },
+        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+    )
+}
+
 @Composable
 private fun NameDialog(title: String, initial: String, confirm: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
     val colors = Xaos.colors
@@ -344,7 +413,7 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
                 "ASCOLTI",
                 caption = "PC E TELEFONO INSIEME · CONTA UN ASCOLTO DOPO 30 SECONDI",
                 trailing = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatsPeriod.entries.forEach { p ->
                             PillButton(p.label, onClick = { period = p }, filled = p == period)
                         }
@@ -353,7 +422,7 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
             )
         }
         item {
-            Row(Modifier.fillMaxWidth().nothingCard().padding(22.dp), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+            androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().nothingCard().padding(22.dp), horizontalArrangement = Arrangement.spacedBy(48.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Stat(stats.plays.toString(), "ASCOLTI")
                 Stat(stats.minutes.toString(), "MINUTI")
                 Stat(stats.distinctSongs.toString(), "BRANI DIVERSI")
@@ -365,15 +434,24 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
             item { EmptyHint("NESSUN ASCOLTO IN QUESTO PERIODO", "Gli ascolti si registrano da soli, qui e sul telefono.") }
         } else {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    RankCard("BRANI PIÙ ASCOLTATI", Modifier.weight(1.3f)) {
+                androidx.compose.foundation.layout.BoxWithConstraints {
+                val wide = maxWidth > 820.dp
+                val arrange: @Composable (@Composable () -> Unit, @Composable () -> Unit) -> Unit = { a, b ->
+                    if (wide) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Box(Modifier.weight(1.3f)) { a() }
+                        Box(Modifier.weight(1f)) { b() }
+                    } else Column(verticalArrangement = Arrangement.spacedBy(20.dp)) { a(); b() }
+                }
+                arrange({
+                    RankCard("BRANI PIÙ ASCOLTATI", Modifier.fillMaxWidth()) {
                         stats.topSongs.forEachIndexed { i, r ->
                             RankRow(i, r.item.title, r.item.artist, r.plays, track = r.item) {
                                 player.play(stats.topSongs.map { it.item }, i)
                             }
                         }
                     }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                }, {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         RankCard("ARTISTI", Modifier.fillMaxWidth()) {
                             stats.topArtists.forEachIndexed { i, r -> RankRow(i, r.item, null, r.plays) }
                         }
@@ -386,6 +464,7 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
                             }
                         }
                     }
+                })
                 }
             }
             item {

@@ -34,6 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
@@ -138,6 +143,9 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
     var saving by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
+    // L'ordine delle tracce, come nell'editor del telefono: si trascina.
+    val ordered = remember(album.key) { androidx.compose.runtime.mutableStateListOf(*album.tracks.toTypedArray()) }
+    val multiDisc = album.tracks.map { it.discNumber }.distinct().size > 1
 
     EditorFrame(
         tag = "MODIFICA ALBUM",
@@ -157,9 +165,16 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
                     artwork = artwork,
                 )
                 var failure: Throwable? = null
-                album.tracks.forEachIndexed { i, t ->
+                // Il nuovo ordine diventa il numero di traccia; con più dischi
+                // diventa un'unica sequenza, altrimenti l'ordine per disco
+                // prevarrebbe su quello scelto.
+                val reordered = ordered.toList() != album.tracks
+                ordered.forEachIndexed { i, t ->
                     progress = i + 1
-                    TagEditor.write(t, edit).onFailure { failure = it }
+                    val number = i + 1
+                    val trackEdit = if (!reordered || (t.trackNumber == number && !multiDisc)) edit
+                    else edit.copy(trackNumber = number.toString(), discNumber = if (multiDisc) "1" else null)
+                    TagEditor.write(t, trackEdit).onFailure { failure = it }
                 }
                 if (failure == null) onSaved()
                 else { error = failure?.message ?: "Alcuni file non sono stati scritti"; saving = false }
@@ -181,6 +196,100 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.inkTertiary,
                 )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("ORDINE DELLE TRACCE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f))
+            if (ordered.toList() != album.tracks) {
+                PillButton("RIPRISTINA ORDINE", onClick = { ordered.clear(); ordered.addAll(album.tracks) })
+            }
+        }
+        Text(
+            "Trascina la maniglia o usa le frecce. Salvando, il numero di traccia di ogni brano diventa la sua posizione" +
+                if (multiDisc) " (i dischi diventano un'unica sequenza)." else ".",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkTertiary,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
+        ReorderableTracks(ordered)
+    }
+}
+
+/**
+ * Le tracce riordinabili: la maniglia si trascina come sul telefono, le
+ * frecce spostano di un posto. Righe ad altezza fissa, così dal trascinamento
+ * si ricava la posizione d'arrivo con una divisione.
+ */
+@Composable
+private fun ReorderableTracks(ordered: androidx.compose.runtime.snapshots.SnapshotStateList<Track>) {
+    val colors = Xaos.colors
+    val rowHeight = 52.dp
+    val rowHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { rowHeight.toPx() }
+    var dragged by remember { mutableStateOf(-1) }
+    var offset by remember { mutableStateOf(0f) }
+
+    Column(Modifier.fillMaxWidth()) {
+        ordered.forEachIndexed { index, track ->
+            val isDragged = index == dragged
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(rowHeight)
+                    .zIndex(if (isDragged) 1f else 0f)
+                    .graphicsLayer { translationY = if (isDragged) offset else 0f }
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isDragged) colors.surfaceHigh else androidx.compose.ui.graphics.Color.Transparent)
+                    .hoverRow(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    XaosIcons.DragHandle,
+                    "Trascina per riordinare",
+                    tint = colors.inkSecondary,
+                    modifier = Modifier
+                        .padding(horizontal = 10.dp)
+                        .size(20.dp)
+                        .pointerHoverIcon(androidx.compose.ui.input.pointer.PointerIcon(java.awt.Cursor(java.awt.Cursor.N_RESIZE_CURSOR)))
+                        .pointerInput(ordered.size) {
+                            detectDragGestures(
+                                onDragStart = { dragged = index; offset = 0f },
+                                onDragEnd = { dragged = -1; offset = 0f },
+                                onDragCancel = { dragged = -1; offset = 0f },
+                            ) { change, amount ->
+                                change.consume()
+                                offset += amount.y
+                                val steps = (offset / rowHeightPx).toInt()
+                                if (steps == 0) return@detectDragGestures
+                                val from = dragged
+                                val to = (from + steps).coerceIn(ordered.indices)
+                                if (to == from) return@detectDragGestures
+                                ordered.add(to, ordered.removeAt(from))
+                                dragged = to
+                                offset -= (to - from) * rowHeightPx
+                            }
+                        },
+                )
+                Text(
+                    (index + 1).toString().padStart(2, '0'),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.accentInk,
+                    modifier = Modifier.width(36.dp),
+                )
+                ArtworkImage(track, size = 34.dp, corner = 6.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.padding(horizontal = 10.dp))
+                CircleIconButton(XaosIcons.ArrowUp, "Sposta su", {
+                    if (index > 0) ordered.add(index - 1, ordered.removeAt(index))
+                }, size = 30.dp, outlined = false, tint = if (index > 0) colors.inkSecondary else colors.track)
+                CircleIconButton(XaosIcons.ArrowDown, "Sposta giù", {
+                    if (index < ordered.lastIndex) ordered.add(index + 1, ordered.removeAt(index))
+                }, size = 30.dp, outlined = false, tint = if (index < ordered.lastIndex) colors.inkSecondary else colors.track)
+                Spacer(Modifier.width(6.dp))
             }
         }
     }
@@ -226,8 +335,13 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
         onCancel = onCancel,
         scrollable = false,
     ) {
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Largo: testo a sinistra e risultati di LRCLIB a destra. Stretto: i
+        // risultati scendono sotto il testo, invece di schiacciarlo.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth > 780.dp
+        val resultsWidth = minOf(380.dp, maxWidth * 0.42f)
+        val editor = @Composable { modifier: Modifier ->
+            Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (text.isNotBlank()) Tag(if (synced) "SINCRONIZZATO" else "SENZA TEMPI")
                     Spacer(Modifier.weight(1f))
@@ -273,9 +387,10 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
                     )
                 }
             }
-
+        }
+        val found = @Composable { modifier: Modifier ->
             results?.let { list ->
-                Column(Modifier.width(380.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionHeader("TROVATI SU LRCLIB", count = list.size)
                     if (list.isEmpty()) {
                         Text("Niente per questo brano.", style = MaterialTheme.typography.bodyMedium, color = colors.inkTertiary)
@@ -287,6 +402,18 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
                     }
                 }
             }
+        }
+        if (wide) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                editor(Modifier.weight(1f).fillMaxHeight())
+                if (results != null) found(Modifier.width(resultsWidth).fillMaxHeight())
+            }
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                editor(Modifier.weight(1f).fillMaxWidth())
+                if (results != null) found(Modifier.fillMaxWidth().weight(0.8f))
+            }
+        }
         }
     }
 }
@@ -339,8 +466,8 @@ private fun EditorFrame(
 ) {
     val colors = Xaos.colors
     Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 24.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Tag(tag)
                 Text(title, style = MaterialTheme.typography.headlineMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -408,7 +535,7 @@ private fun ArtworkPicker(track: Track, chosen: File?, onPick: (File) -> Unit) {
     }
 }
 
-private fun pickImage(): File? {
+internal fun pickImage(): File? {
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
     val chooser = JFileChooser().apply {
         dialogTitle = "Scegli la copertina"

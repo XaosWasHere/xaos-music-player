@@ -34,6 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,7 +99,8 @@ fun FullscreenPlayer(
         value = track?.let { ArtColorExtractor.colors(it) } ?: ArtColors.Fallback
     }
 
-    Box(Modifier.fillMaxSize().background(colors.background)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(colors.background)) {
+        val wideScreen = maxWidth > 1250.dp
         when (background) {
             FullscreenBackground.ARTWORK -> ArtworkWash(track, colors.background)
             // Le onde non stanno dietro: prendono il posto della barra di avanzamento.
@@ -152,7 +156,21 @@ fun FullscreenPlayer(
                     ArtworkImage(track, size = if (lyricsOpen) narrowArt else art, corner = 28.dp)
                     Spacer(Modifier.width(56.dp))
                     if (lyricsOpen) {
-                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                        // Sulla copertina e sulla matrice di punti il testo si perde: lì
+                        // gli si mette sotto un pannello del colore di fondo, velato.
+                        val busy = background == FullscreenBackground.ARTWORK || background == FullscreenBackground.STATIC
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .then(
+                                    if (busy) Modifier
+                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                                        .background(colors.background.copy(alpha = 0.84f))
+                                        .padding(horizontal = 28.dp, vertical = 20.dp)
+                                    else Modifier
+                                ),
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(
@@ -288,18 +306,21 @@ fun FullscreenPlayer(
                     Spacer(Modifier.width(10.dp))
                     DotSlider(
                         value = volume / 100f,
-                        modifier = Modifier.width(150.dp),
+                        modifier = Modifier.width(if (wideScreen) 150.dp else 90.dp),
                         color = colors.ink,
                         onChange = { player.setVolume((it * 100).toInt()) },
                         onScroll = { dy -> player.setVolume(volume - (dy * VOLUME_STEP).toInt()) },
                     )
                 }
-                Text(
-                    "ESC CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.inkTertiary,
-                    modifier = Modifier.align(Alignment.CenterStart),
-                )
+                // Su uno schermo stretto i suggerimenti finirebbero sotto i comandi.
+                if (wideScreen) {
+                    Text(
+                        "ESC CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkTertiary,
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
+                }
             }
         }
     }
@@ -364,7 +385,23 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
         tween(700),
         label = "wave-grow",
     )
-    val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    // VLC aggiorna la posizione qualche volta al secondo: fra un aggiornamento
+    // e l'altro la si fa avanzare a ogni fotogramma, così la testina scorre
+    // fluida invece di andare a scatti.
+    val playing by player.isPlaying.collectAsState()
+    var smooth by remember { androidx.compose.runtime.mutableLongStateOf(position) }
+    LaunchedEffect(position, playing) {
+        smooth = position
+        if (!playing) return@LaunchedEffect
+        var start = -1L
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { now ->
+                if (start < 0) start = now
+                smooth = (position + (now - start) / 1_000_000).coerceAtMost(duration.coerceAtLeast(position))
+            }
+        }
+    }
+    val progress = if (duration > 0) (smooth.toFloat() / duration).coerceIn(0f, 1f) else 0f
     Canvas(
         modifier
             .pointerHoverIcon(androidx.compose.ui.input.pointer.PointerIcon.Hand)
@@ -379,7 +416,7 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
         val down = size.height * 0.26f - r
         val columns = (size.width / step).toInt()
         val startX = (size.width - (columns - 1) * step) / 2f
-        val playedColumns = progress * columns
+        val headX = startX - step / 2f + progress * columns * step
         val data = bins
         for (c in 0 until columns) {
             val x = startX + c * step
@@ -391,13 +428,10 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
                 for (i in from until to) m = maxOf(m, data[i])
                 m * grow
             }
-            val played = c < playedColumns
-            val head = c == playedColumns.toInt()
-            val color = when {
-                head -> colors.accent
-                played -> colors.ink.copy(alpha = 0.85f)
-                else -> colors.ink.copy(alpha = 0.18f)
-            }
+            // La colonna sotto la testina sfuma dallo spento all'acceso man mano
+            // che la testina la attraversa.
+            val lit = ((headX - (x - step / 2f)) / step).coerceIn(0f, 1f)
+            val color = colors.ink.copy(alpha = 0.18f + 0.67f * lit)
             // Sopra: dal basso verso l'alto, almeno un punto anche nel silenzio.
             val upDots = (v * up / step).toInt().coerceAtLeast(1)
             for (d in 0 until upDots) drawCircle(color, r, Offset(x, baseline - d * step))
@@ -406,6 +440,16 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
             for (d in 1..downDots) {
                 drawCircle(color.copy(alpha = color.alpha * (0.45f - 0.3f * d / (downDots + 1))), r, Offset(x, baseline + d * step))
             }
+        }
+        // La testina: una linea d'accento che scorre continua sopra le colonne.
+        if (duration > 0) {
+            drawLine(
+                colors.accent,
+                Offset(headX, baseline - up),
+                Offset(headX, baseline + down * 0.6f),
+                strokeWidth = 2.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
         }
     }
 }

@@ -1,20 +1,19 @@
 package com.example.xaosmusicplayer.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -27,86 +26,90 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.data.Playlist
-import com.example.xaosmusicplayer.ui.icons.XaosIcons
+import com.example.xaosmusicplayer.ui.components.AlbumCell
 import com.example.xaosmusicplayer.ui.components.CircleIconButton
+import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
+import java.io.File
 
+/** La copertina di una playlist: quella scelta, altrimenti quella del primo brano. */
+fun Playlist.coverUri(firstSongArtwork: Uri?): Uri? =
+    coverPath?.let(::File)?.takeIf { it.isFile }?.let(Uri::fromFile) ?: firstSongArtwork
+
+/**
+ * La sezione Playlist: una griglia come quella degli album, con i Preferiti
+ * per primi. Tenere premuto su una playlist la elimina, dopo conferma.
+ */
 @Composable
 fun PlaylistsScreen(
     playlists: List<Playlist>,
-    onBack: () -> Unit,
+    favoritesCount: Int,
+    artworkOf: (Playlist) -> Uri?,
+    onOpenFavorites: () -> Unit,
     onOpen: (Playlist) -> Unit,
     onCreate: (String) -> Unit,
     onDelete: (Playlist) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+    var toDelete by remember { mutableStateOf<Playlist?>(null) }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding(),
     ) {
-        ScreenHeader(
-            title = "PLAYLIST",
-            onBack = onBack,
-            trailing = {
-                CircleIconButton(
-                    icon = XaosIcons.Add,
-                    contentDescription = "Nuova playlist",
-                    onClick = { showCreateDialog = true },
-                    filled = true,
-                )
-            },
-        )
-
-        if (playlists.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "NESSUNA PLAYLIST",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Xaos.colors.inkSecondary,
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "PLAYLIST",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Xaos.colors.ink,
+                modifier = Modifier.weight(1f),
+            )
+            CircleIconButton(
+                icon = XaosIcons.Add,
+                contentDescription = "Nuova playlist",
+                onClick = { showCreateDialog = true },
+                filled = true,
+            )
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "favorites") {
+                AlbumCell(
+                    title = "Preferiti",
+                    subtitle = "[$favoritesCount] brani",
+                    artworkUri = null,
+                    onClick = onOpenFavorites,
                 )
             }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(playlists, key = { it.id }) { playlist ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpen(playlist) }
-                            .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            Text(
-                                text = playlist.name.uppercase(),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Xaos.colors.ink,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "[${playlist.songIds.size}] BRANI",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Xaos.colors.inkTertiary,
-                            )
-                        }
-                        IconButton(onClick = { onDelete(playlist) }) {
-                            Icon(
-                                imageVector = XaosIcons.Delete,
-                                contentDescription = "Elimina playlist",
-                                tint = Xaos.colors.inkSecondary,
-                            )
-                        }
-                    }
+            items(playlists, key = { it.id }) { playlist ->
+                AlbumCell(
+                    title = playlist.name,
+                    subtitle = "[${playlist.songIds.size}] brani",
+                    artworkUri = playlist.coverUri(artworkOf(playlist)),
+                    onClick = { onOpen(playlist) },
+                    onLongClick = { toDelete = playlist },
+                )
+            }
+            if (playlists.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "Crea una playlist con il + in alto, o dal menu di un brano.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Xaos.colors.inkSecondary,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                 }
             }
         }
@@ -123,7 +126,112 @@ fun PlaylistsScreen(
             },
         )
     }
+    toDelete?.let { playlist ->
+        DeletePlaylistDialog(playlist, onDismiss = { toDelete = null }, onConfirm = { toDelete = null; onDelete(playlist) })
+    }
 }
+
+@Composable
+fun DeletePlaylistDialog(playlist: Playlist, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Xaos.colors.surface,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        title = { Text("ELIMINARE \"${playlist.name.uppercase()}\"?", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        text = {
+            Text(
+                "I brani restano dove sono. La playlist sparisce anche dal PC alla prossima sincronizzazione.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Xaos.colors.inkSecondary,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("ELIMINA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.accentInk)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+            }
+        },
+    )
+}
+
+/** Nome, descrizione e copertina di una playlist, dallo stesso dialogo. */
+@Composable
+fun PlaylistInfoDialog(
+    playlist: Playlist,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+) {
+    var name by remember { mutableStateOf(playlist.name) }
+    var description by remember { mutableStateOf(playlist.description) }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Xaos.colors.ink,
+        unfocusedTextColor = Xaos.colors.ink,
+        focusedBorderColor = Xaos.colors.accent,
+        unfocusedBorderColor = Xaos.colors.line,
+        cursorColor = Xaos.colors.accentInk,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Xaos.colors.surface,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        title = { Text("MODIFICA PLAYLIST", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Nome") },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    colors = fieldColors,
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.take(DESCRIPTION_MAX) },
+                    minLines = 2,
+                    maxLines = 4,
+                    label = { Text("Descrizione") },
+                    supportingText = { Text("${description.length}/$DESCRIPTION_MAX") },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    colors = fieldColors,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onPickCover) {
+                        Text("SCEGLI COPERTINA", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
+                    }
+                    if (playlist.coverPath != null) {
+                        TextButton(onClick = onRemoveCover) {
+                            Text("TOGLI", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.inkSecondary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name.trim(), description.trim()) }, enabled = name.isNotBlank()) {
+                Text(
+                    "SALVA",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (name.isNotBlank()) Xaos.colors.accentInk else Xaos.colors.inkSecondary,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+            }
+        },
+    )
+}
+
+/** Una breve descrizione: sta sotto la copertina, non è un articolo. */
+private const val DESCRIPTION_MAX = 160
 
 /** Dialogo per creare o rinominare una playlist. */
 @Composable

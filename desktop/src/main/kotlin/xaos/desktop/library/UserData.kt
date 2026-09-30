@@ -18,7 +18,38 @@ import java.util.concurrent.Executors
 data class SongRef(val title: String, val artist: String, val durationMs: Long)
 
 @Serializable
-data class Playlist(val id: String, val name: String, val paths: List<String> = emptyList())
+data class Playlist(
+    val id: String,
+    val name: String,
+    val paths: List<String> = emptyList(),
+    /** Due righe scritte dall'utente, mostrate sotto la copertina. */
+    val description: String = "",
+    /** L'impronta della copertina scelta: il file è `covers/<impronta>.jpg` ([PlaylistCovers]). */
+    val cover: String? = null,
+)
+
+/**
+ * Le copertine delle playlist, in `~/.xaos/covers`, ognuna col nome della sua
+ * impronta: la stessa immagine ha lo stesso nome qui e sul telefono, così la
+ * sincronizzazione sa da sola quali file mandare e quali ricevere.
+ */
+object PlaylistCovers {
+    val dir: File get() = File(xaos.desktop.Settings.appDir, "covers").apply { mkdirs() }
+
+    fun fileOf(hash: String?): File? = hash?.let { File(dir, "$it.jpg") }?.takeIf { it.isFile }
+
+    fun hashOf(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-1").digest(bytes).take(10).joinToString("") { "%02x".format(it) }
+
+    /** Copia [image] fra le copertine e ne restituisce l'impronta. */
+    fun import(image: File): String? = runCatching {
+        val bytes = image.readBytes()
+        val hash = hashOf(bytes)
+        val target = File(dir, "$hash.jpg")
+        if (!target.isFile) target.writeBytes(bytes)
+        hash
+    }.getOrNull()
+}
 
 @Serializable
 data class PlayEntry(val path: String, val at: Long)
@@ -81,6 +112,18 @@ class UserData(private val file: File) {
 
     fun renamePlaylist(id: String, name: String) = update { s ->
         s.copy(playlists = s.playlists.map { if (it.id == id) it.copy(name = name.trim().ifEmpty { it.name }) else it })
+    }
+
+    fun setPlaylistInfo(id: String, name: String, description: String) = update { s ->
+        s.copy(playlists = s.playlists.map {
+            if (it.id == id) it.copy(name = name.trim().ifEmpty { it.name }, description = description.trim()) else it
+        })
+    }
+
+    /** [image] null toglie la copertina. */
+    fun setPlaylistCover(id: String, image: File?) {
+        val hash = image?.let { PlaylistCovers.import(it) ?: return }
+        update { s -> s.copy(playlists = s.playlists.map { if (it.id == id) it.copy(cover = hash) else it }) }
     }
 
     fun deletePlaylist(id: String) = update { s -> s.copy(playlists = s.playlists.filterNot { it.id == id }) }

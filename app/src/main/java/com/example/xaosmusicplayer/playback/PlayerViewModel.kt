@@ -974,6 +974,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { preferences.renamePlaylist(playlistId, name) }
     }
 
+    fun updatePlaylistInfo(playlistId: String, name: String, description: String) {
+        viewModelScope.launch { preferences.updatePlaylistInfo(playlistId, name, description) }
+    }
+
+    /** La copertina scelta dal selettore: la si copia nell'app, poi la si assegna. */
+    fun setPlaylistCover(playlistId: String, uri: android.net.Uri?) {
+        viewModelScope.launch {
+            val path = uri?.let { com.example.xaosmusicplayer.data.PlaylistCovers.save(getApplication<android.app.Application>(), it) }
+            if (uri != null && path == null) return@launch
+            preferences.setPlaylistCover(playlistId, path)
+        }
+    }
+
     fun deletePlaylist(playlistId: String) {
         viewModelScope.launch { preferences.deletePlaylist(playlistId) }
     }

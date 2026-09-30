@@ -100,6 +100,14 @@ class Settings(private val file: File) {
     }
 
     companion object {
-        val appDir: File = File(System.getProperty("user.home"), ".xaos")
+        /**
+         * Dove stanno impostazioni, indice e dati dell'utente. XAOS_HOME serve
+         * solo a chi sviluppa: un'istanza di prova con dati suoi, che non tocca
+         * quelli veri né il telefono.
+         */
+        val appDir: File = System.getenv("XAOS_HOME")?.let(::File) ?: File(System.getProperty("user.home"), ".xaos")
+
+        /** Un'istanza di prova (XAOS_HOME) non si collega al telefono. */
+        val isTestInstance: Boolean = System.getenv("XAOS_HOME") != null
     }
 }

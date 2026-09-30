@@ -25,10 +25,11 @@ import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 
-/** Le tre sezioni principali dell'app. */
+/** Le sezioni principali dell'app, come su Spotify. */
 enum class Section(val label: String, val icon: ImageVector) {
     HOME("HOME", XaosIcons.Home),
     LIBRARY("LIBRERIA", XaosIcons.Library),
+    PLAYLISTS("PLAYLIST", XaosIcons.Queue),
     SEARCH("CERCA", XaosIcons.Search),
 }
 

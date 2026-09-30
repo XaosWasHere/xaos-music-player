@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import com.example.xaosmusicplayer.data.PlayEvent
 import com.example.xaosmusicplayer.data.Playlist
+import com.example.xaosmusicplayer.data.PlaylistCovers
 import com.example.xaosmusicplayer.data.UserPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +54,7 @@ class DesktopSyncReceiver : BroadcastReceiver() {
             put("format", FORMAT)
             put("stamp", snapshot.stamp)
             put("favorites", JSONArray().also { arr -> snapshot.favorites.forEach(arr::put) })
-            put("playlists", JSONArray().also { arr -> snapshot.playlists.forEach { arr.put(it.toJson()) } })
+            put("playlists", JSONArray().also { arr -> snapshot.playlists.forEach { arr.put(it.toJson(context)) } })
             put("plays", JSONArray().also { arr ->
                 snapshot.events.forEach { arr.put(JSONArray().put(it.songId).put(it.timestampMs)) }
             })
@@ -74,7 +75,13 @@ class DesktopSyncReceiver : BroadcastReceiver() {
             (0 until arr.length()).map { i ->
                 val pl = arr.getJSONObject(i)
                 val ids = pl.getJSONArray("songIds")
-                Playlist(pl.getString("id"), pl.getString("name"), (0 until ids.length()).map { ids.getLong(it) })
+                Playlist(
+                    id = pl.getString("id"),
+                    name = pl.getString("name"),
+                    songIds = (0 until ids.length()).map { ids.getLong(it) },
+                    description = pl.optString("description"),
+                    coverPath = coverFromDesktop(context, pl.optString("cover").takeIf { it.isNotBlank() && it != "null" }),
+                )
             }
         }
         val events = obj.getJSONArray("plays").let { arr ->
@@ -98,10 +105,36 @@ class DesktopSyncReceiver : BroadcastReceiver() {
         return Activity.RESULT_OK to export(context)
     }
 
-    private fun Playlist.toJson() = JSONObject().apply {
+    /**
+     * La copertina viaggia a parte, come file in sync/covers col nome della sua
+     * impronta; nel JSON c'è solo l'impronta.
+     */
+    private fun Playlist.toJson(context: Context) = JSONObject().apply {
         put("id", id)
         put("name", name)
         put("songIds", JSONArray().also { arr -> songIds.forEach(arr::put) })
+        put("description", description)
+        val cover = coverPath?.let(::File)?.takeIf { it.isFile }
+        if (cover != null) {
+            val hash = PlaylistCovers.hashOf(cover.path)!!
+            val shared = File(coversDir(context), "$hash.jpg")
+            if (!shared.isFile) cover.copyTo(shared, overwrite = true)
+            put("cover", hash)
+        }
+    }
+
+    private fun coversDir(context: Context) = File(dir(context), "covers").apply { mkdirs() }
+
+    /** La copertina [hash] arrivata dal PC, copiata fra quelle dell'app. */
+    private fun coverFromDesktop(context: Context, hash: String?): String? {
+        if (hash.isNullOrBlank()) return null
+        val local = PlaylistCovers.fileFor(context, hash)
+        if (!local.isFile) {
+            val shared = File(coversDir(context), "$hash.jpg")
+            if (!shared.isFile) return null
+            shared.copyTo(local, overwrite = true)
+        }
+        return local.absolutePath
     }
 
     private fun dir(context: Context): File =

@@ -19,7 +19,14 @@ import java.io.File
 
 /** Una playlist come la salva il telefono: id di MediaStore. */
 @Serializable
-data class PhonePlaylist(val id: String, val name: String, val songIds: List<Long> = emptyList())
+data class PhonePlaylist(
+    val id: String,
+    val name: String,
+    val songIds: List<Long> = emptyList(),
+    val description: String = "",
+    /** L'impronta della copertina, il cui file viaggia a parte in sync/covers. */
+    val cover: String? = null,
+)
 
 /** Quello che l'app Android esporta su richiesta (`phone-state.json`). */
 @Serializable
@@ -141,6 +148,14 @@ class DataSync(
             ?: error("impossibile leggere i dati del telefono")
         val p = runCatching { json.decodeFromString<PhoneData>(raw) }.getOrElse { error("dati del telefono illeggibili") }
 
+        // Le copertine delle playlist del telefono che qui non ci sono ancora.
+        p.playlists.mapNotNull { it.cover }.distinct()
+            .filter { xaos.desktop.library.PlaylistCovers.fileOf(it) == null }
+            .forEach { hash ->
+                val target = File(xaos.desktop.library.PlaylistCovers.dir, "$hash.jpg")
+                phone.run(listOf("-s", serial, "pull", "$PHONE_DIR/covers/$hash.jpg", target.path), timeoutS = 60)
+            }
+
         // 2. La corrispondenza fra i brani dei due lati.
         _status.value = DataSyncStatus.Running("CONFRONTO DEI BRANI")
         val map = SongMap(phone.listPhoneSongs(serial), snapshot) { phone.remotePathOf(roots, it) }
@@ -162,6 +177,11 @@ class DataSync(
             plays = merge.phonePlays,
             historyClearedAt = merge.clearedAt,
         )
+        // Le copertine scelte sul PC, che il telefono non ha.
+        val phoneCovers = p.playlists.mapNotNull { it.cover }.toSet()
+        merge.phonePlaylists.mapNotNull { it.cover }.distinct().filter { it !in phoneCovers }.forEach { hash ->
+            xaos.desktop.library.PlaylistCovers.fileOf(hash)?.let { phone.push(serial, it, "$PHONE_DIR/covers/$hash.jpg") }
+        }
         val tmp = File.createTempFile("xaos-inbox-", ".json")
         try {
             tmp.writeText(json.encodeToString(inbox), Charsets.UTF_8)
@@ -364,12 +384,17 @@ private class Merge(
             if ((bp != null && pp == null) || (bd != null && dp == null)) continue
             if (pp == null && dp == null) continue
 
-            val name = when {
-                pp == null -> dp!!.name
-                dp == null -> pp.name
-                bp != null && pp.name != bp.name -> pp.name
-                else -> dp.name
+            // Nome, descrizione e copertina: vale la modifica del telefono se
+            // c'è stata dall'ultimo accordo, altrimenti quella del PC.
+            fun <T> pick(phoneValue: T?, baseValue: T?, deskValue: T?): T? = when {
+                pp == null -> deskValue
+                dp == null -> phoneValue
+                bp != null && phoneValue != baseValue -> phoneValue
+                else -> deskValue
             }
+            val name = pick(pp?.name, bp?.name, dp?.name)!!
+            val description = pick(pp?.description, bp?.description, dp?.description).orEmpty()
+            val cover = pick(pp?.cover, bp?.cover, dp?.cover)
             val pU = pp?.songIds?.map(::unitOfPhone)
             val dU = dp?.paths?.map(::unitOfDesk)
             val merged = when {
@@ -393,8 +418,8 @@ private class Merge(
                 }
             }
             val oldIds = pp?.songIds.orEmpty().toMutableList()
-            outP += PhonePlaylist(id, name, merged.mapNotNull { phoneIdOf(it, oldIds) }.distinct())
-            outD += Playlist(id, name, merged.mapNotNull(::deskPathOf).distinct())
+            outP += PhonePlaylist(id, name, merged.mapNotNull { phoneIdOf(it, oldIds) }.distinct(), description, cover)
+            outD += Playlist(id, name, merged.mapNotNull(::deskPathOf).distinct(), description, cover)
         }
         phonePlaylists = outP
         desktopPlaylists = outD

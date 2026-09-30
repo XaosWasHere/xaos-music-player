@@ -10,6 +10,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
+import com.example.xaosmusicplayer.ui.components.CircleIconButton
+import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -58,6 +64,10 @@ import com.example.xaosmusicplayer.ui.screens.LibraryMenuAction
 import com.example.xaosmusicplayer.ui.screens.LibraryScreen
 import com.example.xaosmusicplayer.ui.screens.NowPlayingScreen
 import com.example.xaosmusicplayer.ui.screens.PlaylistsScreen
+import com.example.xaosmusicplayer.ui.screens.CollectionHero
+import com.example.xaosmusicplayer.ui.screens.DeletePlaylistDialog
+import com.example.xaosmusicplayer.ui.screens.PlaylistInfoDialog
+import com.example.xaosmusicplayer.ui.screens.coverUri
 import com.example.xaosmusicplayer.ui.screens.SearchScreen
 import com.example.xaosmusicplayer.ui.screens.SleepTimerSheet
 import com.example.xaosmusicplayer.ui.screens.SongListScreen
@@ -363,7 +373,7 @@ private fun XaosApp(
                         onArtistClick = { backStack += Destination.Artist(it.name) },
                         onMenuAction = { action ->
                             when (action) {
-                                LibraryMenuAction.PLAYLISTS -> backStack += Destination.Playlists
+                                LibraryMenuAction.PLAYLISTS -> selectSection(Section.PLAYLISTS)
                                 LibraryMenuAction.FAVORITES -> backStack += Destination.Favorites
                                 LibraryMenuAction.EQUALIZER -> backStack += Destination.Equalizer
                                 LibraryMenuAction.SLEEP_TIMER -> sleepSheetOpen = true
@@ -374,6 +384,16 @@ private fun XaosApp(
                         },
                         isDark = isDark,
                         onRequestPermission = { requestLibraryPermissions() },
+                    )
+
+                    Section.PLAYLISTS -> PlaylistsScreen(
+                        playlists = playlists,
+                        favoritesCount = favoriteSongs.size,
+                        artworkOf = { pl -> viewModel.songsOfPlaylist(pl.id).firstOrNull()?.artworkUri },
+                        onOpenFavorites = { backStack += Destination.Favorites },
+                        onOpen = { backStack += Destination.PlaylistDetail(it.id, it.name) },
+                        onCreate = { viewModel.createPlaylist(it) },
+                        onDelete = { viewModel.deletePlaylist(it.id) },
                     )
 
                     Section.SEARCH -> SearchScreen(
@@ -567,7 +587,12 @@ private fun DestinationContent(
 
     /** Tutte le liste di brani si comportano allo stesso modo. */
     @Composable
-    fun songList(title: String, songs: List<Song>, emptyMessage: String = "Nessun brano") {
+    fun songList(
+        title: String,
+        songs: List<Song>,
+        emptyMessage: String = "Nessun brano",
+        hero: CollectionHero? = null,
+    ) {
         SongListScreen(
             title = title,
             songs = songs,
@@ -577,21 +602,81 @@ private fun DestinationContent(
             onShuffleAll = { viewModel.play(songs.shuffled(), 0) },
             onSongMenu = onSongMenu,
             emptyMessage = emptyMessage,
+            hero = hero,
         )
     }
 
     when (destination) {
-        is Destination.Album ->
-            songList(destination.title, viewModel.songsOfAlbum(destination.albumId))
+        is Destination.Album -> {
+            val songs = viewModel.songsOfAlbum(destination.albumId)
+            val artist = songs.map { it.albumArtist }.distinct().singleOrNull() ?: "Artisti vari"
+            val year = songs.maxOfOrNull { it.year }?.takeIf { it > 0 }
+            songList(
+                destination.title,
+                songs,
+                hero = CollectionHero(
+                    artwork = songs.firstOrNull()?.artworkUri,
+                    kind = listOfNotNull("ALBUM", year?.toString()).joinToString(" · "),
+                    subtitle = artist,
+                    actions = {
+                        CircleIconButton(
+                            icon = XaosIcons.Edit,
+                            contentDescription = "Modifica album",
+                            onClick = { backStack += Destination.EditAlbum(destination.albumId, destination.title) },
+                        )
+                    },
+                ),
+            )
+        }
 
         is Destination.Artist ->
             songList(destination.name, viewModel.songsOfArtist(destination.name))
 
-        is Destination.PlaylistDetail -> songList(
-            destination.name,
-            viewModel.songsOfPlaylist(destination.id),
-            "Playlist vuota",
-        )
+        is Destination.PlaylistDetail -> {
+            val playlist = playlists.firstOrNull { it.id == destination.id }
+            val songs = viewModel.songsOfPlaylist(destination.id)
+            var editing by remember { mutableStateOf(false) }
+            var deleting by remember { mutableStateOf(false) }
+            // La copertina si sceglie dal selettore di foto di sistema.
+            val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                if (uri != null) viewModel.setPlaylistCover(destination.id, uri)
+            }
+            fun launchPicker() = pickCover.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            songList(
+                playlist?.name ?: destination.name,
+                songs,
+                "Playlist vuota",
+                hero = playlist?.let { pl ->
+                    CollectionHero(
+                        artwork = pl.coverUri(songs.firstOrNull()?.artworkUri),
+                        kind = "PLAYLIST",
+                        description = pl.description,
+                        onArtworkClick = ::launchPicker,
+                        actions = {
+                            CircleIconButton(icon = XaosIcons.Edit, contentDescription = "Modifica playlist", onClick = { editing = true })
+                            Spacer(Modifier.width(10.dp))
+                            CircleIconButton(icon = XaosIcons.Delete, contentDescription = "Elimina playlist", onClick = { deleting = true })
+                        },
+                    )
+                },
+            )
+            if (editing && playlist != null) {
+                PlaylistInfoDialog(
+                    playlist = playlist,
+                    onDismiss = { editing = false },
+                    onConfirm = { name, description -> editing = false; viewModel.updatePlaylistInfo(playlist.id, name, description) },
+                    onPickCover = { editing = false; launchPicker() },
+                    onRemoveCover = { editing = false; viewModel.setPlaylistCover(playlist.id, null) },
+                )
+            }
+            if (deleting && playlist != null) {
+                DeletePlaylistDialog(
+                    playlist,
+                    onDismiss = { deleting = false },
+                    onConfirm = { deleting = false; viewModel.deletePlaylist(playlist.id); pop() },
+                )
+            }
+        }
 
         is Destination.AutoPlaylist -> when (destination.kind) {
             AutoPlaylistKind.MOST_PLAYED ->
@@ -601,13 +686,20 @@ private fun DestinationContent(
                 songList(destination.kind.title, leastPlayed, "Libreria vuota")
         }
 
-        Destination.Favorites -> songList("Preferiti", favoriteSongs, "Nessun preferito")
+        Destination.Favorites -> songList(
+            "Preferiti",
+            favoriteSongs,
+            "Nessun preferito",
+            hero = CollectionHero(artwork = null, kind = "PLAYLIST", description = "I brani col cuore, qui e sul PC."),
+        )
 
         Destination.Queue -> songList("In coda", queue, "Coda vuota")
 
         Destination.Playlists -> PlaylistsScreen(
             playlists = playlists,
-            onBack = pop,
+            favoritesCount = favoriteSongs.size,
+            artworkOf = { pl -> viewModel.songsOfPlaylist(pl.id).firstOrNull()?.artworkUri },
+            onOpenFavorites = { backStack += Destination.Favorites },
             onOpen = { backStack += Destination.PlaylistDetail(it.id, it.name) },
             onCreate = { viewModel.createPlaylist(it) },
             onDelete = { viewModel.deletePlaylist(it.id) },

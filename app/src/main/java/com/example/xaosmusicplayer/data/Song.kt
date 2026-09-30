@@ -67,4 +67,8 @@ data class Playlist(
     val id: String,
     val name: String,
     val songIds: List<Long>,
+    /** Due righe scritte dall'utente, mostrate sotto la copertina. */
+    val description: String = "",
+    /** La copertina scelta dall'utente, copiata nello spazio dell'app ([PlaylistCovers]). */
+    val coverPath: String? = null,
 )

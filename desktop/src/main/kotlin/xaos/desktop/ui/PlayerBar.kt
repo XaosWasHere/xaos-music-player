@@ -19,6 +19,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +40,7 @@ import xaos.desktop.theme.Xaos
  * avanzamento al centro, volume a destra — la disposizione dei player desktop,
  * con i controlli a punti e il play nel colore d'accento.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun PlayerBar(
     player: Player,
@@ -53,15 +60,36 @@ fun PlayerBar(
     val repeat by player.repeat.collectAsState()
     val engine by player.engine.collectAsState()
 
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+    // Finestra stretta: comandi al centro più corti e volume più breve, così i
+    // pulsanti a destra non escono dalla barra.
+    val narrow = maxWidth < 1180.dp
     Column(Modifier.fillMaxWidth().background(colors.sidebar)) {
         Hairline()
         Row(
             Modifier.fillMaxWidth().height(92.dp).padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Brano in corso
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            // Brano in corso. Il clic destro apre lo stesso menu dei brani in lista.
+            val actions = LocalTrackActions.current
+            val favorites = LocalFavorites.current
+            var menuOpen by remember { mutableStateOf(false) }
+            Row(
+                Modifier.weight(1f).onPointerEvent(PointerEventType.Press) { event ->
+                    if (event.buttons.isSecondaryPressed && current != null && actions != null) menuOpen = true
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 val track = current
+                if (track != null && actions != null) {
+                    Box {
+                        TrackMenu(
+                            expanded = menuOpen,
+                            onDismiss = { menuOpen = false },
+                            items = trackMenuItems(track, track.path in favorites, actions),
+                        )
+                    }
+                }
                 if (track != null) {
                     // Copertina e titolo aprono lo schermo intero, come su Spotify.
                     ArtworkImage(track, size = 58.dp, corner = 10.dp, modifier = Modifier.pressable(onOpenFullscreen))
@@ -90,7 +118,7 @@ fun PlayerBar(
             }
 
             // Comandi e avanzamento
-            Column(Modifier.width(520.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.width(if (narrow) 380.dp else 520.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     ModeButton(XaosIcons.Shuffle, "Casuale", shuffle) { player.toggleShuffle() }
                     CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, outlined = false)
@@ -145,7 +173,7 @@ fun PlayerBar(
                 Spacer(Modifier.width(10.dp))
                 DotSlider(
                     value = volume / 100f,
-                    modifier = Modifier.width(130.dp),
+                    modifier = Modifier.width(if (narrow) 72.dp else 130.dp),
                     color = colors.ink,
                     onChange = { player.setVolume((it * 100).toInt()) },
                     onChangeFinished = { onVolumeChange((it * 100).toInt()) },
@@ -164,6 +192,7 @@ fun PlayerBar(
                 CircleIconButton(XaosIcons.Fullscreen, "Schermo intero", onOpenFullscreen, size = 34.dp)
             }
         }
+    }
     }
 }
 

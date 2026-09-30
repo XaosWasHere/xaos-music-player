@@ -57,6 +57,17 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    /** Nome e descrizione insieme: si modificano dallo stesso dialogo. */
+    suspend fun updatePlaylistInfo(playlistId: String, name: String, description: String) {
+        editPlaylists { list ->
+            list.map { if (it.id == playlistId) it.copy(name = name, description = description.trim()) else it }
+        }
+    }
+
+    suspend fun setPlaylistCover(playlistId: String, coverPath: String?) {
+        editPlaylists { list -> list.map { if (it.id == playlistId) it.copy(coverPath = coverPath) else it } }
+    }
+
     suspend fun deletePlaylist(playlistId: String) {
         editPlaylists { list -> list.filterNot { it.id == playlistId } }
     }
@@ -346,6 +357,8 @@ class UserPreferences(private val context: Context) {
                             songIds = buildList {
                                 for (j in 0 until idsArr.length()) add(idsArr.getLong(j))
                             },
+                            description = obj.optString("description"),
+                            coverPath = obj.optStringOrNull("cover"),
                         )
                     )
                 }
@@ -432,6 +445,8 @@ class UserPreferences(private val context: Context) {
                     put("id", pl.id)
                     put("name", pl.name)
                     put("songIds", JSONArray().also { ids -> pl.songIds.forEach(ids::put) })
+                    if (pl.description.isNotBlank()) put("description", pl.description)
+                    pl.coverPath?.let { put("cover", it) }
                 }
             )
         }

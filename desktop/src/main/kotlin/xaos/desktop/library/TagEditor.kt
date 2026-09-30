@@ -16,6 +16,7 @@ data class TagEdit(
     val genre: String? = null,
     val year: String? = null,
     val trackNumber: String? = null,
+    val discNumber: String? = null,
     /** Un'immagine da incorporare come copertina. */
     val artwork: File? = null,
 )
@@ -109,6 +110,7 @@ object TagEditor {
         put(FieldKey.GENRE, edit.genre)
         put(FieldKey.YEAR, edit.year)
         put(FieldKey.TRACK, edit.trackNumber)
+        put(FieldKey.DISC_NO, edit.discNumber)
         edit.artwork?.let { image ->
             val art = ArtworkFactory.createArtworkFromFile(image)
             tag.deleteArtworkField()

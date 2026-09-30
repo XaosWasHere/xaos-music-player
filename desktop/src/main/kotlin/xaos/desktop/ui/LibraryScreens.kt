@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package xaos.desktop.ui
 
 import androidx.compose.foundation.Image
@@ -204,7 +206,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                         color = colors.inkTertiary,
                     )
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0) }, icon = XaosIcons.Play, filled = true)
                         PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
                         PillButton("PLAYLIST", onClick = { actions?.onAddToPlaylist(album.tracks) }, icon = XaosIcons.PlaylistAdd)
@@ -358,25 +360,33 @@ fun TrackRow(
                 TrackMenu(
                     expanded = menuOpen,
                     onDismiss = { menuOpen = false },
-                    items = listOf(
-                        Triple(
-                            if (favorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-                            if (favorite) "TOGLI DAI PREFERITI" else "AGGIUNGI AI PREFERITI",
-                        ) { actions.onToggleFavorite(track) },
-                        Triple(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") { actions.onAddToPlaylist(listOf(track)) },
-                    ) + extraMenu + listOf(
-                        Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
-                        Triple(XaosIcons.Mic, "TESTO") { actions.onLyrics(track) },
-                        Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
-                    ),
+                    items = trackMenuItems(track, favorite, actions, extraMenu),
                 )
             }
         }
     }
 }
 
+/** Le voci del menu di un brano: le stesse ovunque, nelle liste e nella barra del player. */
+fun trackMenuItems(
+    track: Track,
+    favorite: Boolean,
+    actions: TrackActions,
+    extraMenu: List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>> = emptyList(),
+): List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>> = listOf(
+    Triple(
+        if (favorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
+        if (favorite) "TOGLI DAI PREFERITI" else "AGGIUNGI AI PREFERITI",
+    ) { actions.onToggleFavorite(track) },
+    Triple(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") { actions.onAddToPlaylist(listOf(track)) },
+) + extraMenu + listOf(
+    Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
+    Triple(XaosIcons.Mic, "TESTO") { actions.onLyrics(track) },
+    Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
+)
+
 @Composable
-private fun TrackMenu(
+fun TrackMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     items: List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>>,
@@ -447,7 +457,7 @@ fun ArtistDetailScreen(artist: Artist?, player: Player, onOpenAlbum: (Album) -> 
                 Tag("ARTISTA")
                 Text(artist.name, style = MaterialTheme.typography.headlineMedium, color = Xaos.colors.ink)
                 Text("[${artist.albums.size}] ALBUM · [${artist.trackCount}] BRANI", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkTertiary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton("RIPRODUCI", onClick = { player.play(all, 0) }, icon = XaosIcons.Play, filled = true)
                     PillButton("CASUALE", onClick = { player.play(all.shuffled(), 0) }, icon = XaosIcons.Shuffle)
                 }

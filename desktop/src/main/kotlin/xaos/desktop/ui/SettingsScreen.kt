@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package xaos.desktop.ui
 
 import androidx.compose.foundation.background
@@ -92,7 +94,7 @@ fun SettingsScreen(
                         onRemove = { settings.setRoots(prefs.roots - root) },
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton("AGGIUNGI CARTELLA", onClick = onAddFolder, icon = XaosIcons.Add, filled = true)
                     PillButton(
                         "RISCANSIONA",
@@ -159,7 +161,7 @@ fun SettingsScreen(
                 prefs.effectiveDownloadFolder?.let { folder ->
                     FolderRow(path = folder, canRemove = false, onRemove = {})
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton("CAMBIA CARTELLA", onClick = onPickDownloadFolder, icon = XaosIcons.Folder)
                     if (prefs.downloadFolder != null) {
                         PillButton("PREDEFINITA", onClick = { settings.update { it.copy(downloadFolder = null) } })
@@ -187,7 +189,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     FullscreenBackground.entries.forEach { mode ->
                         PillButton(
                             mode.label,
@@ -204,12 +206,12 @@ fun SettingsScreen(
         item {
             SettingsCard("ASPETTO") {
                 Text("TEMA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton("SCURO", onClick = { settings.update { it.copy(dark = true) } }, filled = prefs.dark)
                     PillButton("CHIARO", onClick = { settings.update { it.copy(dark = false) } }, filled = !prefs.dark)
                 }
                 Text("DIMENSIONE INTERFACCIA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1.0f to "100%", 1.1f to "110%", 1.25f to "125%").forEach { (scale, label) ->
                         PillButton(
                             label,
@@ -284,7 +286,7 @@ private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, on
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkSecondary,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(if (open) "NASCONDI ELENCO" else "MOSTRA ELENCO", onClick = { open = !open })
             if (trashSupported && files.isNotEmpty()) {
                 PillButton("SPOSTA LE COPIE NEL CESTINO", onClick = { confirm = true }, icon = XaosIcons.Delete)
@@ -326,6 +328,27 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
     }
 }
 
+/** Un dispositivo audio: una riga intera, col pallino d'accento su quello in uso. */
+@Composable
+private fun DeviceRow(name: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = Xaos.colors
+    Row(
+        Modifier.fillMaxWidth().hoverRow(selected).pressable(onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(20.dp)) {
+            if (selected) AccentDot(size = 8.dp) else AccentDot(size = 8.dp, color = colors.track)
+        }
+        Text(
+            name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (selected) colors.ink else colors.inkSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 private fun FolderRow(path: String, canRemove: Boolean, onRemove: () -> Unit) {
     val colors = Xaos.colors
@@ -361,17 +384,17 @@ private fun OutputCard(prefs: SettingsData, player: Player, onSelect: (String?) 
             style = MaterialTheme.typography.bodyMedium,
             color = Xaos.colors.inkSecondary,
         )
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("PREDEFINITA", onClick = { onSelect(null); player.setOutputDevice(null) }, filled = prefs.outputDevice == null)
-            devices.forEach { (id, name) ->
-                PillButton(
-                    name.uppercase(),
-                    onClick = { onSelect(id); player.setOutputDevice(id) },
-                    filled = prefs.outputDevice == id,
-                )
+        // Un elenco, non una fila: i nomi dei dispositivi sono lunghi e in fila
+        // uscivano dalla card.
+        Column(Modifier.fillMaxWidth()) {
+            DeviceRow("Predefinita di Windows", selected = prefs.outputDevice == null) {
+                onSelect(null); player.setOutputDevice(null)
             }
-            PillButton("AGGIORNA ELENCO", onClick = { devices = player.outputDevices() }, icon = XaosIcons.Sync)
+            devices.forEach { (id, name) ->
+                DeviceRow(name, selected = prefs.outputDevice == id) { onSelect(id); player.setOutputDevice(id) }
+            }
         }
+        PillButton("AGGIORNA ELENCO", onClick = { devices = player.outputDevices() }, icon = XaosIcons.Sync)
     }
 }
 
@@ -396,7 +419,7 @@ private fun EqualizerCard(eq: EqualizerSettings, player: Player, onChange: (Equa
         }
 
         if (player.eqPresets.isNotEmpty()) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 player.eqPresets.forEach { name ->
                     PillButton(
                         name.uppercase(),
@@ -528,7 +551,7 @@ private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolde
 
         Spacer(Modifier.height(4.dp))
         Text("VERSIONE DA INVIARE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("MP3 QUANDO C'È", onClick = { settings.update { it.copy(preferMp3OnPhone = true) } }, filled = prefs.preferMp3OnPhone)
             PillButton("ORIGINALE", onClick = { settings.update { it.copy(preferMp3OnPhone = false) } }, filled = !prefs.preferMp3OnPhone)
             Spacer(Modifier.width(8.dp))

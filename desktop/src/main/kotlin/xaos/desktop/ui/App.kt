@@ -2,6 +2,8 @@ package xaos.desktop.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +93,9 @@ fun XaosDesktopApp(
     dataSync: DataSync,
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
+    /** Lo schermo su cui sta la finestra principale: il player a tutto schermo si apre lì. */
+    screenBounds: () -> java.awt.Rectangle?,
+    appIcon: androidx.compose.ui.graphics.painter.Painter,
     onOpenMini: () -> Unit,
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
@@ -154,19 +159,58 @@ fun XaosDesktopApp(
 
     val colors = Xaos.colors
     if (fullscreen) {
-        CompositionLocalProvider(LocalTrackActions provides trackActions, LocalFavorites provides favorites) {
-            FullscreenPlayer(
-                player = player,
-                background = prefs.fullscreenBackground,
-                onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
-                onClose = { onFullscreenChange(false) },
-                lyricsOpen = lyricsOpen,
-                onToggleLyrics = { lyricsOpen = !lyricsOpen },
-                onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
-            )
+        // Una finestra a parte, senza bordi e grande quanto lo schermo. Lo
+        // schermo intero "esclusivo" di Java si riduce a icona appena si passa a
+        // un'altra app; questa invece resta lì, come qualunque finestra.
+        val bounds = remember {
+            screenBounds() ?: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .defaultScreenDevice.defaultConfiguration.bounds
         }
-        return
+        val state = androidx.compose.ui.window.rememberWindowState(
+            position = androidx.compose.ui.window.WindowPosition(bounds.x.dp, bounds.y.dp),
+            size = androidx.compose.ui.unit.DpSize(bounds.width.dp, bounds.height.dp),
+        )
+        androidx.compose.ui.window.Window(
+            onCloseRequest = { onFullscreenChange(false) },
+            state = state,
+            title = "Xaos",
+            icon = appIcon,
+            undecorated = true,
+            resizable = false,
+            onPreviewKeyEvent = { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@Window false
+                when (event.key) {
+                    androidx.compose.ui.input.key.Key.Escape -> { onFullscreenChange(false); true }
+                    androidx.compose.ui.input.key.Key.Spacebar -> { player.togglePlayPause(); true }
+                    androidx.compose.ui.input.key.Key.DirectionRight -> { player.seekBy(10_000); true }
+                    androidx.compose.ui.input.key.Key.DirectionLeft -> { player.seekBy(-10_000); true }
+                    else -> false
+                }
+            },
+        ) {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            val scaled = androidx.compose.ui.unit.Density(base.density * prefs.uiScale, base.fontScale)
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides scaled,
+                LocalTrackActions provides trackActions,
+                LocalFavorites provides favorites,
+            ) {
+                xaos.desktop.theme.XaosTheme(dark = prefs.dark) {
+                    FullscreenPlayer(
+                        player = player,
+                        background = prefs.fullscreenBackground,
+                        onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
+                        onClose = { onFullscreenChange(false) },
+                        lyricsOpen = lyricsOpen,
+                        onToggleLyrics = { lyricsOpen = !lyricsOpen },
+                        onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
+                    )
+                }
+            }
+        }
     }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val windowWidth = maxWidth
     Column(Modifier.fillMaxSize().background(colors.background)) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Sidebar(
@@ -283,10 +327,14 @@ fun XaosDesktopApp(
                     }
                 }
             }
-            if (lyricsOpen) {
+            // La barra dei testi si fa da parte quando al contenuto resterebbe
+            // troppo poco spazio, e mentre si sta già modificando un testo.
+            val panelWidth = if (windowWidth < 1180.dp) 280.dp else 360.dp
+            val panelFits = windowWidth - 236.dp - panelWidth >= 560.dp
+            if (lyricsOpen && panelFits && details.lastOrNull() !is Detail.Lyrics) {
                 LyricsSidePanel(
                     player = player,
-                    width = 360.dp,
+                    width = panelWidth,
                     onClose = { lyricsOpen = false },
                     onEdit = { t -> details += Detail.Lyrics(t.path) },
                 )
@@ -303,6 +351,7 @@ fun XaosDesktopApp(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -315,12 +364,15 @@ private fun Sidebar(
     onSelect: (Section) -> Unit,
 ) {
     val colors = Xaos.colors
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.width(236.dp).fillMaxHeight()) {
+    // Finestra bassa: voci più strette e niente scheda del telefono (la
+    // raggiunge comunque la voce Telefono), così tutto resta visibile.
+    val compact = maxHeight < 600.dp
     Column(
         Modifier
-            .width(236.dp)
-            .fillMaxHeight()
+            .fillMaxSize()
             .background(colors.sidebar)
-            .padding(horizontal = 16.dp, vertical = 20.dp),
+            .padding(horizontal = 16.dp, vertical = if (compact) 14.dp else 20.dp),
     ) {
         // Il logo porta al progetto su GitHub; se c'è una versione più nuova il
         // pallino pulsa e il clic apre direttamente la sua pagina.
@@ -346,7 +398,7 @@ private fun Sidebar(
             )
         }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(if (compact) 16.dp else 28.dp))
 
         MainSections.forEach { entry ->
             NavItem(
@@ -354,20 +406,24 @@ private fun Sidebar(
                 selected = entry == selected,
                 badge = if (entry == Section.PHONE) phoneState is PhoneState.Connected else false,
                 onClick = { onSelect(entry) },
+                compact = compact,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(if (compact) 2.dp else 4.dp))
         }
 
         Spacer(Modifier.weight(1f))
 
-        PhoneStatusCard(phoneState, onClick = { onSelect(Section.PHONE) })
-        Spacer(Modifier.height(12.dp))
+        if (!compact) {
+            PhoneStatusCard(phoneState, onClick = { onSelect(Section.PHONE) })
+            Spacer(Modifier.height(12.dp))
+        }
 
         NavItem(
             section = Section.SETTINGS,
             selected = selected == Section.SETTINGS,
             badge = false,
             onClick = { onSelect(Section.SETTINGS) },
+            compact = compact,
         )
         Text(
             text = when (scan) {
@@ -379,6 +435,7 @@ private fun Sidebar(
             color = colors.inkTertiary,
             modifier = Modifier.padding(start = 12.dp, top = 6.dp),
         )
+    }
     }
 }
 
@@ -405,7 +462,7 @@ private fun PulsingDot(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun NavItem(section: Section, selected: Boolean, badge: Boolean, onClick: () -> Unit) {
+private fun NavItem(section: Section, selected: Boolean, badge: Boolean, onClick: () -> Unit, compact: Boolean = false) {
     val colors = Xaos.colors
     val tint by animateColorAsState(if (selected) colors.ink else colors.inkSecondary, label = "nav")
     Row(
@@ -414,7 +471,7 @@ private fun NavItem(section: Section, selected: Boolean, badge: Boolean, onClick
             .clip(RoundedCornerShape(12.dp))
             .hoverRow(selected)
             .pressable(onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = if (compact) 7.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(section.icon, null, tint = tint, modifier = Modifier.size(18.dp))
@@ -510,19 +567,32 @@ private fun TopBar(
 @Composable
 fun ScreenTitle(title: String, caption: String? = null, trailing: @Composable (() -> Unit)? = null) {
     val colors = Xaos.colors
-    Row(
-        Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 18.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
+    // Con poco spazio i comandi a destra scendono sotto il titolo invece di schiacciarlo.
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val stacked = maxWidth < 860.dp
+        val heading = @Composable {
             DotText(title, color = colors.ink, pitch = 5.dp)
             if (caption != null) {
                 Spacer(Modifier.height(10.dp))
                 Text(caption, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
             }
         }
-        trailing?.invoke()
+        if (stacked) {
+            Column(Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 18.dp)) {
+                heading()
+                if (trailing != null) {
+                    Spacer(Modifier.height(14.dp))
+                    trailing()
+                }
+            }
+        } else Row(
+            Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 18.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(Modifier.weight(1f)) { heading() }
+            trailing?.invoke()
+        }
     }
 }
 

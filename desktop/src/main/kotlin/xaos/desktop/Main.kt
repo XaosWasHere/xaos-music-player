@@ -9,14 +9,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.launch
@@ -49,7 +44,7 @@ fun main() = application {
     }
     val player = remember { Player().also { it.setVolume(settings.data.value.volume) } }
     val scope = rememberCoroutineScope()
-    val phone = remember { PhoneSync(scope).also { it.startWatching() } }
+    val phone = remember { PhoneSync(scope).also { if (!Settings.isTestInstance) it.startWatching() } }
     val ytdlp = remember { YtDlp(scope) }
     // Preferiti, playlist e ascolti del PC; gli ascolti li registra il player.
     val userData = remember {
@@ -95,7 +90,6 @@ fun main() = application {
 
     val windowState = rememberWindowState(size = DpSize(1320.dp, 860.dp))
     var fullscreen by remember { mutableStateOf(System.getenv("XAOS_START") == "FULLSCREEN") }
-    var placementBefore by remember { mutableStateOf(WindowPlacement.Floating) }
     // XAOS_START=MINI apre direttamente il miniplayer: serve solo per provarlo.
     var mini by remember { mutableStateOf(System.getenv("XAOS_START") == "MINI") }
     var mediaBridge by remember { mutableStateOf<MediaBridge?>(null) }
@@ -103,17 +97,12 @@ fun main() = application {
     // Riaprire Xaos dalla barra delle applicazioni chiude il miniplayer.
     LaunchedEffect(windowState.isMinimized) { if (!windowState.isMinimized) mini = false }
 
-    // Il player a tutto schermo porta a tutto schermo anche la finestra, come
-    // Spotify; uscendo, la finestra torna com'era (anche se era massimizzata).
+    // Il player a tutto schermo è una finestra sua (la apre XaosDesktopApp);
+    // chiudendola si torna davanti alla finestra principale.
     fun setFullscreen(on: Boolean) {
         if (on == fullscreen) return
-        if (on) {
-            placementBefore = windowState.placement
-            windowState.placement = WindowPlacement.Fullscreen
-        } else {
-            windowState.placement = placementBefore
-        }
         fullscreen = on
+        if (!on) mainWindow[0]?.toFront()
     }
 
     Window(
@@ -125,18 +114,6 @@ fun main() = application {
         title = "Xaos",
         icon = appIcon,
         state = windowState,
-        onPreviewKeyEvent = { event ->
-            // I tasti valgono solo a schermo intero: altrove lo spazio serve a
-            // scrivere nella ricerca.
-            if (!fullscreen || event.type != KeyEventType.KeyDown) return@Window false
-            when (event.key) {
-                Key.Escape -> { setFullscreen(false); true }
-                Key.Spacebar -> { player.togglePlayPause(); true }
-                Key.DirectionRight -> { player.seekBy(10_000); true }
-                Key.DirectionLeft -> { player.seekBy(-10_000); true }
-                else -> false
-            }
-        },
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)
         mainWindow[0] = window
@@ -144,7 +121,7 @@ fun main() = application {
         // I controlli nella barra delle applicazioni e nel riquadro multimediale di Windows.
         LaunchedEffect(Unit) {
             TaskbarButtons.install(window, player, scope)
-            mediaBridge = MediaBridge.start(appResourcesDir?.let { File(it, "media/XaosMedia.exe") }, player, scope)
+            if (!Settings.isTestInstance) mediaBridge = MediaBridge.start(appResourcesDir?.let { File(it, "media/XaosMedia.exe") }, player, scope)
         }
         // L'ingrandimento vale per tutto: testo, spazi, icone. Si ottiene
         // dichiarando allo strato di Compose uno schermo un po' più denso.
@@ -162,6 +139,8 @@ fun main() = application {
                 dataSync = dataSync,
                 fullscreen = fullscreen,
                 onFullscreenChange = ::setFullscreen,
+                screenBounds = { mainWindow[0]?.graphicsConfiguration?.bounds },
+                appIcon = appIcon,
                 onOpenMini = {
                     mini = true
                     windowState.isMinimized = true

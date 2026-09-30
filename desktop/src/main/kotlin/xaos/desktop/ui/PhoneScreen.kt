@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package xaos.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -234,7 +236,7 @@ fun PhoneScreen(
 /** Le due direzioni, come i filtri a pillola del resto dell'app. */
 @Composable
 private fun DirectionSelector(importMode: Boolean, onChange: (Boolean) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         PillButton("INVIA AL TELEFONO", onClick = { onChange(false) }, icon = XaosIcons.Phone, filled = !importMode)
         PillButton("IMPORTA DAL TELEFONO", onClick = { onChange(true) }, icon = XaosIcons.Download, filled = importMode)
     }
@@ -366,13 +368,13 @@ private fun ImportPanel(
                 Text("CONFRONTO FRA TELEFONO E PC…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
             else -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     BigStat(chosen.size.toString(), "DA IMPORTARE")
                     BigStat(formatBytes(chosen.sumOf { it.size }), "DA COPIARE")
                     BigStat(plan.onlyOnPhone.size.toString(), "SOLO SUL TELEFONO")
                     BigStat(plan.phoneTotal.toString(), "BRANI SUL TELEFONO")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton(
                         text = when {
                             plan.onlyOnPhone.isEmpty() -> "IL PC HA GIÀ TUTTO"
@@ -655,13 +657,13 @@ private fun PlanView(plan: SyncPlan, selected: List<SyncItem>, onSync: () -> Uni
     val colors = Xaos.colors
     val bytes = selected.sumOf { it.size }
     val fits = plan.freeBytes == null || bytes < plan.freeBytes - SyncPlan.SPACE_MARGIN
-    Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         BigStat(selected.size.toString(), "DA INVIARE")
         BigStat(formatBytes(bytes), "DA COPIARE")
         BigStat(plan.alreadyThere.toString(), "GIÀ SUL TELEFONO")
         plan.freeBytes?.let { BigStat(formatBytes(it), "SPAZIO LIBERO") }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         PillButton(
             text = when {
                 plan.missing.isEmpty() -> "TUTTO SINCRONIZZATO"
@@ -815,7 +817,7 @@ private fun AppCard(
                 Spacer(Modifier.width(10.dp))
                 Text("INSTALLAZIONE…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
-            justInstalled -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            justInstalled -> androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone, filled = true)
                 PillButton("OK", onClick = onDismiss)
             }
