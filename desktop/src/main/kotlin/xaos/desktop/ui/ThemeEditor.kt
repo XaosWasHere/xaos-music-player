@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import xaos.desktop.CustomTheme
 import xaos.desktop.Settings
 import xaos.desktop.SettingsData
+import xaos.desktop.ThemePreset
+import xaos.desktop.theme.customized
 import xaos.desktop.theme.DarkPalette
 import xaos.desktop.theme.LightPalette
 import xaos.desktop.theme.Xaos
@@ -103,41 +105,44 @@ fun ThemeEditor(prefs: SettingsData, settings: Settings) {
         )
         XaosSwitch(t.enabled, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(enabled = on)) } })
     }
-    if (!t.enabled) return
+    if (t.enabled) {
 
-    ThemeSlot.entries.forEach { slot ->
-        val value = current(slot)
-        Row(
-            Modifier.fillMaxWidth().hoverRow().pressable { editing = slot }.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Swatch(value ?: fallback(slot), size = 26.dp, dimmed = value == null && slot == ThemeSlot.BACKGROUND2)
-            Spacer(Modifier.width(14.dp))
+        ThemeSlot.entries.forEach { slot ->
+            val value = current(slot)
+            Row(
+                Modifier.fillMaxWidth().hoverRow().pressable { editing = slot }.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Swatch(value ?: fallback(slot), size = 26.dp, dimmed = value == null && slot == ThemeSlot.BACKGROUND2)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(slot.label, style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                    Text(
+                        if (slot == ThemeSlot.BACKGROUND2 && value == null) "Nessuna: sfondo in tinta unita" else slot.hint,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkTertiary,
+                    )
+                }
+                Text(value?.hex() ?: "PREDEFINITO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                if (value != null) {
+                    Spacer(Modifier.width(8.dp))
+                    CircleIconButton(XaosIcons.Close, "Torna al predefinito", { set(slot, null) }, size = 26.dp, outlined = false)
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(slot.label, style = MaterialTheme.typography.labelLarge, color = colors.ink)
-                Text(
-                    if (slot == ThemeSlot.BACKGROUND2 && value == null) "Nessuna: sfondo in tinta unita" else slot.hint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.inkTertiary,
-                )
+                Text("PALLINI DI SFONDO", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                Text("La griglia di punti dietro le schermate", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
             }
-            Text(value?.hex() ?: "PREDEFINITO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
-            if (value != null) {
-                Spacer(Modifier.width(8.dp))
-                CircleIconButton(XaosIcons.Close, "Torna al predefinito", { set(slot, null) }, size = 26.dp, outlined = false)
-            }
+            XaosSwitch(t.dots, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(dots = on)) } })
         }
+        PillButton("RIPRISTINA I COLORI", onClick = {
+            settings.update { it.copy(customTheme = CustomTheme(enabled = true)) }
+        }, icon = XaosIcons.Sync)
+
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("PALLINI DI SFONDO", style = MaterialTheme.typography.labelLarge, color = colors.ink)
-            Text("La griglia di punti dietro le schermate", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
-        }
-        XaosSwitch(t.dots, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(dots = on)) } })
-    }
-    PillButton("RIPRISTINA I COLORI", onClick = {
-        settings.update { it.copy(customTheme = CustomTheme(enabled = true)) }
-    }, icon = XaosIcons.Sync)
+    ThemePresets(prefs, settings)
 
     editing?.let { slot ->
         ColorPickerDialog(
@@ -270,4 +275,154 @@ private fun ColorPickerDialog(title: String, initial: Color, onChange: (Color) -
         },
         confirmButton = { PillButton("FATTO", onClick = onDismiss, filled = true) },
     )
+}
+
+/**
+ * I preset: temi salvati con un nome. Un clic lo applica; con un nome già
+ * usato il salvataggio aggiorna quel preset. Si sincronizzano col telefono.
+ */
+@Composable
+private fun ThemePresets(prefs: SettingsData, settings: Settings) {
+    val colors = Xaos.colors
+    val current = prefs.customTheme.normalized()
+    var saving by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<ThemePreset?>(null) }
+
+    Spacer(Modifier.height(6.dp))
+    Text("PRESET", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+    if (prefs.themePresets.isEmpty()) {
+        Text(
+            "Salva i colori di adesso con un nome, per riapplicarli quando vuoi. I preset arrivano anche sul telefono.",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.inkTertiary,
+        )
+    }
+    prefs.themePresets.forEach { preset ->
+        val inUse = current.enabled && preset.theme.normalized().copy(enabled = true) == current
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .hoverRow()
+                .pressable { settings.update { it.copy(customTheme = preset.theme.copy(enabled = true)) } }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ThemePreview(preset.theme, prefs.dark)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(preset.name.uppercase(), style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                Text(
+                    if (inUse) "IN USO" else "Clic per applicarlo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (inUse) colors.accentInk else colors.inkTertiary,
+                )
+            }
+            CircleIconButton(XaosIcons.Edit, "Rinomina", { renaming = preset }, size = 28.dp, outlined = false)
+            Spacer(Modifier.width(4.dp))
+            CircleIconButton(
+                XaosIcons.Delete,
+                "Elimina il preset",
+                { settings.update { s -> s.copy(themePresets = s.themePresets.filter { it.id != preset.id }) } },
+                size = 28.dp,
+                outlined = false,
+            )
+        }
+    }
+    if (prefs.customTheme.enabled) {
+        PillButton("SALVA COME PRESET", onClick = { saving = true }, icon = XaosIcons.Add)
+    }
+
+    if (saving) {
+        NameDialog(
+            title = "SALVA COME PRESET",
+            initial = "",
+            hint = "Con un nome già usato, quel preset prende i colori di adesso.",
+            onConfirm = { name ->
+                saving = false
+                settings.update { s ->
+                    val theme = s.customTheme.copy(enabled = true).normalized()
+                    val same = s.themePresets.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                    s.copy(
+                        themePresets = if (same != null) s.themePresets.map { if (it.id == same.id) it.copy(theme = theme) else it }
+                        else s.themePresets + ThemePreset("tp_${System.currentTimeMillis()}", name, theme),
+                    )
+                }
+            },
+            onDismiss = { saving = false },
+        )
+    }
+    renaming?.let { preset ->
+        NameDialog(
+            title = "RINOMINA",
+            initial = preset.name,
+            hint = null,
+            onConfirm = { name ->
+                renaming = null
+                settings.update { s -> s.copy(themePresets = s.themePresets.map { if (it.id == preset.id) it.copy(name = name) else it }) }
+            },
+            onDismiss = { renaming = null },
+        )
+    }
+}
+
+@Composable
+private fun NameDialog(title: String, initial: String, hint: String?, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val colors = Xaos.colors
+    var name by remember { mutableStateOf(initial) }
+    val ok = name.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text(title, style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                XaosTextField("NOME", name, { name = it.take(40) }, modifier = Modifier.width(300.dp), placeholder = "Notte, Carta, Ufficio…")
+                if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
+            }
+        },
+        confirmButton = { PillButton("SALVA", onClick = { if (ok) onConfirm(name.trim()) }, filled = true, enabled = ok) },
+        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+    )
+}
+
+/**
+ * L'anteprima di un tema in miniatura: lo sfondo (anche sfumato), un pannello,
+ * una riga di testo e il punto d'accento, con i colori che il tema darebbe.
+ */
+@Composable
+internal fun ThemePreview(theme: CustomTheme, dark: Boolean) {
+    val colors = Xaos.colors
+    val p = (if (dark) DarkPalette else LightPalette).customized(theme.copy(enabled = theme.enabled))
+    val shape = RoundedCornerShape(8.dp)
+    val second = p.background2
+    Box(
+        Modifier
+            .size(width = 46.dp, height = 30.dp)
+            .clip(shape)
+            .background(if (second != null) Brush.linearGradient(listOf(p.background, second)) else Brush.linearGradient(listOf(p.background, p.background)))
+            .border(1.dp, colors.line, shape),
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(4.dp)
+                .size(width = 22.dp, height = 14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(p.surface),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 5.dp, top = 6.dp)
+                .size(width = 16.dp, height = 3.dp)
+                .background(p.ink, RoundedCornerShape(2.dp)),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(5.dp)
+                .size(7.dp)
+                .background(p.accent, CircleShape),
+        )
+    }
 }

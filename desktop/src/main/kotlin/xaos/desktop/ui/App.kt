@@ -311,6 +311,8 @@ fun XaosDesktopApp(
                                 importExcluded = prefs.importExcluded,
                                 onImportExcludedChange = { set -> settings.update { it.copy(importExcluded = set) } },
                                 onImport = onImport,
+                                deskTheme = prefs.customTheme,
+                                dark = prefs.dark,
                             )
                             section == Section.SETTINGS -> SettingsScreen(
                                 settings = settings,

@@ -54,6 +54,19 @@ data class CustomTheme(
     }
 }
 
+/**
+ * Un tema salvato con un nome, da riapplicare quando si vuole. I preset si
+ * sincronizzano col telefono; il tema in uso invece no, si trasferisce a mano.
+ */
+@Serializable
+data class ThemePreset(
+    val id: String,
+    val name: String,
+    val theme: CustomTheme,
+) {
+    fun normalized(): ThemePreset = copy(theme = theme.normalized())
+}
+
 /** Come si ordinano i brani nella schermata Brani. */
 @Serializable
 enum class SongSort { LIBRARY, TITLE, ARTIST, ALBUM, DURATION }
@@ -84,6 +97,7 @@ data class SettingsData(
     /** Ingrandimento di tutta l'interfaccia, testo compreso. */
     val uiScale: Float = 1.1f,
     val customTheme: CustomTheme = CustomTheme(),
+    val themePresets: List<ThemePreset> = emptyList(),
     val songSort: SongSort = SongSort.TITLE,
     val songSortDescending: Boolean = false,
     /** Il "riduci a icona" della finestra la trasforma nel miniplayer. */

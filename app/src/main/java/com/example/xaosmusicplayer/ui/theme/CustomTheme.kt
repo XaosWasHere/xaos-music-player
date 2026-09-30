@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -88,4 +89,35 @@ fun XaosPalette.customized(t: CustomTheme): XaosPalette {
         dot = if (t.dots) text.copy(alpha = if (darkBg) 0.16f else 0.30f) else Color.Transparent,
         track = lerp(bg, text, 0.2f),
     )
+}
+
+/**
+ * Un tema salvato con un nome, da riapplicare quando si vuole. I preset si
+ * sincronizzano col PC; il tema in uso invece si trasferisce a mano dal PC.
+ */
+data class ThemePreset(
+    val id: String,
+    val name: String,
+    val theme: CustomTheme,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("theme", theme.toJson())
+    }
+
+    companion object {
+        fun fromJson(obj: JSONObject): ThemePreset = ThemePreset(
+            id = obj.getString("id"),
+            name = obj.optString("name"),
+            theme = CustomTheme.fromJson(obj.optJSONObject("theme")),
+        )
+
+        fun listToJson(list: List<ThemePreset>): JSONArray = JSONArray().also { arr -> list.forEach { arr.put(it.toJson()) } }
+
+        fun listFromJson(arr: JSONArray?): List<ThemePreset> =
+            if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.let { runCatching { fromJson(it) }.getOrNull() }
+            }
+    }
 }

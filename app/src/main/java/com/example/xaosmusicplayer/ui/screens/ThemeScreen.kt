@@ -58,7 +58,9 @@ import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.CustomTheme
 import com.example.xaosmusicplayer.ui.theme.DarkPalette
 import com.example.xaosmusicplayer.ui.theme.LightPalette
+import com.example.xaosmusicplayer.ui.theme.ThemePreset
 import com.example.xaosmusicplayer.ui.theme.ThemeStore
+import com.example.xaosmusicplayer.ui.theme.customized
 import com.example.xaosmusicplayer.ui.theme.Xaos
 
 /** I colori del tema che si possono scegliere, e dove stanno in [CustomTheme]. */
@@ -73,7 +75,8 @@ private enum class ThemeSlot(val label: String, val hint: String) {
 /**
  * La personalizzazione del tema, la stessa di Xaos desktop: si parte dal tema
  * chiaro o scuro e si cambiano i colori che si vogliono, vedendoli subito. Il
- * tema viaggia col PC a ogni sincronizzazione.
+ * tema in uso si copia dal PC quando lo si sceglie lì; i preset invece si
+ * sincronizzano da soli.
  */
 @Composable
 fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -124,7 +127,7 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             ToggleRow(
                 title = "PERSONALIZZATO",
-                hint = if (t.enabled) "I tuoi colori, sopra il tema ${if (dark) "scuro" else "chiaro"}. Arrivano anche sul PC."
+                hint = if (t.enabled) "I tuoi colori, sopra il tema ${if (dark) "scuro" else "chiaro"}."
                 else "Scegli i colori di sfondo, pannelli, testo e accento.",
                 checked = t.enabled,
                 onChange = { on -> store.setCustom(store.custom.value.copy(enabled = on)) },
@@ -174,6 +177,9 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     onClick = { store.setCustom(CustomTheme(enabled = true)) },
                 )
             }
+            Spacer(Modifier.height(12.dp))
+            Hairline()
+            PresetsSection(store, dark)
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -358,4 +364,171 @@ private fun ColorPickerDialog(title: String, initial: Color, onChange: (Color) -
             }
         },
     )
+}
+
+/**
+ * I preset: temi salvati con un nome. Un tocco lo applica; con un nome già
+ * usato il salvataggio aggiorna quel preset. Si sincronizzano col PC.
+ */
+@Composable
+private fun PresetsSection(store: ThemeStore, dark: Boolean) {
+    val colors = Xaos.colors
+    val presets by store.presets.collectAsState()
+    val current by store.custom.collectAsState()
+    var saving by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<ThemePreset?>(null) }
+
+    Text(
+        "PRESET",
+        style = MaterialTheme.typography.titleMedium,
+        color = colors.ink,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    Text(
+        if (presets.isEmpty()) "Salva i colori di adesso con un nome, per riapplicarli quando vuoi. I preset arrivano anche sul PC."
+        else "Tocca un preset per applicarlo. Arrivano anche sul PC.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = colors.inkSecondary,
+    )
+    Spacer(Modifier.height(8.dp))
+    presets.forEach { preset ->
+        val inUse = current.enabled && preset.theme.copy(enabled = true) == current
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .clickable { store.setCustom(preset.theme.copy(enabled = true)) }
+                .padding(vertical = 10.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ThemePreview(preset.theme, dark)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(preset.name.uppercase(), style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                Text(
+                    if (inUse) "IN USO" else "Tocca per applicarlo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (inUse) colors.accentInk else colors.inkTertiary,
+                )
+            }
+            CircleIconButton(XaosIcons.Edit, "Rinomina", { renaming = preset }, size = 34.dp)
+            Spacer(Modifier.width(8.dp))
+            CircleIconButton(
+                XaosIcons.Delete,
+                "Elimina il preset",
+                { store.setPresets(store.presets.value.filter { it.id != preset.id }) },
+                size = 34.dp,
+            )
+        }
+    }
+    if (current.enabled) {
+        Spacer(Modifier.height(8.dp))
+        PillButton(text = "SALVA COME PRESET", icon = XaosIcons.Add, onClick = { saving = true })
+    }
+
+    if (saving) {
+        NameDialog(
+            title = "SALVA COME PRESET",
+            initial = "",
+            hint = "Con un nome già usato, quel preset prende i colori di adesso.",
+            onConfirm = { name -> saving = false; store.saveAsPreset(name) },
+            onDismiss = { saving = false },
+        )
+    }
+    renaming?.let { preset ->
+        NameDialog(
+            title = "RINOMINA",
+            initial = preset.name,
+            hint = null,
+            onConfirm = { name ->
+                renaming = null
+                store.setPresets(store.presets.value.map { if (it.id == preset.id) it.copy(name = name) else it })
+            },
+            onDismiss = { renaming = null },
+        )
+    }
+}
+
+@Composable
+private fun NameDialog(title: String, initial: String, hint: String?, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val colors = Xaos.colors
+    var name by remember { mutableStateOf(initial) }
+    val ok = name.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(24.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(40) },
+                    singleLine = true,
+                    label = { Text("Nome") },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = colors.ink,
+                        unfocusedTextColor = colors.ink,
+                        focusedBorderColor = colors.accent,
+                        unfocusedBorderColor = colors.line,
+                        cursorColor = colors.accentInk,
+                    ),
+                )
+                if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (ok) onConfirm(name.trim()) }, enabled = ok) {
+                Text("SALVA", style = MaterialTheme.typography.titleMedium, color = if (ok) colors.accentInk else colors.inkSecondary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = colors.inkSecondary)
+            }
+        },
+    )
+}
+
+/**
+ * L'anteprima di un tema in miniatura: lo sfondo (anche sfumato), un pannello,
+ * una riga di testo e il punto d'accento, con i colori che il tema darebbe.
+ */
+@Composable
+private fun ThemePreview(theme: CustomTheme, dark: Boolean) {
+    val colors = Xaos.colors
+    val p = (if (dark) DarkPalette else LightPalette).customized(theme)
+    val shape = RoundedCornerShape(8.dp)
+    val second = p.background2 ?: p.background
+    Box(
+        Modifier
+            .size(width = 52.dp, height = 34.dp)
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(p.background, second)))
+            .border(1.dp, colors.line, shape),
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(4.dp)
+                .size(width = 24.dp, height = 16.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(p.surface),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 6.dp, top = 7.dp)
+                .size(width = 18.dp, height = 3.dp)
+                .background(p.ink, RoundedCornerShape(2.dp)),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp)
+                .size(8.dp)
+                .background(p.accent, CircleShape),
+        )
+    }
 }

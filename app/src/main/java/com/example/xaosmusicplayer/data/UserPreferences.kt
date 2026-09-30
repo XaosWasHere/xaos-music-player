@@ -249,6 +249,8 @@ class UserPreferences(private val context: Context) {
         historyClearedAt: Long,
         /** Il tema concordato col PC; null se il PC non lo gestisce ancora. */
         theme: com.example.xaosmusicplayer.ui.theme.CustomTheme?,
+        /** I preset concordati col PC; null se il PC non li gestisce ancora. */
+        themePresets: List<com.example.xaosmusicplayer.ui.theme.ThemePreset>?,
     ): Boolean {
         var applied = false
         context.dataStore.edit { prefs ->
@@ -258,6 +260,7 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_PLAY_EVENTS] = serializeEvents(events.sortedBy { it.timestampMs }.takeLast(MAX_EVENTS))
             prefs[KEY_HISTORY_CLEARED_AT] = historyClearedAt
             theme?.let { com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).setCustom(it) }
+            themePresets?.let { com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).setPresets(it) }
             applied = true
         }
         return applied
@@ -273,6 +276,7 @@ class UserPreferences(private val context: Context) {
             (prefs[KEY_HISTORY_CLEARED_AT] ?: 0L).toString(),
             // Il tema non sta nel DataStore, ma si sincronizza anche lui.
             com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).customJson(),
+            com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).presetsJson(),
         ).forEach { digest.update(it.toByteArray()); digest.update(0) }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }

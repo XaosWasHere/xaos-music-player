@@ -9,6 +9,7 @@ import com.example.xaosmusicplayer.data.Playlist
 import com.example.xaosmusicplayer.data.PlaylistCovers
 import com.example.xaosmusicplayer.data.UserPreferences
 import com.example.xaosmusicplayer.ui.theme.CustomTheme
+import com.example.xaosmusicplayer.ui.theme.ThemePreset
 import com.example.xaosmusicplayer.ui.theme.ThemeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +63,7 @@ class DesktopSyncReceiver : BroadcastReceiver() {
             })
             put("historyClearedAt", snapshot.historyClearedAt)
             put("theme", ThemeStore.get(context).custom.value.toJson())
+            put("themePresets", ThemePreset.listToJson(ThemeStore.get(context).presets.value))
         }
         writeAtomically(File(dir(context), STATE_FILE), root.toString())
         return snapshot.stamp
@@ -103,6 +105,7 @@ class DesktopSyncReceiver : BroadcastReceiver() {
             historyClearedAt = obj.optLong("historyClearedAt"),
             // Un PC più vecchio non manda il tema: allora resta quello di qui.
             theme = obj.optJSONObject("theme")?.let(CustomTheme::fromJson),
+            themePresets = obj.optJSONArray("themePresets")?.let(ThemePreset::listFromJson),
         )
         inbox.delete()
         if (!applied) return RESULT_STALE to "dati cambiati nel frattempo"

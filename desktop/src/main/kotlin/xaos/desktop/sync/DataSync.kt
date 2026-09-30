@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import xaos.desktop.CustomTheme
+import xaos.desktop.ThemePreset
 import xaos.desktop.Settings
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.PlayEntry
@@ -41,8 +42,10 @@ data class PhoneData(
     /** Coppie [id, istante]. */
     val plays: List<List<Long>> = emptyList(),
     val historyClearedAt: Long = 0,
-    /** Il tema personalizzato; manca nelle app più vecchie della 1.5. */
+    /** Il tema personalizzato in uso; manca nelle app più vecchie della 1.5. */
     val theme: CustomTheme? = null,
+    /** I preset dei temi; mancano nelle app più vecchie della 1.5.1. */
+    val themePresets: List<ThemePreset>? = null,
 )
 
 /** Quello che il PC manda al telefono (`desktop-inbox.json`): lo stato finale, non le differenze. */
@@ -55,8 +58,10 @@ data class PhoneInbox(
     val playlists: List<PhonePlaylist>,
     val plays: List<List<Long>>,
     val historyClearedAt: Long,
-    /** Il tema concordato; null lascia sul telefono quello che c'è. */
+    /** Il tema da mettere in uso sul telefono; null lascia quello che c'è. */
     val theme: CustomTheme? = null,
+    /** I preset concordati; null lascia quelli che ci sono. */
+    val themePresets: List<ThemePreset>? = null,
 )
 
 /**
@@ -70,8 +75,8 @@ data class SyncBase(
     val phonePlaylists: List<PhonePlaylist> = emptyList(),
     val desktopFavorites: Set<String> = emptySet(),
     val desktopPlaylists: List<Playlist> = emptyList(),
-    /** Il tema concordato; null finché non lo si è mai scambiato. */
-    val theme: CustomTheme? = null,
+    /** I preset dei temi concordati l'ultima volta. */
+    val themePresets: List<ThemePreset> = emptyList(),
     val at: Long = 0,
 )
 
@@ -85,10 +90,15 @@ data class DataSyncReport(
     val unmatched: Int,
     val themeToPc: Boolean = false,
     val themeToPhone: Boolean = false,
+    val presetsChanged: Boolean = false,
 ) {
     val nothingChanged: Boolean
-        get() = favoritesToPc + favoritesToPhone + favoritesRemoved + playsToPc + playsToPhone == 0 && !themeToPc && !themeToPhone
+        get() = favoritesToPc + favoritesToPhone + favoritesRemoved + playsToPc + playsToPhone == 0 &&
+            !themeToPc && !themeToPhone && !presetsChanged
 }
+
+/** In che senso copiare il tema in uso, quando lo si chiede. */
+enum class ThemeTransfer { PC_TO_PHONE, PHONE_TO_PC }
 
 sealed interface DataSyncStatus {
     data object Idle : DataSyncStatus
@@ -134,6 +144,19 @@ class DataSync(
 
     private var job: Job? = null
 
+    /** Il trasferimento del tema chiesto dall'utente, fatto al prossimo scambio. */
+    private val pendingTransfer = java.util.concurrent.atomic.AtomicReference<ThemeTransfer?>(null)
+
+    private val _phoneTheme = MutableStateFlow<CustomTheme?>(null)
+    /** Il tema in uso sul telefono, com'era all'ultimo scambio; null se non si sa. */
+    val phoneTheme: StateFlow<CustomTheme?> = _phoneTheme.asStateFlow()
+
+    /** Copia il tema in uso da una parte all'altra, con uno scambio completo. */
+    fun transferTheme(direction: ThemeTransfer, snapshot: LibrarySnapshot, roots: List<File>) {
+        pendingTransfer.set(direction)
+        run(snapshot, roots)
+    }
+
     fun reset() {
         if (job?.isActive != true) _status.value = DataSyncStatus.Idle
     }
@@ -177,14 +200,16 @@ class DataSync(
         val base = runCatching { json.decodeFromString<SyncBase>(baseFile.readText()) }.getOrNull() ?: SyncBase()
         val merge = Merge(p, d, base, map, snapshot)
 
-        // Il tema, un valore solo: se dall'ultimo accordo è cambiato sul
-        // telefono vince il telefono, altrimenti vale quello del PC. La prima
-        // volta l'accordo è il tema predefinito, così un tema scelto da una
-        // parte sola arriva all'altra invece di essere cancellato. Un'app
-        // troppo vecchia non manda il tema: allora non lo si tocca.
+        // Il tema in uso non si sincronizza da solo: ognuno tiene il suo, e
+        // lo si copia da una parte all'altra solo quando l'utente lo chiede.
+        // Un'app troppo vecchia non manda il tema: la richiesta aspetta.
         val deskTheme = settings.data.value.customTheme.normalized()
         val phoneTheme = p.theme?.normalized()
-        val theme = phoneTheme?.let { pt -> if (pt != (base.theme?.normalized() ?: CustomTheme())) pt else deskTheme }
+        _phoneTheme.value = phoneTheme
+        val transfer = if (phoneTheme != null) pendingTransfer.getAndSet(null) else null
+        // I preset invece sì, come le playlist.
+        val deskPresets = settings.data.value.themePresets.map { it.normalized() }
+        val presets = p.themePresets?.map { it.normalized() }?.let { mergePresets(it, base.themePresets, deskPresets) }
 
         // 4. Il telefono adotta il risultato; il PC solo se il telefono ha accettato.
         _status.value = DataSyncStatus.Running("SCRITTURA SUL TELEFONO")
@@ -196,7 +221,8 @@ class DataSync(
             playlists = merge.phonePlaylists,
             plays = merge.phonePlays,
             historyClearedAt = merge.clearedAt,
-            theme = theme,
+            theme = if (transfer == ThemeTransfer.PC_TO_PHONE) deskTheme else null,
+            themePresets = presets,
         )
         // Le copertine scelte sul PC, che il telefono non ha.
         val phoneCovers = p.playlists.mapNotNull { it.cover }.toSet()
@@ -219,10 +245,18 @@ class DataSync(
 
         // Le modifiche fatte sul PC mentre si sincronizzava non vanno perse.
         userData.update { now -> merge.desktopResult(now, d) }
-        // Se il tema l'hanno appena cambiato qui, resta quello: andrà al prossimo giro.
-        if (theme != null && theme != deskTheme) {
-            settings.update { s -> if (s.customTheme.normalized() == deskTheme) s.copy(customTheme = theme) else s }
+        // Quello che è cambiato qui durante lo scambio resta: andrà al prossimo giro.
+        settings.update { s ->
+            var next = s
+            if (transfer == ThemeTransfer.PHONE_TO_PC && phoneTheme != null && s.customTheme.normalized() == deskTheme) {
+                next = next.copy(customTheme = phoneTheme)
+            }
+            if (presets != null && s.themePresets.map { it.normalized() } == deskPresets) {
+                next = next.copy(themePresets = presets)
+            }
+            next
         }
+        if (transfer == ThemeTransfer.PC_TO_PHONE) _phoneTheme.value = deskTheme
         baseDir.mkdirs()
         baseFile.writeText(
             json.encodeToString(
@@ -231,16 +265,35 @@ class DataSync(
                     phonePlaylists = merge.phonePlaylists,
                     desktopFavorites = merge.desktopFavorites.toSet(),
                     desktopPlaylists = merge.desktopPlaylists,
-                    theme = theme ?: base.theme,
+                    themePresets = presets ?: base.themePresets,
                     at = System.currentTimeMillis(),
                 )
             )
         )
         return merge.report.copy(
-            themeToPc = theme != null && theme != deskTheme,
-            themeToPhone = theme != null && theme != phoneTheme,
+            themeToPc = transfer == ThemeTransfer.PHONE_TO_PC,
+            themeToPhone = transfer == ThemeTransfer.PC_TO_PHONE,
+            presetsChanged = presets != null && (presets != deskPresets || presets != p.themePresets?.map { it.normalized() }),
         )
     }
+
+    /**
+     * I preset delle due parti, uniti rispetto a quelli dell'ultimo accordo:
+     * uno eliminato da una parte sparisce anche dall'altra, uno cambiato
+     * (nome o colori) prende la modifica; se è cambiato da entrambe le parti
+     * vince il telefono.
+     */
+    private fun mergePresets(phone: List<ThemePreset>, base: List<ThemePreset>, desk: List<ThemePreset>): List<ThemePreset> =
+        (phone.map { it.id } + desk.map { it.id }).distinct().mapNotNull { id ->
+            val p = phone.firstOrNull { it.id == id }
+            val d = desk.firstOrNull { it.id == id }
+            val b = base.firstOrNull { it.id == id }
+            when {
+                b != null && (p == null || d == null) -> null
+                p != null && d != null -> if (b == null || p != b) p else d
+                else -> p ?: d
+            }
+        }
 
     /** Invia un broadcast all'app e restituisce codice e dati del risultato. */
     private fun broadcast(serial: String, action: String): Pair<Int, String?> {

@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -53,10 +54,38 @@ class ThemeStore private constructor(context: Context) {
     /** Il tema personalizzato come testo: entra nell'impronta della sincronizzazione. */
     fun customJson(): String = _custom.value.toJson().toString()
 
+    private val _presets = MutableStateFlow(
+        runCatching { ThemePreset.listFromJson(prefs.getString(KEY_PRESETS, null)?.let(::JSONArray)) }.getOrDefault(emptyList())
+    )
+    /** I temi salvati con un nome. */
+    val presets: StateFlow<List<ThemePreset>> = _presets.asStateFlow()
+
+    fun setPresets(list: List<ThemePreset>) {
+        _presets.value = list
+        prefs.edit().putString(KEY_PRESETS, ThemePreset.listToJson(list).toString()).apply()
+    }
+
+    /** I preset come testo, per l'impronta della sincronizzazione. */
+    fun presetsJson(): String = ThemePreset.listToJson(_presets.value).toString()
+
+    /**
+     * Salva il tema in uso come preset [name]. Con un nome già usato aggiorna
+     * quel preset invece di crearne un altro.
+     */
+    fun saveAsPreset(name: String) {
+        val theme = _custom.value.copy(enabled = true)
+        val same = _presets.value.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        setPresets(
+            if (same != null) _presets.value.map { if (it.id == same.id) it.copy(theme = theme) else it }
+            else _presets.value + ThemePreset("tp_${System.currentTimeMillis()}", name, theme)
+        )
+    }
+
     companion object {
         private const val PREFS_NAME = "xaos_theme"
         private const val KEY_DARK = "dark"
         private const val KEY_CUSTOM = "custom"
+        private const val KEY_PRESETS = "presets"
 
         @Volatile private var instance: ThemeStore? = null
 

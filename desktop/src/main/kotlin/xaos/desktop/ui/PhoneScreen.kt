@@ -3,6 +3,7 @@
 package xaos.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -64,6 +65,9 @@ fun PhoneScreen(
     importExcluded: Set<String>,
     onImportExcludedChange: (Set<String>) -> Unit,
     onImport: (List<PhoneFile>) -> Unit,
+    /** Il tema in uso sul PC e il chiaro/scuro, per l'anteprima nella scheda del tema. */
+    deskTheme: xaos.desktop.CustomTheme,
+    dark: Boolean,
 ) {
     val state by phone.state.collectAsState()
     val importPlan by phone.importPlan.collectAsState()
@@ -162,6 +166,7 @@ fun PhoneScreen(
                         onDismiss = phone::dismissInstall,
                     )
                     DataSyncCard(dataSync, onSync = { dataSync.run(snapshot, roots) })
+                    ThemeTransferCard(dataSync, deskTheme, dark, onTransfer = { dataSync.transferTheme(it, snapshot, roots) })
                     ConnectedPanel(
                         state = s,
                         remoteRoot = phone.remoteRoot,
@@ -916,6 +921,7 @@ private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
                             if (r.playsToPhone > 0) add("${r.playsToPhone} → TELEFONO")
                             if (r.themeToPc) add("TEMA DAL TELEFONO")
                             if (r.themeToPhone) add("TEMA AL TELEFONO")
+                            if (r.presetsChanged) add("PRESET AGGIORNATI")
                             add("[${r.playlists}] PLAYLIST")
                         }.joinToString(" · ", prefix = "SINCRONIZZATI ALLE $time · "),
                         style = MaterialTheme.typography.labelSmall,
@@ -939,6 +945,70 @@ private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
             icon = XaosIcons.Sync,
             enabled = status !is DataSyncStatus.Running && status != DataSyncStatus.NeedsAppUpdate && status != DataSyncStatus.NoApp,
         )
+    }
+}
+
+/**
+ * Il tema in uso: il PC e il telefono tengono ciascuno il suo, e qui si sceglie
+ * quale copiare sull'altro. I preset invece viaggiano da soli.
+ */
+@Composable
+private fun ThemeTransferCard(
+    dataSync: DataSync,
+    deskTheme: xaos.desktop.CustomTheme,
+    dark: Boolean,
+    onTransfer: (xaos.desktop.sync.ThemeTransfer) -> Unit,
+) {
+    val colors = Xaos.colors
+    val status by dataSync.status.collectAsState()
+    val phoneTheme by dataSync.phoneTheme.collectAsState()
+    val busy = status is DataSyncStatus.Running || status == DataSyncStatus.NeedsAppUpdate || status == DataSyncStatus.NoApp
+    Row(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(XaosIcons.Contrast, null, tint = colors.ink, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("TEMA", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            Text(
+                "Ognuno tiene il suo: scegli tu quale copiare sull'altro. I preset invece si sincronizzano da soli.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.inkTertiary,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                ThemeSide("PC", deskTheme, dark)
+                ThemeSide("TELEFONO", phoneTheme, dark)
+                if (deskTheme.normalized() == phoneTheme) {
+                    Text("UGUALI", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                }
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+            PillButton("PC → TELEFONO", onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PC_TO_PHONE) }, enabled = !busy)
+            PillButton("TELEFONO → PC", onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PHONE_TO_PC) }, enabled = !busy)
+        }
+    }
+}
+
+@Composable
+private fun ThemeSide(label: String, theme: xaos.desktop.CustomTheme?, dark: Boolean) {
+    val colors = Xaos.colors
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (theme != null) ThemePreview(theme, dark) else Box(Modifier.size(width = 46.dp, height = 30.dp), contentAlignment = Alignment.Center) {
+            Text("?", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+        }
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.ink)
+            Text(
+                when {
+                    theme == null -> "Da leggere"
+                    theme.enabled -> "Personalizzato"
+                    else -> "Standard"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.inkTertiary,
+            )
+        }
     }
 }
 
