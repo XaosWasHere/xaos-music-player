@@ -223,8 +223,14 @@ class Library(private val indexFile: File) {
                         collapsedParent(File(c.path)) == File(kept.path).parentFile
                 }
                 if (twin != null) kept = kept.copy(mobilePath = twin.path)
-                val copies = cluster.drop(1).filter { it !== twin }
-                if (copies.isNotEmpty()) duplicates += DuplicateGroup(kept, copies)
+                // Doppione è solo lo stesso brano nello stesso formato: un FLAC e un
+                // MP3 (o un M4A) sono versioni diverse, e restano tutte. Per ogni
+                // formato si tiene il file col percorso più corto, gli altri sono copie.
+                cluster.filter { it !== twin }
+                    .groupBy { File(it.path).extension.lowercase() }
+                    .values
+                    .filter { it.size > 1 }
+                    .forEach { same -> duplicates += DuplicateGroup(same.first(), same.drop(1)) }
                 result += kept.copy(
                     aliases = kept.aliases + cluster.drop(1).flatMap { it.allPaths },
                     hasLyrics = cluster.any { it.hasLyrics },

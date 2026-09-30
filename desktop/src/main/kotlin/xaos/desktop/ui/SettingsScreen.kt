@@ -257,7 +257,7 @@ private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, on
             title = { Text("Spostare ${files.size} file nel cestino?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
             text = {
                 Text(
-                    "Sono copie di brani che restano in libreria nella versione migliore (${formatBytes(bytes)} in tutto). " +
+                    "Sono copie identiche per formato di brani che restano in libreria (${formatBytes(bytes)} in tutto). " +
                         "Finiscono nel Cestino di Windows, da cui puoi recuperarli. Preferiti e playlist passano da soli alla copia che resta.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
@@ -278,8 +278,9 @@ private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, on
 
     SettingsCard("DOPPIONI") {
         Text(
-            "Lo stesso brano dello stesso album in più file — la copia di iTunes accanto al FLAC, quella tornata dal telefono " +
-                "accanto all'originale. In libreria compare una volta sola, nella versione migliore; le copie restano sul disco.",
+            "Lo stesso brano dello stesso album, nello stesso formato, in più file: di solito copie tornate dal telefono. " +
+                "Le versioni in formati diversi (FLAC, MP3, M4A) non sono doppioni e qui non compaiono. " +
+                "In libreria il brano si vede una volta sola; le copie restano sul disco finché non decidi tu.",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkSecondary,
         )
