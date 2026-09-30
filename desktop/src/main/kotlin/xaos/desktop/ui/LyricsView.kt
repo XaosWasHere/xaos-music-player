@@ -275,14 +275,15 @@ fun MiniLyrics(player: Player, track: Track?, modifier: Modifier = Modifier) {
                     val current = lyrics.lines.getOrNull(i)?.text?.ifBlank { "♪" } ?: "♪"
                     val next = lyrics.lines.getOrNull(i + 1)?.text
                     MiniLine(previous, MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp), colors.inkTertiary)
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     MiniLine(
                         current,
                         MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
                         colors.ink,
                         maxLines = 4,
+                        minFontSize = 11.sp,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     MiniLine(next, MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp), colors.inkTertiary)
                 }
             }
@@ -290,15 +291,54 @@ fun MiniLyrics(player: Player, track: Track?, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Un verso del miniplayer. Lo spazio in altezza è fisso ([maxLines] righe
+ * alla dimensione piena): se il verso non ci entra, il testo si rimpicciolisce
+ * a piccoli passi (fino a [minFontSize]) e nello stesso spazio ci stanno più
+ * righe. I puntini restano solo per i versi davvero enormi.
+ */
 @Composable
-private fun MiniLine(text: String?, style: TextStyle, color: androidx.compose.ui.graphics.Color, maxLines: Int = 2) {
-    Text(
-        text?.takeIf { it.isNotBlank() } ?: "",
-        style = style,
-        color = color,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        modifier = Modifier.fillMaxWidth(),
-    )
+private fun MiniLine(
+    text: String?,
+    style: TextStyle,
+    color: androidx.compose.ui.graphics.Color,
+    maxLines: Int = 3,
+    minFontSize: androidx.compose.ui.unit.TextUnit = 9.sp,
+) {
+    val shown = text?.takeIf { it.isNotBlank() } ?: ""
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val widthPx = constraints.maxWidth
+        // Lo stesso stile che userà Text (font del tema compreso), o la misura mente.
+        val full = androidx.compose.material3.LocalTextStyle.current.merge(style)
+        val (fitted, lines) = remember(shown, full, widthPx, maxLines) {
+            val ratio = full.lineHeight.value / full.fontSize.value
+            val budget = maxLines * full.lineHeight.value
+            var s = full
+            var allowed = maxLines
+            while (true) {
+                allowed = (budget / s.lineHeight.value).toInt().coerceAtLeast(1)
+                val next = s.fontSize.value - 0.5f
+                if (next < minFontSize.value) break
+                // Senza limite di righe: si conta quante ne servirebbero davvero.
+                val result = measurer.measure(
+                    shown,
+                    s,
+                    constraints = androidx.compose.ui.unit.Constraints(maxWidth = widthPx),
+                )
+                if (result.lineCount <= allowed && !result.didOverflowWidth) break
+                s = s.copy(fontSize = next.sp, lineHeight = (next * ratio).sp)
+            }
+            s to allowed
+        }
+        Text(
+            shown,
+            style = fitted,
+            color = color,
+            maxLines = lines,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
