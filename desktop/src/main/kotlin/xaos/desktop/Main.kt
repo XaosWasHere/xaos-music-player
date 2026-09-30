@@ -22,6 +22,8 @@ import xaos.desktop.sync.DataSync
 import xaos.desktop.system.MediaBridge
 import xaos.desktop.system.TaskbarButtons
 import xaos.desktop.system.SingleInstance
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import xaos.desktop.ui.MiniPlayerCard
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.foundation.layout.padding
@@ -143,6 +145,12 @@ private fun runApp() = application {
         icon = appIcon,
         state = windowState,
         visible = !mini,
+        // F11 apre il player a schermo intero; nella sua finestra lo richiude.
+        onPreviewKeyEvent = { event ->
+            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key == androidx.compose.ui.input.key.Key.F11) {
+                setFullscreen(true); true
+            } else false
+        },
     ) {
         window.minimumSize = java.awt.Dimension(1000, 640)
         mainWindow[0] = window

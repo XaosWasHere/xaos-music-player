@@ -317,7 +317,7 @@ fun FullscreenPlayer(
                 // Su uno schermo stretto i suggerimenti finirebbero sotto i comandi.
                 if (wideScreen) {
                     Text(
-                        "ESC CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
+                        "ESC O F11 CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                         modifier = Modifier.align(Alignment.CenterStart),

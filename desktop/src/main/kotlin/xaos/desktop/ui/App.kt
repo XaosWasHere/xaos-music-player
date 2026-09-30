@@ -213,7 +213,7 @@ fun XaosDesktopApp(
             onPreviewKeyEvent = { event ->
                 if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@Window false
                 when (event.key) {
-                    androidx.compose.ui.input.key.Key.Escape -> { onFullscreenChange(false); true }
+                    androidx.compose.ui.input.key.Key.Escape, androidx.compose.ui.input.key.Key.F11 -> { onFullscreenChange(false); true }
                     androidx.compose.ui.input.key.Key.Spacebar -> { player.togglePlayPause(); true }
                     androidx.compose.ui.input.key.Key.DirectionRight -> { player.seekBy(10_000); true }
                     androidx.compose.ui.input.key.Key.DirectionLeft -> { player.seekBy(-10_000); true }
