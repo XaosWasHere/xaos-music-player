@@ -13,15 +13,19 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 
 /**
- * La scelta fra tema chiaro e scuro.
+ * La scelta fra tema chiaro e scuro, e il tema personalizzato.
  *
  * Sta in SharedPreferences e non nel DataStore del resto delle preferenze perché
  * va letta prima del primo frame: con una lettura asincrona l'app partirebbe
  * sempre scura e poi cambierebbe, un lampo a ogni avvio per chi usa il chiaro.
+ *
+ * È una sola istanza per processo: la sincronizzazione col PC scrive il tema
+ * da un ricevitore, e l'app aperta deve vederlo cambiare subito.
  */
-class ThemeStore(context: Context) {
+class ThemeStore private constructor(context: Context) {
 
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -36,9 +40,28 @@ class ThemeStore(context: Context) {
         prefs.edit().putBoolean(KEY_DARK, dark).apply()
     }
 
-    private companion object {
-        const val PREFS_NAME = "xaos_theme"
-        const val KEY_DARK = "dark"
+    private val _custom = MutableStateFlow(
+        runCatching { CustomTheme.fromJson(prefs.getString(KEY_CUSTOM, null)?.let(::JSONObject)) }.getOrDefault(CustomTheme())
+    )
+    val custom: StateFlow<CustomTheme> = _custom.asStateFlow()
+
+    fun setCustom(theme: CustomTheme) {
+        _custom.value = theme
+        prefs.edit().putString(KEY_CUSTOM, theme.toJson().toString()).apply()
+    }
+
+    /** Il tema personalizzato come testo: entra nell'impronta della sincronizzazione. */
+    fun customJson(): String = _custom.value.toJson().toString()
+
+    companion object {
+        private const val PREFS_NAME = "xaos_theme"
+        private const val KEY_DARK = "dark"
+        private const val KEY_CUSTOM = "custom"
+
+        @Volatile private var instance: ThemeStore? = null
+
+        fun get(context: Context): ThemeStore =
+            instance ?: synchronized(this) { instance ?: ThemeStore(context.applicationContext).also { instance = it } }
     }
 }
 
@@ -50,9 +73,10 @@ class ThemeStore(context: Context) {
 @Composable
 fun XaosMusicPlayerTheme(
     darkTheme: Boolean = true,
+    custom: CustomTheme = CustomTheme(),
     content: @Composable () -> Unit,
 ) {
-    val target = if (darkTheme) DarkPalette else LightPalette
+    val target = (if (darkTheme) DarkPalette else LightPalette).customized(custom)
     val palette = target.animated()
 
     val scheme = if (palette.isDark) {
@@ -134,6 +158,9 @@ private fun XaosPalette.animated(): XaosPalette {
         accentInk = accentInk.follow("accentInk"),
         dot = dot.follow("dot"),
         track = track.follow("track"),
+        // Sempre animato, anche quando non c'è: una chiamata che compare e
+        // scompare cambierebbe la struttura della composizione.
+        background2 = (background2 ?: background).follow("background2").takeIf { background2 != null },
     )
 }
 

@@ -8,6 +8,8 @@ import com.example.xaosmusicplayer.data.PlayEvent
 import com.example.xaosmusicplayer.data.Playlist
 import com.example.xaosmusicplayer.data.PlaylistCovers
 import com.example.xaosmusicplayer.data.UserPreferences
+import com.example.xaosmusicplayer.ui.theme.CustomTheme
+import com.example.xaosmusicplayer.ui.theme.ThemeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +19,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Lo scambio di preferiti, playlist e ascolti con Xaos desktop.
+ * Lo scambio di preferiti, playlist, ascolti e tema con Xaos desktop.
  *
  * È il PC a fare tutto il lavoro — riconoscere i brani, unire le modifiche
  * dei due lati — e a chiamare questo ricevitore via adb, con due comandi:
@@ -59,6 +61,7 @@ class DesktopSyncReceiver : BroadcastReceiver() {
                 snapshot.events.forEach { arr.put(JSONArray().put(it.songId).put(it.timestampMs)) }
             })
             put("historyClearedAt", snapshot.historyClearedAt)
+            put("theme", ThemeStore.get(context).custom.value.toJson())
         }
         writeAtomically(File(dir(context), STATE_FILE), root.toString())
         return snapshot.stamp
@@ -98,6 +101,8 @@ class DesktopSyncReceiver : BroadcastReceiver() {
             playlists = playlists,
             events = events,
             historyClearedAt = obj.optLong("historyClearedAt"),
+            // Un PC più vecchio non manda il tema: allora resta quello di qui.
+            theme = obj.optJSONObject("theme")?.let(CustomTheme::fromJson),
         )
         inbox.delete()
         if (!applied) return RESULT_STALE to "dati cambiati nel frattempo"

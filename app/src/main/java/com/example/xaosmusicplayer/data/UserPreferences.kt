@@ -215,7 +215,7 @@ class UserPreferences(private val context: Context) {
 
     // ---------- Sincronizzazione con Xaos desktop ----------
 
-    /** Preferiti, playlist e ascolti così come sono ora, con la loro impronta. */
+    /** Preferiti, playlist e ascolti così come sono ora, con la loro impronta (che copre anche il tema). */
     data class SyncSnapshot(
         val favorites: Set<Long>,
         val playlists: List<Playlist>,
@@ -247,6 +247,8 @@ class UserPreferences(private val context: Context) {
         playlists: List<Playlist>,
         events: List<PlayEvent>,
         historyClearedAt: Long,
+        /** Il tema concordato col PC; null se il PC non lo gestisce ancora. */
+        theme: com.example.xaosmusicplayer.ui.theme.CustomTheme?,
     ): Boolean {
         var applied = false
         context.dataStore.edit { prefs ->
@@ -255,6 +257,7 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_PLAYLISTS] = serializePlaylists(playlists)
             prefs[KEY_PLAY_EVENTS] = serializeEvents(events.sortedBy { it.timestampMs }.takeLast(MAX_EVENTS))
             prefs[KEY_HISTORY_CLEARED_AT] = historyClearedAt
+            theme?.let { com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).setCustom(it) }
             applied = true
         }
         return applied
@@ -268,6 +271,8 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_PLAYLISTS].orEmpty(),
             prefs[KEY_PLAY_EVENTS].orEmpty(),
             (prefs[KEY_HISTORY_CLEARED_AT] ?: 0L).toString(),
+            // Il tema non sta nel DataStore, ma si sincronizza anche lui.
+            com.example.xaosmusicplayer.ui.theme.ThemeStore.get(context).customJson(),
         ).forEach { digest.update(it.toByteArray()); digest.update(0) }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }

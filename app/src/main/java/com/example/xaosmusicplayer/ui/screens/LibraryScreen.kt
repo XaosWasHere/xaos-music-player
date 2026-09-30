@@ -54,7 +54,7 @@ import com.example.xaosmusicplayer.ui.theme.Xaos
 
 /** Voci del menu in alto a destra della libreria. */
 enum class LibraryMenuAction {
-    PLAYLISTS, FAVORITES, EQUALIZER, SLEEP_TIMER, THEME, RESCAN, UPDATE_ENGINE
+    PLAYLISTS, FAVORITES, EQUALIZER, SLEEP_TIMER, THEME, CUSTOM_THEME, RESCAN, UPDATE_ENGINE
 }
 
 @Composable
@@ -147,6 +147,7 @@ private fun LibraryMenuAction.label(isDark: Boolean): String = when (this) {
     LibraryMenuAction.EQUALIZER -> "EQUALIZZATORE"
     LibraryMenuAction.SLEEP_TIMER -> "SLEEP TIMER"
     LibraryMenuAction.THEME -> if (isDark) "TEMA CHIARO" else "TEMA SCURO"
+    LibraryMenuAction.CUSTOM_THEME -> "PERSONALIZZA TEMA"
     LibraryMenuAction.RESCAN -> "RISCANSIONA"
     LibraryMenuAction.UPDATE_ENGINE -> "AGGIORNA MOTORE DOWNLOAD"
 }

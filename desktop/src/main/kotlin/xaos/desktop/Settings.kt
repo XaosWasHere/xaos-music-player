@@ -42,7 +42,17 @@ data class CustomTheme(
     val ink: Long? = null,
     val accent: Long? = null,
     val dots: Boolean = true,
-)
+) {
+    /**
+     * Gli stessi colori scritti sempre allo stesso modo, come interi ARGB con
+     * segno: 0xFF000000 e -16777216 sono lo stesso nero, e confrontando il
+     * tema del PC con quello del telefono non devono sembrare diversi.
+     */
+    fun normalized(): CustomTheme {
+        fun n(v: Long?) = v?.toInt()?.toLong()
+        return copy(background = n(background), background2 = n(background2), panels = n(panels), ink = n(ink), accent = n(accent))
+    }
+}
 
 /** Come si ordinano i brani nella schermata Brani. */
 @Serializable

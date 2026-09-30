@@ -914,6 +914,8 @@ private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
                             if (r.favoritesRemoved > 0) add("${r.favoritesRemoved} TOLTI")
                             if (r.playsToPc > 0) add("${r.playsToPc} ASCOLTI → PC")
                             if (r.playsToPhone > 0) add("${r.playsToPhone} → TELEFONO")
+                            if (r.themeToPc) add("TEMA DAL TELEFONO")
+                            if (r.themeToPhone) add("TEMA AL TELEFONO")
                             add("[${r.playlists}] PLAYLIST")
                         }.joinToString(" · ", prefix = "SINCRONIZZATI ALLE $time · "),
                         style = MaterialTheme.typography.labelSmall,

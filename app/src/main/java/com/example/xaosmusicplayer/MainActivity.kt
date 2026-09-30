@@ -76,6 +76,9 @@ import com.example.xaosmusicplayer.ui.components.screenBackground
 import com.example.xaosmusicplayer.ui.theme.DarkPalette
 import com.example.xaosmusicplayer.ui.theme.LightPalette
 import com.example.xaosmusicplayer.ui.theme.ThemeStore
+import com.example.xaosmusicplayer.ui.theme.CustomTheme
+import com.example.xaosmusicplayer.ui.theme.customized
+import com.example.xaosmusicplayer.ui.screens.ThemeScreen
 import com.example.xaosmusicplayer.ui.theme.XaosMusicPlayerTheme
 import android.graphics.drawable.ColorDrawable
 import androidx.activity.SystemBarStyle
@@ -83,15 +86,16 @@ import androidx.compose.ui.graphics.toArgb
 
 class MainActivity : ComponentActivity() {
 
-    private val themeStore by lazy { ThemeStore(this) }
+    private val themeStore by lazy { ThemeStore.get(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applySystemBars(themeStore.isDark.value)
+        applySystemBars(themeStore.isDark.value, themeStore.custom.value)
         setContent {
             val dark by themeStore.isDark.collectAsStateWithLifecycle()
-            LaunchedEffect(dark) { applySystemBars(dark) }
-            XaosMusicPlayerTheme(darkTheme = dark) {
+            val custom by themeStore.custom.collectAsStateWithLifecycle()
+            LaunchedEffect(dark, custom) { applySystemBars(dark, custom) }
+            XaosMusicPlayerTheme(darkTheme = dark, custom = custom) {
                 XaosApp(isDark = dark, onToggleTheme = themeStore::toggle)
             }
         }
@@ -102,15 +106,16 @@ class MainActivity : ComponentActivity() {
      * finestra dello stesso colore dell'app: è quello che si vede per un istante
      * all'avvio e durante le transizioni di sistema.
      */
-    private fun applySystemBars(dark: Boolean) {
+    private fun applySystemBars(dark: Boolean, custom: CustomTheme) {
         val transparent = android.graphics.Color.TRANSPARENT
-        val style = if (dark) {
+        // Con il tema personalizzato conta lo sfondo scelto, non l'interruttore.
+        val palette = (if (dark) DarkPalette else LightPalette).customized(custom)
+        val style = if (palette.isDark) {
             SystemBarStyle.dark(transparent)
         } else {
             SystemBarStyle.light(transparent, transparent)
         }
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
-        val palette = if (dark) DarkPalette else LightPalette
         window.setBackgroundDrawable(ColorDrawable(palette.background.toArgb()))
     }
 }
@@ -129,6 +134,7 @@ private sealed interface Destination {
     data object Favorites : Destination
     data object Playlists : Destination
     data object Equalizer : Destination
+    data object Theme : Destination
     data object Queue : Destination
     data class EditSong(val songId: Long) : Destination
     data class EditAlbum(val albumId: Long, val title: String) : Destination
@@ -380,6 +386,7 @@ private fun XaosApp(
                                 LibraryMenuAction.RESCAN -> viewModel.refresh()
                                 LibraryMenuAction.UPDATE_ENGINE -> viewModel.updateEngine()
                                 LibraryMenuAction.THEME -> onToggleTheme()
+                                LibraryMenuAction.CUSTOM_THEME -> backStack += Destination.Theme
                             }
                         },
                         isDark = isDark,
@@ -778,5 +785,7 @@ private fun DestinationContent(
             onVirtualizerChange = viewModel::setVirtualizer,
             onPreampChange = viewModel::setPreampDb,
         )
+
+        Destination.Theme -> ThemeScreen(onBack = pop)
     }
 }

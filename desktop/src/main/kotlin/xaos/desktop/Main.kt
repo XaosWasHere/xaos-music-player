@@ -64,7 +64,7 @@ private fun runApp() = application {
             player.onListened = { track, at -> data.recordPlay(track, at) }
         }
     }
-    val dataSync = remember { DataSync(scope, phone, userData, File(Settings.appDir, "sync")) }
+    val dataSync = remember { DataSync(scope, phone, userData, File(Settings.appDir, "sync"), settings) }
     val prefs by settings.data.collectAsState()
     // La stessa icona dell'app Android: barra del titolo e barra delle applicazioni.
     val appIcon = remember {

@@ -56,6 +56,8 @@ data class XaosPalette(
     val dot: Color,
     /** Parte non riempita di cursori e barre di avanzamento. */
     val track: Color,
+    /** Il secondo colore dello sfondo, dal tema personalizzato: se c'è, lo sfondo è una sfumatura. */
+    val background2: Color? = null,
 )
 
 val DarkPalette = XaosPalette(

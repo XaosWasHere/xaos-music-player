@@ -64,7 +64,8 @@ fun Modifier.dotGrid(
     color: Color,
     spacing: Dp = DotGridSpacing,
     radius: Dp = DotGridRadius,
-): Modifier = drawWithCache {
+): Modifier = if (color.alpha == 0f) this else drawWithCache {
+    // Pallini spenti dal tema personalizzato: niente da disegnare.
     // Passo e diametro in pixel interi, e ogni centro nello stesso punto di un
     // pixel: un puntino a cavallo fra due pixel verrebbe sfumato e sembrerebbe
     // più tenue degli altri.
@@ -95,11 +96,14 @@ fun Modifier.dotGrid(
     }
 }
 
-/** Fondo pieno di una schermata, con la sua griglia. */
+/** Fondo di una schermata, con la sua griglia: pieno, o sfumato se il tema lo vuole. */
 @Composable
 fun Modifier.screenBackground(): Modifier {
     val colors = Xaos.colors
-    return background(colors.background).dotGrid(colors.dot)
+    val second = colors.background2
+    val fill = if (second == null) background(colors.background)
+    else background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(colors.background, second)))
+    return fill.dotGrid(colors.dot)
 }
 
 val CardShape = RoundedCornerShape(20.dp)

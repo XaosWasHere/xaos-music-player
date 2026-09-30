@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import xaos.desktop.CustomTheme
+import xaos.desktop.Settings
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.PlayEntry
 import xaos.desktop.library.Playlist
@@ -39,6 +41,8 @@ data class PhoneData(
     /** Coppie [id, istante]. */
     val plays: List<List<Long>> = emptyList(),
     val historyClearedAt: Long = 0,
+    /** Il tema personalizzato; manca nelle app più vecchie della 1.5. */
+    val theme: CustomTheme? = null,
 )
 
 /** Quello che il PC manda al telefono (`desktop-inbox.json`): lo stato finale, non le differenze. */
@@ -51,6 +55,8 @@ data class PhoneInbox(
     val playlists: List<PhonePlaylist>,
     val plays: List<List<Long>>,
     val historyClearedAt: Long,
+    /** Il tema concordato; null lascia sul telefono quello che c'è. */
+    val theme: CustomTheme? = null,
 )
 
 /**
@@ -64,6 +70,8 @@ data class SyncBase(
     val phonePlaylists: List<PhonePlaylist> = emptyList(),
     val desktopFavorites: Set<String> = emptySet(),
     val desktopPlaylists: List<Playlist> = emptyList(),
+    /** Il tema concordato; null finché non lo si è mai scambiato. */
+    val theme: CustomTheme? = null,
     val at: Long = 0,
 )
 
@@ -75,9 +83,11 @@ data class DataSyncReport(
     val playsToPc: Int,
     val playsToPhone: Int,
     val unmatched: Int,
+    val themeToPc: Boolean = false,
+    val themeToPhone: Boolean = false,
 ) {
     val nothingChanged: Boolean
-        get() = favoritesToPc + favoritesToPhone + favoritesRemoved + playsToPc + playsToPhone == 0
+        get() = favoritesToPc + favoritesToPhone + favoritesRemoved + playsToPc + playsToPhone == 0 && !themeToPc && !themeToPhone
 }
 
 sealed interface DataSyncStatus {
@@ -91,7 +101,7 @@ sealed interface DataSyncStatus {
 }
 
 /**
- * Preferiti, playlist e ascolti, nei due sensi.
+ * Preferiti, playlist, ascolti e tema personalizzato, nei due sensi.
  *
  * Il telefono conosce i brani per id di MediaStore, il PC per percorso: a
  * ogni giro si ricostruisce la corrispondenza (il percorso con cui Xaos ha
@@ -115,6 +125,7 @@ class DataSync(
     private val phone: PhoneSync,
     private val userData: UserData,
     private val baseDir: File,
+    private val settings: Settings,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -166,6 +177,15 @@ class DataSync(
         val base = runCatching { json.decodeFromString<SyncBase>(baseFile.readText()) }.getOrNull() ?: SyncBase()
         val merge = Merge(p, d, base, map, snapshot)
 
+        // Il tema, un valore solo: se dall'ultimo accordo è cambiato sul
+        // telefono vince il telefono, altrimenti vale quello del PC. La prima
+        // volta l'accordo è il tema predefinito, così un tema scelto da una
+        // parte sola arriva all'altra invece di essere cancellato. Un'app
+        // troppo vecchia non manda il tema: allora non lo si tocca.
+        val deskTheme = settings.data.value.customTheme.normalized()
+        val phoneTheme = p.theme?.normalized()
+        val theme = phoneTheme?.let { pt -> if (pt != (base.theme?.normalized() ?: CustomTheme())) pt else deskTheme }
+
         // 4. Il telefono adotta il risultato; il PC solo se il telefono ha accettato.
         _status.value = DataSyncStatus.Running("SCRITTURA SUL TELEFONO")
         val syncId = "s${System.currentTimeMillis()}"
@@ -176,6 +196,7 @@ class DataSync(
             playlists = merge.phonePlaylists,
             plays = merge.phonePlays,
             historyClearedAt = merge.clearedAt,
+            theme = theme,
         )
         // Le copertine scelte sul PC, che il telefono non ha.
         val phoneCovers = p.playlists.mapNotNull { it.cover }.toSet()
@@ -198,6 +219,10 @@ class DataSync(
 
         // Le modifiche fatte sul PC mentre si sincronizzava non vanno perse.
         userData.update { now -> merge.desktopResult(now, d) }
+        // Se il tema l'hanno appena cambiato qui, resta quello: andrà al prossimo giro.
+        if (theme != null && theme != deskTheme) {
+            settings.update { s -> if (s.customTheme.normalized() == deskTheme) s.copy(customTheme = theme) else s }
+        }
         baseDir.mkdirs()
         baseFile.writeText(
             json.encodeToString(
@@ -206,11 +231,15 @@ class DataSync(
                     phonePlaylists = merge.phonePlaylists,
                     desktopFavorites = merge.desktopFavorites.toSet(),
                     desktopPlaylists = merge.desktopPlaylists,
+                    theme = theme ?: base.theme,
                     at = System.currentTimeMillis(),
                 )
             )
         )
-        return merge.report
+        return merge.report.copy(
+            themeToPc = theme != null && theme != deskTheme,
+            themeToPhone = theme != null && theme != phoneTheme,
+        )
     }
 
     /** Invia un broadcast all'app e restituisce codice e dati del risultato. */
