@@ -12,7 +12,6 @@ import java.io.File
 enum class FullscreenBackground(val label: String) {
     /** Le onde di tutto il brano, alla SoundCloud, che si accendono man mano. */
     WAVEFORM("ONDE"),
-    STATIC("FISSA"),
     ARTWORK("COPERTINA"),
     OFF("SPENTA"),
 }

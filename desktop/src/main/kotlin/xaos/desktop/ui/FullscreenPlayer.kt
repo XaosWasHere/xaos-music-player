@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -95,9 +96,6 @@ fun FullscreenPlayer(
     val upNext by player.upNext.collectAsState()
 
     val track = current
-    val artColors by produceState(ArtColors.Fallback, track?.path) {
-        value = track?.let { ArtColorExtractor.colors(it) } ?: ArtColors.Fallback
-    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(colors.background)) {
         val wideScreen = maxWidth > 1250.dp
@@ -106,14 +104,6 @@ fun FullscreenPlayer(
             // Le onde non stanno dietro: prendono il posto della barra di avanzamento.
             FullscreenBackground.WAVEFORM -> Box(Modifier.fillMaxSize().dotGrid(colors.dot.copy(alpha = colors.dot.alpha * 0.6f), spacing = 20.dp))
             FullscreenBackground.OFF -> Box(Modifier.fillMaxSize().dotGrid(colors.dot.copy(alpha = colors.dot.alpha * 0.6f), spacing = 20.dp))
-            else -> DotMatrix(
-                colors = artColors,
-                animated = false,
-                isPlaying = isPlaying,
-                baseDot = colors.dot,
-                backdrop = colors.background,
-                mono = if (colors.isDark) null else colors.ink,
-            )
         }
 
         Column(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 32.dp)) {
@@ -158,7 +148,7 @@ fun FullscreenPlayer(
                     if (lyricsOpen) {
                         // Sulla copertina e sulla matrice di punti il testo si perde: lì
                         // gli si mette sotto un pannello del colore di fondo, velato.
-                        val busy = background == FullscreenBackground.ARTWORK || background == FullscreenBackground.STATIC
+                        val busy = background == FullscreenBackground.ARTWORK
                         Column(
                             Modifier
                                 .weight(1f)
@@ -332,7 +322,6 @@ private const val VOLUME_STEP = 5
 private val FullscreenBackground.icon: ImageVector
     get() = when (this) {
         FullscreenBackground.WAVEFORM -> XaosIcons.Waveform
-        FullscreenBackground.STATIC -> XaosIcons.GlowStatic
         FullscreenBackground.ARTWORK -> XaosIcons.GlowArtwork
         FullscreenBackground.OFF -> XaosIcons.GlowOff
     }
@@ -455,7 +444,10 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
 }
 
 
-/** La copertina a tutto schermo, velata e sfumata nel fondo in alto e in basso. */
+/**
+ * La copertina a tutto schermo, sfocata appena — si riconosce, ma non fa
+ * concorrenza al titolo — velata e sfumata nel fondo in alto e in basso.
+ */
 @Composable
 private fun ArtworkWash(track: Track?, backdrop: Color) {
     val image by rememberArtwork(track, 640)
@@ -464,8 +456,12 @@ private fun ArtworkWash(track: Track?, backdrop: Color) {
         bitmap,
         null,
         contentScale = ContentScale.Crop,
-        modifier = Modifier.fillMaxSize().drawWithContent {
-            drawContent()
+        modifier = Modifier
+            .fillMaxSize()
+            .blur(22.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Rectangle),
+    )
+    Box(
+        Modifier.fillMaxSize().drawWithContent {
             drawRect(backdrop.copy(alpha = 0.45f))
             drawRect(
                 Brush.verticalGradient(
@@ -478,103 +474,4 @@ private fun ArtworkWash(track: Track?, backdrop: Color) {
             )
         },
     )
-}
-
-/**
- * La matrice a mezzatinta del telefono: tre macchie di colore che derivano
- * lentamente, campionate su una griglia di punti che crescono dove la luce è
- * forte. Sul PC non c'è l'analisi dell'audio, quindi "animata" respira da
- * sola; "fissa" resta ferma. Sul tema chiaro i punti sono in inchiostro.
- */
-@Composable
-private fun DotMatrix(
-    colors: ArtColors,
-    animated: Boolean,
-    isPlaying: Boolean,
-    baseDot: Color,
-    backdrop: Color,
-    mono: Color?,
-) {
-    val transition = rememberInfiniteTransition(label = "fs-matrix")
-    val drift by transition.animateFloat(
-        0f, (2 * PI).toFloat(),
-        infiniteRepeatable(tween(24_000, easing = LinearEasing)),
-        label = "drift",
-    )
-    val breath by transition.animateFloat(
-        0f, 1f,
-        infiniteRepeatable(tween(4_800, easing = LinearEasing), AnimRepeat.Reverse),
-        label = "breath",
-    )
-    val phase = if (animated) drift else 1.1f
-    val energy = when {
-        !animated -> 0.5f
-        isPlaying -> 0.35f + breath * 0.35f
-        else -> 0.2f
-    }
-    Canvas(Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val base = (w + h) * 0.30f
-        val blobs = listOf(
-            Triple(colors.primary, Offset(w * (0.30f + 0.12f * cos(phase)), h * (0.45f + 0.10f * sin(phase))), base * (1f + energy * 0.4f)),
-            Triple(colors.secondary, Offset(w * (0.62f + 0.16f * cos(phase + 2.2f)), h * (0.55f + 0.12f * sin(phase + 2.2f))), base * 1.15f),
-            Triple(colors.accent, Offset(w * (0.45f + 0.20f * cos(phase + 4.4f)), h * (0.30f + 0.14f * sin(phase * 1.3f + 4.4f))), base * 0.8f),
-        )
-        val alphas = listOf(0.30f + energy * 0.5f, 0.30f + energy * 0.35f, 0.16f + energy * 0.3f)
-        drawMatrix(blobs, alphas, baseDot, backdrop, mono)
-    }
-}
-
-private fun DrawScope.drawMatrix(
-    blobs: List<Triple<Color, Offset, Float>>,
-    alphas: List<Float>,
-    baseDot: Color,
-    backdrop: Color,
-    mono: Color?,
-) {
-    // Punti radi e piccoli: la matrice deve fare da atmosfera, non da trama
-    // sotto il titolo. Anche al massimo un punto occupa meno di un quinto del passo.
-    val step = 20.dp.toPx().let { kotlin.math.round(it) }
-    val minR = 0.6.dp.toPx()
-    val maxR = step * 0.17f
-    val startX = kotlin.math.floor((size.width % step) / 2f + step / 2f)
-    // La matrice si spegne verso il basso: i comandi stanno sul fondo pulito.
-    val fadeFrom = size.height * 0.62f
-    val fadeTo = size.height * 0.80f
-    var y = kotlin.math.floor(step / 2f)
-    while (y < size.height) {
-        val t = ((y - fadeFrom) / (fadeTo - fadeFrom)).coerceIn(0f, 1f)
-        val mask = 1f - t * t * (3f - 2f * t)
-        if (mask <= 0.01f) break
-        var x = startX
-        while (x < size.width) {
-            var weight = 0f
-            var r = 0f; var g = 0f; var b = 0f
-            blobs.forEachIndexed { i, (color, center, radius) ->
-                val dx = x - center.x
-                val dy = y - center.y
-                val d = sqrt(dx * dx + dy * dy) / radius
-                if (d < 1f) {
-                    val f = alphas[i] * (1f - d).pow(1.6f)
-                    weight += f
-                    r += color.red * f; g += color.green * f; b += color.blue * f
-                }
-            }
-            val intensity = (weight * 1.25f * mask).coerceIn(0f, 1f)
-            val center = Offset(x, y)
-            if (intensity < 0.06f) {
-                drawCircle(baseDot.copy(alpha = baseDot.alpha * 0.6f * mask), minR, center)
-            } else {
-                val radius = minR + (maxR - minR) * intensity
-                val color = mono?.copy(alpha = 0.05f + intensity * 0.16f)
-                    ?: Color(r / weight, g / weight, b / weight, alpha = 0.08f + intensity * 0.24f)
-                drawCircle(color, radius, center)
-            }
-            x += step
-        }
-        y += step
-    }
-    // Un velo sul fondo, sotto la matrice, per staccare i comandi.
-    drawRect(Brush.verticalGradient(0.7f to Color.Transparent, 1f to backdrop.copy(alpha = 0.6f)))
 }

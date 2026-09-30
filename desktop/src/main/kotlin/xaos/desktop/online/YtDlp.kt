@@ -48,8 +48,15 @@ sealed interface DownloadState {
 /**
  * Ricerca e download con yt-dlp, come nell'app Android.
  *
- * Qui yt-dlp e ffmpeg non viaggiano dentro l'app: si usano quelli installati sul
- * PC (con winget, o comunque nel PATH). Il formato è lo stesso del telefono:
+ * yt-dlp invecchia in fretta: YouTube cambia spesso, e una versione di qualche
+ * mese fa riceve solo "403 Forbidden". Per questo Xaos tiene una sua copia in
+ * `~/.xaos/tools`, scaricata dalle release ufficiali, controlla una volta al
+ * giorno se ce n'è una nuova e, a un 403, si aggiorna subito e ritenta. Quella
+ * installata con winget non basta: winget non la aggiorna da sola, e yt-dlp
+ * rifiuta di aggiornarsi se l'ha installato un gestore di pacchetti. Se la
+ * copia non si può scaricare, si usa comunque quella del PC.
+ *
+ * ffmpeg resta quello installato sul PC. Il formato è lo stesso del telefono:
  * miglior audio, convertito in MP3 alla qualità massima, con metadati e
  * copertina incorporati, così il brano arriva in libreria già pronto.
  */
@@ -64,9 +71,52 @@ class YtDlp(private val scope: CoroutineScope) {
 
     init {
         Thread({
-            exe = locate("yt-dlp.exe", "yt-dlp.yt-dlp")
+            exe = ownExe.takeIf { it.isFile } ?: locate("yt-dlp.exe", "yt-dlp.yt-dlp")
             ffmpeg = locate("ffmpeg.exe", "Gyan.FFmpeg", "yt-dlp.FFmpeg")
+            // Poi, con calma, la copia di Xaos: scaricata se manca, aggiornata se vecchia.
+            refresh(force = false)
         }, "xaos-tools").apply { isDaemon = true }.start()
+    }
+
+    private val ownExe = File(xaos.desktop.Settings.appDir, "tools/yt-dlp.exe")
+    private val checkedMarker = File(xaos.desktop.Settings.appDir, "tools/yt-dlp.checked")
+    private val refreshLock = Any()
+
+    /**
+     * Si assicura che la copia di Xaos ci sia e sia aggiornata. Senza [force]
+     * controlla al massimo una volta al giorno. Restituisce true se ora c'è una
+     * copia utilizzabile.
+     */
+    private fun refresh(force: Boolean): Boolean = synchronized(refreshLock) {
+        runCatching {
+            if (!ownExe.isFile) {
+                ownExe.parentFile.mkdirs()
+                val tmp = File(ownExe.path + ".download")
+                val client = java.net.http.HttpClient.newBuilder()
+                    .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                    .connectTimeout(java.time.Duration.ofSeconds(15))
+                    .build()
+                val request = java.net.http.HttpRequest.newBuilder(java.net.URI(RELEASE_URL))
+                    .header("User-Agent", "Xaos Desktop")
+                    .timeout(java.time.Duration.ofMinutes(3))
+                    .build()
+                val response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofFile(tmp.toPath()))
+                if (response.statusCode() != 200 || tmp.length() < 1_000_000) { tmp.delete(); return@runCatching false }
+                java.nio.file.Files.move(tmp.toPath(), ownExe.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                checkedMarker.writeText(System.currentTimeMillis().toString())
+            } else {
+                val last = checkedMarker.takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() ?: 0L
+                if (force || System.currentTimeMillis() - last > DAY_MS) {
+                    // La copia standalone sa aggiornarsi da sola.
+                    val process = ProcessBuilder(ownExe.path, "-U").redirectErrorStream(true).start()
+                    process.inputStream.readAllBytes()
+                    process.waitFor(3, java.util.concurrent.TimeUnit.MINUTES)
+                    checkedMarker.writeText(System.currentTimeMillis().toString())
+                }
+            }
+            exe = ownExe
+            true
+        }.getOrDefault(false)
     }
 
     private val _search = MutableStateFlow<OnlineSearch>(OnlineSearch.Idle)
@@ -105,49 +155,21 @@ class YtDlp(private val scope: CoroutineScope) {
 
     /** Scarica [track] in [folder]; alla fine [onDone] riceve il file MP3. */
     fun download(track: OnlineTrack, folder: File, onDone: (File) -> Unit) {
-        val yt = exe ?: return
+        if (exe == null) return
         val ff = ffmpeg ?: return
         if (jobs[track.id]?.isActive == true) return
         set(track.id, DownloadState.Queued)
         jobs[track.id] = scope.launch(Dispatchers.IO) {
-            val result = runCatching {
-                folder.mkdirs()
-                val process = ProcessBuilder(
-                    yt.path, track.url,
-                    "-f", "bestaudio/best",
-                    "-x", "--audio-format", "mp3", "--audio-quality", "0",
-                    "--embed-metadata", "--embed-thumbnail",
-                    "--no-playlist", "--no-warnings",
-                    "--ffmpeg-location", ff.parent,
-                    "-o", "${folder.path}${File.separator}%(title)s.%(ext)s",
-                    // Il percorso finale, dopo la conversione: è l'unico modo
-                    // affidabile di saperlo, yt-dlp ripulisce i caratteri del titolo.
-                    "--print", "after_move:XAOSFILE %(filepath)s",
-                    "--no-simulate", "--progress", "--newline",
-                    "--progress-template", "download:XAOSPROG %(progress._percent_str)s",
-                ).redirectErrorStream(true).start()
-                processes[track.id] = process
-                var finalPath: String? = null
-                var lastError: String? = null
-                process.inputStream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
-                    when {
-                        line.startsWith("XAOSPROG") -> {
-                            val pct = line.removePrefix("XAOSPROG").trim().removeSuffix("%").trim().toFloatOrNull()
-                            if (pct != null) {
-                                set(track.id, if (pct >= 100f) DownloadState.Converting else DownloadState.Running(pct / 100f))
-                            }
-                        }
-                        line.startsWith("XAOSFILE ") -> finalPath = line.removePrefix("XAOSFILE ").trim()
-                        line.startsWith("ERROR") -> lastError = line.removePrefix("ERROR:").trim()
-                        line.startsWith("[ExtractAudio]") || line.startsWith("[EmbedThumbnail]") ->
-                            set(track.id, DownloadState.Converting)
-                    }
+            val result = runCatching { runDownload(track, folder, ff) }
+                .recoverCatching { failure ->
+                    // Un 403 vuol dire quasi sempre yt-dlp vecchio: lo si aggiorna
+                    // e si ritenta una volta, senza che l'utente debba fare niente.
+                    val message = failure.message.orEmpty()
+                    if (!message.contains("403") && !message.contains("Forbidden", ignoreCase = true)) throw failure
+                    set(track.id, DownloadState.Queued)
+                    if (!refresh(force = true)) throw failure
+                    runDownload(track, folder, ff)
                 }
-                val code = process.waitFor()
-                val file = finalPath?.let(::File)
-                if (code != 0 || file == null || !file.isFile) error(lastError ?: "yt-dlp ha terminato con errore ($code)")
-                file
-            }
             processes.remove(track.id)
             result.onSuccess { file ->
                 set(track.id, DownloadState.Completed(file))
@@ -156,6 +178,46 @@ class YtDlp(private val scope: CoroutineScope) {
                 set(track.id, DownloadState.Failed(it.message ?: "Download non riuscito"))
             }
         }
+    }
+
+    private fun runDownload(track: OnlineTrack, folder: File, ff: File): File {
+        val yt = exe ?: error("yt-dlp non trovato")
+        folder.mkdirs()
+        val process = ProcessBuilder(
+            yt.path, track.url,
+            "-f", "bestaudio/best",
+            "-x", "--audio-format", "mp3", "--audio-quality", "0",
+            "--embed-metadata", "--embed-thumbnail",
+            "--no-playlist", "--no-warnings",
+            "--ffmpeg-location", ff.parent,
+            "-o", "${folder.path}${File.separator}%(title)s.%(ext)s",
+            // Il percorso finale, dopo la conversione: è l'unico modo
+            // affidabile di saperlo, yt-dlp ripulisce i caratteri del titolo.
+            "--print", "after_move:XAOSFILE %(filepath)s",
+            "--no-simulate", "--progress", "--newline",
+            "--progress-template", "download:XAOSPROG %(progress._percent_str)s",
+        ).redirectErrorStream(true).start()
+        processes[track.id] = process
+        var finalPath: String? = null
+        var lastError: String? = null
+        process.inputStream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
+            when {
+                line.startsWith("XAOSPROG") -> {
+                    val pct = line.removePrefix("XAOSPROG").trim().removeSuffix("%").trim().toFloatOrNull()
+                    if (pct != null) {
+                        set(track.id, if (pct >= 100f) DownloadState.Converting else DownloadState.Running(pct / 100f))
+                    }
+                }
+                line.startsWith("XAOSFILE ") -> finalPath = line.removePrefix("XAOSFILE ").trim()
+                line.startsWith("ERROR") -> lastError = line.removePrefix("ERROR:").trim()
+                line.startsWith("[ExtractAudio]") || line.startsWith("[EmbedThumbnail]") ->
+                    set(track.id, DownloadState.Converting)
+            }
+        }
+        val code = process.waitFor()
+        val file = finalPath?.let(::File)
+        if (code != 0 || file == null || !file.isFile) error(lastError ?: "yt-dlp ha terminato con errore ($code)")
+        return file
     }
 
     fun cancel(id: String) {
@@ -190,6 +252,10 @@ class YtDlp(private val scope: CoroutineScope) {
     }.getOrNull()
 
     private companion object {
+        /** L'ultima versione ufficiale per Windows, dalle release di GitHub. */
+        const val RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+        const val DAY_MS = 24L * 60 * 60 * 1000
+
         /**
          * Nel PATH, poi fra i collegamenti di winget, poi nelle cartelle dei
          * soli pacchetti che ci interessano ([packages], per prefisso del
