@@ -45,7 +45,7 @@ Plug the phone in with USB debugging enabled and open the Phone screen.
 
 ## Requirements
 
-- **Windows** 10 or 11, 64 bit. VLC and adb are included. Downloads also need ffmpeg: `winget install Gyan.FFmpeg`.
+- **Windows** 10 or 11, 64 bit. Nothing else to install: VLC, adb, ffmpeg, yt-dlp and Deno come with the app, and Xaos keeps yt-dlp up to date by itself.
 - **Android** 7.0 or later on an arm64 phone. To sync, enable USB debugging in the developer options and allow the PC when the phone asks.
 
 ## Install
@@ -67,7 +67,8 @@ The repository has two Gradle projects: the Android app in the root, the desktop
 cd desktop
 ./gradlew run
 
-# Desktop: installer (needs JDK 21 with jpackage and Inno Setup 6.7)
+# Desktop: installer (needs JDK 21 with jpackage and Inno Setup 6.7;
+# ffmpeg, Deno and yt-dlp are downloaded once and cached)
 ./gradlew packageInstaller -PandroidApkDir=../app/build/outputs/apk/debug
 ```
 
@@ -86,4 +87,4 @@ Everything stays on your devices. Xaos goes online only when you ask it to: sear
 
 ## Third party components
 
-The desktop app includes parts of VLC (LGPL 2.1 or later) and adb from the Android SDK Platform-Tools (Apache 2.0). Details are in `THIRD-PARTY-NOTICES.txt`, next to the app after installation.
+The desktop app includes parts of VLC (LGPL 2.1 or later), adb from the Android SDK Platform-Tools (Apache 2.0), an LGPL build of FFmpeg, Deno (MIT) and yt-dlp (Unlicense). Details are in `THIRD-PARTY-NOTICES.txt`, next to the app after installation.

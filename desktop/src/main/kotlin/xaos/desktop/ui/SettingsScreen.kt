@@ -167,8 +167,9 @@ fun SettingsScreen(
                         PillButton("PREDEFINITA", onClick = { settings.update { it.copy(downloadFolder = null) } })
                     }
                 }
-                InfoLine("YT-DLP", ytdlp.exe?.path ?: "non trovato — winget install yt-dlp.yt-dlp")
-                InfoLine("FFMPEG", ytdlp.ffmpeg?.path ?: "non trovato — winget install Gyan.FFmpeg")
+                val (ytExe, ffExe) = ytdlp.tools.collectAsState().value
+                InfoLine("YT-DLP", ytExe?.path ?: "ricerca in corso…")
+                InfoLine("FFMPEG", ffExe?.path ?: "ricerca in corso…")
             }
         }
 

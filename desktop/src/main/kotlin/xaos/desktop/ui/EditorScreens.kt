@@ -493,7 +493,8 @@ private fun EditorFrame(
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier),
         ) {
-            Box(Modifier.widthIn(max = if (scrollable) 980.dp else 1600.dp)) { content() }
+            // Una colonna, non un Box: gli editor mettono più blocchi uno sotto l'altro.
+            Column(Modifier.widthIn(max = if (scrollable) 980.dp else 1600.dp)) { content() }
         }
     }
 }

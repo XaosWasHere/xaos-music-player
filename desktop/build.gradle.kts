@@ -1,4 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.net.URI
+import java.util.zip.ZipFile
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
 val appVersion = "1.3.1"
@@ -135,6 +137,54 @@ val buildMediaBridge by tasks.registering(Exec::class) {
     )
 }
 
+/*
+ * Gli strumenti per scaricare musica, perché l'utente non debba installare
+ * nulla: ffmpeg (build LGPL "shared" di BtbN: si può ridistribuire), deno (il
+ * motore JavaScript che yt-dlp usa per YouTube) e una prima copia di yt-dlp,
+ * che poi Xaos tiene aggiornata da solo. Si scaricano una volta e restano in
+ * cache nella cartella di Gradle.
+ */
+val ffmpegZipUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip"
+val denoZipUrl = "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip"
+val ytdlpUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+val toolsCache = File(gradle.gradleUserHomeDir, "caches/xaos-tools")
+
+fun cached(url: String, name: String, maxAgeDays: Long = 3650): File {
+    val file = File(toolsCache, name)
+    val fresh = file.isFile && System.currentTimeMillis() - file.lastModified() < maxAgeDays * 86_400_000L
+    if (!fresh) {
+        toolsCache.mkdirs()
+        val tmp = File(file.path + ".part")
+        URI(url).toURL().openStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        tmp.copyTo(file, overwrite = true)
+        tmp.delete()
+    }
+    return file
+}
+
+val prepareTools by tasks.registering {
+    val out = bundledResources.map { it.dir("common/tools") }
+    outputs.dir(out)
+    inputs.property("urls", listOf(ffmpegZipUrl, denoZipUrl))
+    doLast {
+        val dir = out.get().asFile.apply { deleteRecursively(); mkdirs() }
+        // ffmpeg: solo gli eseguibili che servono e le loro librerie.
+        val ffmpegDir = File(dir, "ffmpeg").apply { mkdirs() }
+        ZipFile(cached(ffmpegZipUrl, "ffmpeg-n9.0-lgpl-shared.zip")).use { zip ->
+            zip.entries().asSequence()
+                .filter { !it.isDirectory && it.name.contains("/bin/") }
+                .filter { e -> e.name.substringAfterLast('/').let { it.endsWith(".dll") || it == "ffmpeg.exe" || it == "ffprobe.exe" } }
+                .forEach { e -> zip.getInputStream(e).use { i -> File(ffmpegDir, e.name.substringAfterLast('/')).outputStream().use { i.copyTo(it) } } }
+        }
+        ZipFile(cached(denoZipUrl, "deno-2.9.7.zip")).use { zip ->
+            val entry = zip.getEntry("deno.exe")
+            zip.getInputStream(entry).use { i -> File(dir, "deno.exe").outputStream().use { i.copyTo(it) } }
+        }
+        // yt-dlp si riprende se la copia in cache ha più di una settimana.
+        cached(ytdlpUrl, "yt-dlp.exe", maxAgeDays = 7).copyTo(File(dir, "yt-dlp.exe"), overwrite = true)
+    }
+}
+
 val prepareLicenses by tasks.registering {
     val out = bundledResources.map { it.file("common/THIRD-PARTY-NOTICES.txt") }
     outputs.file(out)
@@ -152,13 +202,27 @@ val prepareLicenses by tasks.registering {
               Copyright (C) The Android Open Source Project
               License: Apache License, version 2.0
               Source code: https://android.googlesource.com/platform/packages/modules/adb/
+
+            FFmpeg 9.0 (LGPL shared build by BtbN)
+              Copyright (C) the FFmpeg developers
+              License: GNU Lesser General Public License, version 2.1 or later
+              Source code: https://ffmpeg.org/download.html and https://github.com/BtbN/FFmpeg-Builds
+
+            Deno
+              Copyright (C) the Deno authors
+              License: MIT
+              Source code: https://github.com/denoland/deno
+
+            yt-dlp
+              License: The Unlicense (public domain)
+              Source code: https://github.com/yt-dlp/yt-dlp
             """.trimIndent() + "\n"
         )
     }
 }
 
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
-    dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses, buildMediaBridge)
+    dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses, buildMediaBridge, prepareTools)
 }
 
 /*

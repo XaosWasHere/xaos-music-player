@@ -62,17 +62,46 @@ sealed interface DownloadState {
  */
 class YtDlp(private val scope: CoroutineScope) {
 
-    /** Trovati in background: all'avvio non si aspetta nessuna ricerca su disco. */
-    @Volatile var exe: File? = null
-        private set
-    @Volatile var ffmpeg: File? = null
-        private set
+    /**
+     * yt-dlp e ffmpeg, trovati in background: all'avvio non si aspetta nessuna
+     * ricerca su disco. È un flusso perché le schermate si aggiornino quando arrivano.
+     */
+    private val _tools = MutableStateFlow<Pair<File?, File?>>(null to null)
+    val tools: StateFlow<Pair<File?, File?>> = _tools.asStateFlow()
+
+    var exe: File?
+        get() = _tools.value.first
+        private set(value) { _tools.update { it.copy(first = value) } }
+    var ffmpeg: File?
+        get() = _tools.value.second
+        private set(value) { _tools.update { it.copy(second = value) } }
     val available: Boolean get() = exe != null && ffmpeg != null
+
+    /** Gli strumenti che viaggiano con Xaos: ffmpeg, deno e una prima copia di yt-dlp. */
+    private val bundled: File? = xaos.desktop.appResourcesDir?.let { File(it, "tools") }?.takeIf { it.isDirectory }
+
+    /** Il motore JavaScript per yt-dlp: YouTube lo richiede per sbloccare i flussi. */
+    private val deno: File? = bundled?.let { File(it, "deno.exe") }?.takeIf { it.isFile }
+
+    /** Gli argomenti che dicono a yt-dlp di usare il deno incluso, se c'è. */
+    private fun runtimeArgs(): List<String> = deno?.let { listOf("--js-runtimes", "deno:" + it.path) }.orEmpty()
 
     init {
         Thread({
+            // La copia di Xaos; alla prima apertura la si prende da quella inclusa,
+            // senza scaricare niente.
+            if (!ownExe.isFile) {
+                bundled?.let { File(it, "yt-dlp.exe") }?.takeIf { it.isFile }?.let { seed ->
+                    runCatching {
+                        ownExe.parentFile.mkdirs()
+                        seed.copyTo(ownExe, overwrite = true)
+                        checkedMarker.writeText(System.currentTimeMillis().toString())
+                    }
+                }
+            }
             exe = ownExe.takeIf { it.isFile } ?: locate("yt-dlp.exe", "yt-dlp.yt-dlp")
-            ffmpeg = locate("ffmpeg.exe", "Gyan.FFmpeg", "yt-dlp.FFmpeg")
+            ffmpeg = bundled?.let { File(it, "ffmpeg/ffmpeg.exe") }?.takeIf { it.isFile }
+                ?: locate("ffmpeg.exe", "Gyan.FFmpeg", "yt-dlp.FFmpeg")
             // Poi, con calma, la copia di Xaos: scaricata se manca, aggiornata se vecchia.
             refresh(force = false)
         }, "xaos-tools").apply { isDaemon = true }.start()
@@ -139,8 +168,8 @@ class YtDlp(private val scope: CoroutineScope) {
             _search.value = OnlineSearch.Searching
             val result = runCatching {
                 val process = ProcessBuilder(
-                    yt.path, "ytsearch$limit:$query",
-                    "--dump-json", "--flat-playlist", "--no-warnings", "--ignore-errors",
+                    listOf(yt.path, "ytsearch$limit:$query", "--dump-json", "--flat-playlist", "--no-warnings", "--ignore-errors") +
+                        runtimeArgs(),
                 ).redirectErrorStream(false).start()
                 val out = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
                 process.waitFor()
@@ -184,7 +213,7 @@ class YtDlp(private val scope: CoroutineScope) {
         val yt = exe ?: error("yt-dlp non trovato")
         folder.mkdirs()
         val process = ProcessBuilder(
-            yt.path, track.url,
+            listOf(yt.path, track.url) + runtimeArgs() + listOf(
             "-f", "bestaudio/best",
             "-x", "--audio-format", "mp3", "--audio-quality", "0",
             "--embed-metadata", "--embed-thumbnail",
@@ -196,6 +225,7 @@ class YtDlp(private val scope: CoroutineScope) {
             "--print", "after_move:XAOSFILE %(filepath)s",
             "--no-simulate", "--progress", "--newline",
             "--progress-template", "download:XAOSPROG %(progress._percent_str)s",
+            ),
         ).redirectErrorStream(true).start()
         processes[track.id] = process
         var finalPath: String? = null

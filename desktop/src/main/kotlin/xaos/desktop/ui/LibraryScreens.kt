@@ -558,9 +558,8 @@ fun SearchResults(
         item {
             val current = online
             when {
-                !ytdlp.available -> Text(
-                    "Per scaricare servono yt-dlp e ffmpeg. Si installano con winget: " +
-                        "\"winget install yt-dlp.yt-dlp\" e \"winget install Gyan.FFmpeg\".",
+                ytdlp.tools.collectAsState().value.let { it.first == null || it.second == null } -> Text(
+                    "Gli strumenti per scaricare non sono ancora pronti: se il messaggio resta, reinstalla Xaos.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkTertiary,
                     modifier = Modifier.padding(horizontal = 12.dp),
