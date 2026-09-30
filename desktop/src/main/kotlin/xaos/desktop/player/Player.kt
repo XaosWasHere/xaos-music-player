@@ -103,6 +103,43 @@ class Player {
             .toTypedArray()
     }
 
+    // ---------------------------------------------------------- analisi
+
+    private val analysisLock = Any()
+    @Volatile private var analyzer: MediaPlayer? = null
+
+    /**
+     * Converte [source] in un WAV mono a bassa frequenza in [target], per
+     * disegnarne le onde. Usa un secondo lettore dello stesso VLC, che scrive
+     * sul file invece che sulle casse: non si sente nulla e la riproduzione
+     * non viene disturbata. Un brano alla volta.
+     */
+    fun decodeForWaveform(source: java.io.File, target: java.io.File, sampleRate: Int): Boolean = synchronized(analysisLock) {
+        val f = factory ?: return false
+        val analysis = analyzer ?: f.mediaPlayers().newMediaPlayer().also { analyzer = it }
+        val done = java.util.concurrent.CountDownLatch(1)
+        val ended = object : MediaPlayerEventAdapter() {
+            override fun finished(mediaPlayer: MediaPlayer) = done.countDown()
+            override fun error(mediaPlayer: MediaPlayer) = done.countDown()
+        }
+        analysis.events().addMediaPlayerEventListener(ended)
+        return try {
+            target.delete()
+            val dst = target.path.replace('\\', '/')
+            val started = analysis.media().play(
+                mrlOf(source.path),
+                ":sout=#transcode{acodec=s16l,channels=1,samplerate=$sampleRate}:std{access=file,mux=wav,dst=\"$dst\"}",
+                ":no-sout-video",
+            )
+            started && done.await(90, java.util.concurrent.TimeUnit.SECONDS) && target.length() > 44
+        } catch (_: Throwable) {
+            false
+        } finally {
+            analysis.events().removeMediaPlayerEventListener(ended)
+            runCatching { analysis.controls().stop() }
+        }
+    }
+
     // ---------------------------------------------------------- equalizzatore
 
     /** Le frequenze centrali delle bande, in Hz, come le espone VLC. */
@@ -178,6 +215,16 @@ class Player {
     /** I prossimi brani, nell'ordine in cui verranno davvero suonati. */
     val upNext: StateFlow<List<Track>> = _upNext.asStateFlow()
 
+    /**
+     * Chiamato una volta per brano, quando è stato ascoltato davvero: trenta
+     * secondi, o tutto se è più corto. È la stessa regola del telefono, così
+     * le statistiche dei due si possono sommare.
+     */
+    @Volatile var onListened: ((Track, Long) -> Unit)? = null
+    @Volatile private var listenedMs = 0L
+    @Volatile private var lastTimeMs = 0L
+    @Volatile private var listenRecorded = false
+
     /** L'ordine di ascolto: gli indici della coda, mescolati se c'è il casuale. */
     private var order: List<Int> = emptyList()
     private var cursor = -1
@@ -186,7 +233,20 @@ class Player {
         override fun playing(mediaPlayer: MediaPlayer) { _isPlaying.value = true }
         override fun paused(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
         override fun stopped(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
-        override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) { _positionMs.value = newTime }
+        override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) {
+            _positionMs.value = newTime
+            // Solo il tempo che scorre suonando: un salto in avanti non è ascolto.
+            val delta = newTime - lastTimeMs
+            lastTimeMs = newTime
+            if (listenRecorded || delta !in 1..MAX_TICK_MS) return
+            listenedMs += delta
+            val track = _current.value ?: return
+            val needed = if (track.durationMs in 1 until PLAY_THRESHOLD_MS) track.durationMs - 1_000 else PLAY_THRESHOLD_MS
+            if (listenedMs >= needed) {
+                listenRecorded = true
+                onListened?.invoke(track, System.currentTimeMillis())
+            }
+        }
         override fun lengthChanged(mediaPlayer: MediaPlayer, newLength: Long) {
             if (newLength > 0) _durationMs.value = newLength
         }
@@ -239,6 +299,16 @@ class Player {
         _positionMs.value = target
     }
 
+    /** Salta a [ms] nel brano in corso: il clic su una riga del testo. */
+    fun seekToMs(ms: Long) {
+        val player = mp ?: return
+        val duration = _durationMs.value
+        val target = if (duration > 0) ms.coerceIn(0, duration - 500) else ms.coerceAtLeast(0)
+        player.controls().setTime(target)
+        _positionMs.value = target
+        if (!player.status().isPlaying) player.controls().play()
+    }
+
     /** Avanti o indietro di [deltaMs] nel brano in corso. */
     fun seekBy(deltaMs: Long) {
         val player = mp ?: return
@@ -270,6 +340,7 @@ class Player {
     }
 
     fun release() {
+        runCatching { analyzer?.release() }
         runCatching { mp?.release() }
         runCatching { factory?.release() }
     }
@@ -312,6 +383,9 @@ class Player {
         val track = _queue.value.getOrNull(order.getOrNull(cursor) ?: return) ?: return
         _current.value = track
         refreshUpNext()
+        listenedMs = 0
+        lastTimeMs = 0
+        listenRecorded = false
         _positionMs.value = 0
         _durationMs.value = track.durationMs
         player.media().play(mrlOf(track))
@@ -330,11 +404,16 @@ class Player {
      * speciali codificati. Passare il percorso nudo fallisce su accenti e
      * simboli nei nomi dei file.
      */
-    private fun mrlOf(track: Track): String =
-        URI("file", "", "/" + track.path.replace('\\', '/'), null).toASCIIString()
+    private fun mrlOf(track: Track): String = mrlOf(track.path)
+
+    private fun mrlOf(path: String): String =
+        URI("file", "", "/" + path.replace('\\', '/'), null).toASCIIString()
 
     private companion object {
         const val RESTART_THRESHOLD_MS = 3_000L
+        const val PLAY_THRESHOLD_MS = 30_000L
+        /** VLC aggiorna la posizione più volte al secondo: oltre questo è un salto. */
+        const val MAX_TICK_MS = 1_500L
         const val UP_NEXT = 3
     }
 }

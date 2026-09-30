@@ -45,7 +45,8 @@ sealed interface PhoneState {
 data class SyncItem(
     val track: Track,
     val file: File,
-    val remoteRel: String,
+    /** Il percorso completo sul telefono. */
+    val remotePath: String,
     val size: Long,
     /** Era già stato mandato ma sul PC è cambiato (tag, testo, copertina). */
     val isUpdate: Boolean = false,
@@ -150,6 +151,14 @@ class PhoneSync(
     @Volatile var remoteRoot: String = remoteRoot.trimEnd('/')
         set(value) { field = value.trim().trimEnd('/').ifEmpty { field } }
 
+    /**
+     * La cartella del PC dove arrivano i brani importati dal telefono, e le
+     * cartelle della libreria. Servono a rimandare i brani importati dove
+     * stavano (e non in "Xaos/Dal telefono/…") e a non annidarli a ogni giro.
+     */
+    @Volatile var importFolder: File? = null
+    @Volatile var libraryRoots: List<File> = emptyList()
+
     private val adb: File? = locateAdb()
 
     /** Il percorso di adb in uso, per la schermata Informazioni. */
@@ -217,15 +226,15 @@ class PhoneSync(
                 val matcher = SongMatcher(listPhoneSongs(phone.serial))
                 val items = tracks.mapNotNull { track ->
                     val file = File(if (preferMp3) track.mobilePath ?: track.path else track.path)
-                    val rel = remoteRelative(roots, file) ?: return@mapNotNull null
-                    SyncItem(track, file, rel, file.length(), isUpdate = remote.containsKey(rel))
+                    val target = remotePathOf(roots, file) ?: return@mapNotNull null
+                    SyncItem(track, file, target, file.length(), isUpdate = remote.containsKey(target))
                 }
                 // Un brano che Xaos ha già mandato si riconosce dal percorso: se la
                 // dimensione è cambiata, sul PC è stato modificato e va rimandato.
                 // Per tutti gli altri conta se il telefono ha lo stesso brano,
                 // ovunque sia.
                 val missing = items.filter { item ->
-                    if (item.isUpdate) remote[item.remoteRel] != item.size
+                    if (item.isUpdate) remote[item.remotePath] != item.size
                     else !matcher.isOnPhone(item.track)
                 }
                 checkLyrics(phone, roots, tracks, preferMp3, remote, matcher, missing.map { it.track.path }.toSet())
@@ -263,7 +272,7 @@ class PhoneSync(
             for (item in selected) {
                 if (!isActive) break
                 _status.value = SyncStatus.Running(sent + failed, total, doneBytes, totalBytes, item.file.name)
-                val remote = "$remoteRoot/${item.remoteRel}"
+                val remote = item.remotePath
                 val ok = push(phone.serial, item.file, remote)
                 if (ok) { sent++; pushed += remote } else failed++
                 doneBytes += item.size
@@ -303,9 +312,9 @@ class PhoneSync(
                 if (!isActive) return@launch
                 if (i % 5 == 0) _lyrics.value = LyricsCheck.Checking(i, candidates.size)
                 val file = File(if (preferMp3) track.mobilePath ?: track.path else track.path)
-                val rel = remoteRelative(roots, file)
+                val target = remotePathOf(roots, file)
                 val phonePath = when {
-                    rel != null && remote.containsKey(rel) -> "$remoteRoot/$rel"
+                    target != null && remote.containsKey(target) -> target
                     else -> matcher.find(track)?.path?.replace("/storage/emulated/0/", "/sdcard/")
                 } ?: return@forEachIndexed
                 if (!phonePath.endsWith(".mp3", ignoreCase = true)) return@forEachIndexed
@@ -393,10 +402,13 @@ class PhoneSync(
                 val onPhone = listPhoneMusic(phone.serial)
                 // Le copie MP3 dei FLAC contano come lo stesso brano: il PC ce l'ha.
                 val pc = SongMatcher(tracks.map { PhoneSong(it.title, it.artist, it.durationMs, it.path) })
-                ImportPlan(
-                    onlyOnPhone = onPhone.filter { pc.find(it.title, it.artist, it.durationMs) == null },
-                    phoneTotal = onPhone.size,
-                )
+                // Dove Xaos ha mandato i brani del PC: un file lì è del PC, anche senza tag.
+                val sent = tracks.flatMap { t -> listOfNotNull(t.path, t.mobilePath) }
+                    .mapNotNull { remotePathOf(libraryRoots, File(it)) }.toHashSet()
+                val missing = onPhone.filter { f ->
+                    f.path !in sent && pc.find(f.title, f.artist, f.durationMs) == null && !untaggedMatch(pc, f)
+                }
+                ImportPlan(onlyOnPhone = oneCopyEach(missing), phoneTotal = onPhone.size)
             }
             result.onSuccess {
                 _importPlan.value = it
@@ -404,6 +416,35 @@ class PhoneSync(
             }
             result.onFailure { _importStatus.value = ImportStatus.Failed(it.message ?: "Impossibile leggere il telefono") }
         }
+    }
+
+    /**
+     * Un file senza tag, per cui Android usa il nome come titolo:
+     * "Titolo - Artista" (o il contrario). Si prova a leggerlo così.
+     */
+    private fun untaggedMatch(pc: SongMatcher, f: PhoneFile): Boolean {
+        if (f.artist.isNotBlank() || " - " !in f.title) return false
+        val a = f.title.substringBefore(" - ").trim()
+        val b = f.title.substringAfter(" - ").trim()
+        return pc.find(a, b, f.durationMs) != null || pc.find(b, a, f.durationMs) != null
+    }
+
+    /**
+     * Se sul telefono lo stesso brano c'è più volte, se ne importa una copia
+     * sola: la più pesante (la qualità migliore), a parità quella col percorso
+     * più corto, che di solito è l'originale e non una copia annidata.
+     */
+    private fun oneCopyEach(files: List<PhoneFile>): List<PhoneFile> {
+        val kept = mutableListOf<PhoneFile>()
+        files.sortedWith(compareByDescending<PhoneFile> { it.size }.thenBy { it.path.count { c -> c == '/' } }.thenBy { it.path })
+            .forEach { f ->
+                val twin = kept.any { k ->
+                    kotlin.math.abs(k.durationMs - f.durationMs) <= SongMatcher.SAME_RECORDING_MS &&
+                        SongMatcher(listOf(PhoneSong(k.title, k.artist, k.durationMs))).find(f.title, f.artist, f.durationMs) != null
+                }
+                if (!twin) kept += f
+            }
+        return files.filter { it in kept }
     }
 
     /**
@@ -486,8 +527,14 @@ class PhoneSync(
      */
     private fun localTarget(destination: File, phonePath: String): File {
         val music = "/sdcard/Music/"
-        val relative = if (phonePath.startsWith(music)) phonePath.removePrefix(music)
+        var relative = if (phonePath.startsWith(music)) phonePath.removePrefix(music)
         else phonePath.split('/').takeLast(2).joinToString("/")
+        // Un brano importato e poi rimandato al telefono sta in
+        // "Xaos/Dal telefono/…": riportarlo in "Dal telefono/Xaos/Dal telefono/…"
+        // creerebbe un doppione annidato a ogni giro. Il suo posto è quello di prima.
+        loopPrefix(destination)?.let { prefix ->
+            while (relative.startsWith(prefix)) relative = relative.removePrefix(prefix)
+        }
         val safe = relative.split('/').filter { it.isNotBlank() }.joinToString(File.separator) { segment ->
             segment.replace(Regex("[<>:\"\\\\|?*]"), "_").trimEnd('.', ' ').ifEmpty { "_" }
         }
@@ -630,18 +677,20 @@ class PhoneSync(
         return parts.firstOrNull { it.startsWith("model:") }?.removePrefix("model:")?.replace('_', ' ') ?: serial
     }
 
-    /** Percorso relativo → dimensione, per tutti i file già sotto [remoteRoot]. */
+    /**
+     * Percorso completo → dimensione, per tutti i file sotto [remoteRoot] e
+     * sotto Music (dove tornano i brani importati).
+     */
     private fun listRemote(serial: String): Map<String, Long> {
-        val out = shell(serial, "find ${q(remoteRoot)} -type f -exec stat -c '%s|%n' {} + 2>/dev/null")
+        val dirs = listOf(remoteRoot, "/sdcard/Music").distinct().joinToString(" ") { q(it) }
+        val out = shell(serial, "find $dirs -type f -exec stat -c '%s|%n' {} + 2>/dev/null")
             ?: return emptyMap()
-        val prefix = "$remoteRoot/"
         return out.lineSequence()
             .mapNotNull { line ->
                 val bar = line.indexOf('|')
                 if (bar <= 0) return@mapNotNull null
                 val size = line.substring(0, bar).toLongOrNull() ?: return@mapNotNull null
-                val path = line.substring(bar + 1).trimEnd('\r')
-                if (!path.startsWith(prefix)) null else path.removePrefix(prefix) to size
+                line.substring(bar + 1).trimEnd('\r') to size
             }
             .toMap()
     }
@@ -650,14 +699,24 @@ class PhoneSync(
      * Tutti i brani musicali che Android conosce, ovunque siano sul telefono,
      * con i tag già letti da MediaStore: niente da scaricare né da decodificare.
      */
-    private fun listPhoneSongs(serial: String): List<PhoneSong> {
+    internal fun listPhoneSongs(serial: String): List<PhoneSong> {
+        val keys = listOf("_id", "title", "artist", "duration", "_data")
         val out = shell(
             serial,
             "content query --uri content://media/external/audio/media " +
-                "--projection title:artist:duration:_data --where \"is_music!=0\"",
+                "--projection ${keys.joinToString(":")} --where \"is_music!=0\"",
             timeoutS = 60,
         ) ?: return emptyList()
-        return SongMatcher.parseContentQuery(out)
+        return SongMatcher.parseRows(out, keys).mapNotNull { row ->
+            val title = row["title"].orEmpty().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            PhoneSong(
+                title = title,
+                artist = row["artist"].orEmpty().let { if (it == "<unknown>") "" else it },
+                durationMs = row["duration"]?.toLongOrNull() ?: 0L,
+                path = row["_data"].orEmpty(),
+                id = row["_id"]?.toLongOrNull() ?: -1L,
+            )
+        }
     }
 
     private fun freeSpace(serial: String): Long? {
@@ -666,7 +725,7 @@ class PhoneSync(
         return cols.getOrNull(3)?.toLongOrNull()?.times(1024)
     }
 
-    private fun push(serial: String, local: File, remote: String): Boolean {
+    internal fun push(serial: String, local: File, remote: String): Boolean {
         val adb = adb ?: return false
         return runCatching {
             val process = ProcessBuilder(adb.path, "-s", serial, "push", local.path, remote)
@@ -692,10 +751,10 @@ class PhoneSync(
         }
     }
 
-    private fun shell(serial: String, command: String, timeoutS: Long = 30): String? =
+    internal fun shell(serial: String, command: String, timeoutS: Long = 30): String? =
         run(listOf("-s", serial, "shell", command), timeoutS)
 
-    private fun run(args: List<String>, timeoutS: Long): String? {
+    internal fun run(args: List<String>, timeoutS: Long): String? {
         val adb = adb ?: return null
         return runCatching {
             val process = ProcessBuilder(listOf(adb.path) + args).redirectErrorStream(true).start()
@@ -708,22 +767,41 @@ class PhoneSync(
     }
 
     /** Virgolette singole per la shell del telefono, apostrofi compresi. */
-    private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
+    internal fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
     /**
      * Il percorso sul telefono: quello sul PC relativo alla sua cartella di
-     * libreria, senza la sottocartella delle copie MP3.
+     * libreria, senza la sottocartella delle copie MP3, sotto [remoteRoot].
+     * I brani importati dal telefono tornano invece dove stavano, sotto Music:
+     * è l'inverso esatto di [localTarget].
      */
-    private fun remoteRelative(roots: List<File>, file: File): String? = runCatching {
-        val root = roots.firstOrNull { file.path.startsWith(it.path + File.separator) } ?: return null
+    internal fun remotePathOf(roots: List<File>, file: File): String? = runCatching {
         val folder = Library.collapsedParent(file) ?: return null
-        val relFolder = root.toPath().relativize(folder.toPath()).joinToString("/")
-        if (relFolder.startsWith("..")) null
-        else if (relFolder.isEmpty()) file.name
-        else "$relFolder/${file.name}"
+        val imported = importFolder?.takeIf { folder.path == it.path || folder.path.startsWith(it.path + File.separator) }
+        val base = imported ?: roots.firstOrNull { file.path.startsWith(it.path + File.separator) } ?: return null
+        val relFolder = base.toPath().relativize(folder.toPath()).joinToString("/")
+        val rel = when {
+            relFolder.startsWith("..") -> return null
+            relFolder.isEmpty() -> file.name
+            else -> "$relFolder/${file.name}"
+        }
+        if (imported != null) "/sdcard/Music/$rel" else "$remoteRoot/$rel"
     }.getOrNull()
 
-    private companion object {
+    /**
+     * "Xaos/Dal telefono/": la cartella d'importazione vista dal telefono, cioè
+     * dove sarebbe finita se fosse stata mandata come un brano qualunque.
+     */
+    private fun loopPrefix(destination: File): String? {
+        val music = "/sdcard/Music/"
+        if (!remoteRoot.startsWith(music)) return null
+        val root = libraryRoots.firstOrNull { destination.path.startsWith(it.path + File.separator) } ?: return null
+        val rel = root.toPath().relativize(destination.toPath()).joinToString("/")
+        if (rel.isEmpty() || rel.startsWith("..")) return null
+        return remoteRoot.removePrefix(music) + "/" + rel + "/"
+    }
+
+    internal companion object {
         const val APP_PACKAGE = "com.example.xaosmusicplayer"
         /** Quanto leggere al primo colpo: basta per quasi tutti i tag senza copertine enormi. */
         const val HEAD_PROBE = 256 * 1024

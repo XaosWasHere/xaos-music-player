@@ -275,6 +275,40 @@ object XaosIcons {
         )
     }
 
+    /** Il testo del brano: il microfono, come su Spotify. */
+    val Mic: ImageVector by lazy {
+        icon(
+            "M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 " +
+                "3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 " +
+                "6-3.3 6-6.72h-1.7z"
+        )
+    }
+
+    val Stats: ImageVector by lazy { icon("M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z") }
+
+    val PlaylistMusic: ImageVector by lazy {
+        icon(
+            "M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 " +
+                "0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"
+        )
+    }
+
+    /** Il miniplayer: un riquadro piccolo dentro quello grande. */
+    val MiniPlayer: ImageVector by lazy {
+        icon(
+            "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 " +
+                "2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"
+        )
+    }
+
+    /** Le onde del brano: barre di altezze diverse. */
+    val Waveform: ImageVector by lazy {
+        icon("M3 10h2v4H3zm4-4h2v12H7zm4-3h2v18h-2zm4 5h2v8h-2zm4 2h2v4h-2z")
+    }
+
+    val ArrowUp: ImageVector by lazy { icon("M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z") }
+    val ArrowDown: ImageVector by lazy { icon("M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z") }
+
     private fun icon(pathData: String): ImageVector =
         ImageVector.Builder(
             defaultWidth = 24.dp,

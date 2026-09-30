@@ -178,6 +178,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
         return
     }
     val colors = Xaos.colors
+    val actions = LocalTrackActions.current
     val current by player.current.collectAsState()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
@@ -206,6 +207,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0) }, icon = XaosIcons.Play, filled = true)
                         PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0) }, icon = XaosIcons.Shuffle)
+                        PillButton("PLAYLIST", onClick = { actions?.onAddToPlaylist(album.tracks) }, icon = XaosIcons.PlaylistAdd)
                         PillButton("MODIFICA", onClick = { onEdit(album) }, icon = XaosIcons.Edit)
                     }
                 }
@@ -259,13 +261,14 @@ fun SongsScreen(snapshot: LibrarySnapshot, player: Player) {
 }
 
 @Composable
-private fun TrackHeader(showAlbum: Boolean) {
+fun TrackHeader(showAlbum: Boolean) {
     val colors = Xaos.colors
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("#", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(40.dp))
             Text("TITOLO", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.weight(1f))
             if (showAlbum) Text("ALBUM", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.weight(0.7f))
+            Spacer(Modifier.width(36.dp))
             Text("DURATA", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
         }
         Hairline()
@@ -282,9 +285,12 @@ fun TrackRow(
     showAlbum: Boolean,
     showArtwork: Boolean,
     onClick: () -> Unit,
+    /** Voci in più per il menu, per esempio "togli dalla playlist". */
+    extraMenu: List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>> = emptyList(),
 ) {
     val colors = Xaos.colors
     val actions = LocalTrackActions.current
+    val favorite = track.path in LocalFavorites.current
     var menuOpen by remember { mutableStateOf(false) }
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -330,6 +336,9 @@ fun TrackRow(
                 modifier = Modifier.weight(0.7f).padding(end = 12.dp),
             )
         }
+        // Il cuore si vede sempre sui preferiti, sugli altri solo col mouse sopra.
+        FavoriteButton(track, visible = hovered || menuOpen)
+        Spacer(Modifier.width(6.dp))
         Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
         if (actions != null) {
             Box {
@@ -350,8 +359,14 @@ fun TrackRow(
                     expanded = menuOpen,
                     onDismiss = { menuOpen = false },
                     items = listOf(
+                        Triple(
+                            if (favorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
+                            if (favorite) "TOGLI DAI PREFERITI" else "AGGIUNGI AI PREFERITI",
+                        ) { actions.onToggleFavorite(track) },
+                        Triple(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") { actions.onAddToPlaylist(listOf(track)) },
+                    ) + extraMenu + listOf(
                         Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
-                        Triple(XaosIcons.Sort, "TESTO") { actions.onLyrics(track) },
+                        Triple(XaosIcons.Mic, "TESTO") { actions.onLyrics(track) },
                         Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
                     ),
                 )

@@ -145,6 +145,10 @@ fun SettingsScreen(
             }
         }
 
+        if (snapshot.duplicates.isNotEmpty()) {
+            item { DuplicatesCard(snapshot.duplicates, onRescan) }
+        }
+
         item {
             SettingsCard("DOWNLOAD") {
                 Text(
@@ -224,6 +228,82 @@ fun SettingsScreen(
                 InfoLine("ADB", phone.adbPath ?: "non trovato — serve per la sincronizzazione")
                 InfoLine("DATI", Settings.appDir.path)
                 InfoLine("PROGETTO", "github.com/XaosWasHere/xaos-music-player")
+            }
+        }
+    }
+}
+
+/**
+ * I file che la libreria ha riconosciuto come copie di un altro brano dello
+ * stesso album e che quindi non mostra. Restano sul disco finché l'utente non
+ * decide: spostarli nel cestino è reversibile, cancellarli no.
+ */
+@Composable
+private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, onRescan: () -> Unit) {
+    val colors = Xaos.colors
+    var open by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val files = remember(groups) { groups.flatMap { g -> g.copies.flatMap { it.allPaths } }.distinct().map { java.io.File(it) }.filter { it.isFile } }
+    val bytes = remember(files) { files.sumOf { it.length() } }
+    val trashSupported = remember {
+        runCatching { java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.MOVE_TO_TRASH) }.getOrDefault(false)
+    }
+
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            containerColor = colors.surface,
+            title = { Text("Spostare ${files.size} file nel cestino?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+            text = {
+                Text(
+                    "Sono copie di brani che restano in libreria nella versione migliore (${formatBytes(bytes)} in tutto). " +
+                        "Finiscono nel Cestino di Windows, da cui puoi recuperarli. Preferiti e playlist passano da soli alla copia che resta.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkSecondary,
+                )
+            },
+            confirmButton = {
+                PillButton("SPOSTA NEL CESTINO", filled = true, onClick = {
+                    confirm = false
+                    val desktop = java.awt.Desktop.getDesktop()
+                    val moved = files.count { runCatching { desktop.moveToTrash(it) }.getOrDefault(false) }
+                    result = "[$moved] SPOSTATI NEL CESTINO" + if (moved < files.size) " · [${files.size - moved}] NON RIUSCITI" else ""
+                    onRescan()
+                })
+            },
+            dismissButton = { PillButton("ANNULLA", onClick = { confirm = false }) },
+        )
+    }
+
+    SettingsCard("DOPPIONI") {
+        Text(
+            "Lo stesso brano dello stesso album in più file — la copia di iTunes accanto al FLAC, quella tornata dal telefono " +
+                "accanto all'originale. In libreria compare una volta sola, nella versione migliore; le copie restano sul disco.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.inkSecondary,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(if (open) "NASCONDI ELENCO" else "MOSTRA ELENCO", onClick = { open = !open })
+            if (trashSupported && files.isNotEmpty()) {
+                PillButton("SPOSTA LE COPIE NEL CESTINO", onClick = { confirm = true }, icon = XaosIcons.Delete)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                result ?: "[${groups.size}] BRANI · [${files.size}] FILE IN PIÙ · ${formatBytes(bytes)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.inkTertiary,
+            )
+        }
+        if (open) {
+            groups.forEach { g ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text("${g.kept.title} · ${g.kept.artist}", style = MaterialTheme.typography.titleSmall, color = colors.ink)
+                    Text("TIENE  " + g.kept.path, style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+                    g.copies.forEach { c ->
+                        Text("COPIA  " + c.path, style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                    }
+                }
             }
         }
     }

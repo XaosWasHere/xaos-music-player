@@ -1,6 +1,7 @@
 package xaos.desktop.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,8 @@ import xaos.desktop.sync.PhoneSync
 import xaos.desktop.online.OnlineTrack
 import xaos.desktop.sync.PhoneFile
 import xaos.desktop.online.YtDlp
+import xaos.desktop.library.UserData
+import xaos.desktop.sync.DataSync
 import androidx.compose.runtime.CompositionLocalProvider
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
@@ -53,12 +56,19 @@ enum class Section(val label: String, val icon: ImageVector) {
     ALBUMS("ALBUM", XaosIcons.Album),
     SONGS("BRANI", XaosIcons.MusicNote),
     ARTISTS("ARTISTI", XaosIcons.Person),
+    FAVORITES("PREFERITI", XaosIcons.Favorite),
+    PLAYLISTS("PLAYLIST", XaosIcons.PlaylistMusic),
+    STATS("ASCOLTI", XaosIcons.Stats),
     PHONE("TELEFONO", XaosIcons.Phone),
     SETTINGS("IMPOSTAZIONI", XaosIcons.Settings),
 }
 
 /** Le sezioni della navigazione principale; le impostazioni stanno in fondo, a parte. */
-private val MainSections = listOf(Section.ALBUMS, Section.SONGS, Section.ARTISTS, Section.PHONE)
+private val MainSections = listOf(
+    Section.ALBUMS, Section.SONGS, Section.ARTISTS,
+    Section.FAVORITES, Section.PLAYLISTS, Section.STATS,
+    Section.PHONE,
+)
 
 /** Le schermate di dettaglio, impilate sopra la sezione. */
 sealed interface Detail {
@@ -67,6 +77,7 @@ sealed interface Detail {
     data class EditTrack(val path: String) : Detail
     data class EditAlbum(val key: String) : Detail
     data class Lyrics(val path: String) : Detail
+    data class PlaylistDetail(val id: String) : Detail
 }
 
 @Composable
@@ -76,8 +87,11 @@ fun XaosDesktopApp(
     player: Player,
     phone: PhoneSync,
     ytdlp: YtDlp,
+    userData: UserData,
+    dataSync: DataSync,
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
+    onOpenMini: () -> Unit,
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
     onPickDownloadFolder: () -> Unit,
@@ -89,6 +103,18 @@ fun XaosDesktopApp(
     val snapshot by library.snapshot.collectAsState()
     val scan by library.scan.collectAsState()
     val phoneState by phone.state.collectAsState()
+    val data by userData.state.collectAsState()
+    // I preferiti risolti sui brani della libreria: un preferito salvato con il
+    // percorso della copia MP3 o di un doppione vale per il brano mostrato.
+    val favorites = remember(data.favorites, snapshot) {
+        data.favorites.mapNotNull { snapshot.byPath[it]?.path }.toSet()
+    }
+    var lyricsOpen by remember { mutableStateOf(false) }
+    // Una volta all'avvio: c'è una release più nuova di questa su GitHub?
+    val latest by androidx.compose.runtime.produceState<xaos.desktop.online.ReleaseCheck.Latest?>(null) {
+        value = xaos.desktop.online.ReleaseCheck.latest()
+    }
+    var addToPlaylist by remember { mutableStateOf<List<xaos.desktop.library.Track>?>(null) }
 
     // XAOS_START apre direttamente una sezione: serve solo per provare l'app
     // durante lo sviluppo, senza dover navigare a mano.
@@ -112,6 +138,8 @@ fun XaosDesktopApp(
             onShowInFolder = { t ->
                 runCatching { ProcessBuilder("explorer.exe", "/select,", t.path).start() }
             },
+            onToggleFavorite = { userData.toggleFavorite(it) },
+            onAddToPlaylist = { addToPlaylist = it },
         )
     }
     /** Dopo una modifica: si torna indietro e la libreria rilegge i file toccati. */
@@ -120,19 +148,29 @@ fun XaosDesktopApp(
         onRescan()
     }
 
+    addToPlaylist?.let { tracks ->
+        AddToPlaylistDialog(tracks, data, userData) { addToPlaylist = null }
+    }
+
     val colors = Xaos.colors
     if (fullscreen) {
-        FullscreenPlayer(
-            player = player,
-            background = prefs.fullscreenBackground,
-            onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
-            onClose = { onFullscreenChange(false) },
-        )
+        CompositionLocalProvider(LocalTrackActions provides trackActions, LocalFavorites provides favorites) {
+            FullscreenPlayer(
+                player = player,
+                background = prefs.fullscreenBackground,
+                onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
+                onClose = { onFullscreenChange(false) },
+                lyricsOpen = lyricsOpen,
+                onToggleLyrics = { lyricsOpen = !lyricsOpen },
+                onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
+            )
+        }
         return
     }
     Column(Modifier.fillMaxSize().background(colors.background)) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Sidebar(
+                latest = latest,
                 selected = section,
                 phoneState = phoneState,
                 scan = scan,
@@ -148,7 +186,7 @@ fun XaosDesktopApp(
                     .dotGrid(colors.dot),
             ) {
                 Column(Modifier.fillMaxSize()) {
-                    if (section != Section.PHONE && section != Section.SETTINGS) {
+                    if (section != Section.PHONE && section != Section.SETTINGS && section != Section.STATS) {
                         TopBar(
                             query = query,
                             onQueryChange = { query = it },
@@ -158,7 +196,7 @@ fun XaosDesktopApp(
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         val detail = details.lastOrNull()
-                        CompositionLocalProvider(LocalTrackActions provides trackActions) {
+                        CompositionLocalProvider(LocalTrackActions provides trackActions, LocalFavorites provides favorites) {
                         when {
                             detail is Detail.EditTrack -> EditTrackScreen(
                                 track = snapshot.tracks.firstOrNull { it.path == detail.path },
@@ -175,8 +213,17 @@ fun XaosDesktopApp(
                                 onSaved = ::afterEdit,
                                 onCancel = { details.removeLastOrNull() },
                             )
+                            detail is Detail.PlaylistDetail -> PlaylistDetailScreen(
+                                id = detail.id,
+                                snapshot = snapshot,
+                                data = data,
+                                userData = userData,
+                                player = player,
+                                onDeleted = { details.removeLastOrNull() },
+                            )
                             section == Section.PHONE -> PhoneScreen(
                                 phone = phone,
+                                dataSync = dataSync,
                                 snapshot = snapshot,
                                 preferMp3 = prefs.preferMp3OnPhone,
                                 phoneFolder = prefs.phoneFolder,
@@ -226,22 +273,41 @@ fun XaosDesktopApp(
                             section == Section.ARTISTS -> ArtistsScreen(snapshot) {
                                 details += Detail.ArtistDetail(it.name)
                             }
+                            section == Section.FAVORITES -> FavoritesScreen(snapshot, data, player)
+                            section == Section.PLAYLISTS -> PlaylistsScreen(snapshot, data, userData) {
+                                details += Detail.PlaylistDetail(it)
+                            }
+                            section == Section.STATS -> StatsScreen(snapshot, data, userData, player)
                         }
                         }
                     }
                 }
             }
+            if (lyricsOpen) {
+                LyricsSidePanel(
+                    player = player,
+                    width = 360.dp,
+                    onClose = { lyricsOpen = false },
+                    onEdit = { t -> details += Detail.Lyrics(t.path) },
+                )
+            }
         }
-        PlayerBar(
-            player = player,
-            onVolumeChange = { v -> settings.update { it.copy(volume = v) } },
-            onOpenFullscreen = { onFullscreenChange(true) },
-        )
+        CompositionLocalProvider(LocalTrackActions provides trackActions, LocalFavorites provides favorites) {
+            PlayerBar(
+                player = player,
+                onVolumeChange = { v -> settings.update { it.copy(volume = v) } },
+                onOpenFullscreen = { onFullscreenChange(true) },
+                lyricsOpen = lyricsOpen,
+                onToggleLyrics = { lyricsOpen = !lyricsOpen },
+                onOpenMini = onOpenMini,
+            )
+        }
     }
 }
 
 @Composable
 private fun Sidebar(
+    latest: xaos.desktop.online.ReleaseCheck.Latest?,
     selected: Section,
     phoneState: PhoneState,
     scan: ScanState,
@@ -256,13 +322,29 @@ private fun Sidebar(
             .background(colors.sidebar)
             .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            DotText("XAOS", color = colors.ink, pitch = 4.dp)
-            Spacer(Modifier.width(8.dp))
-            AccentDot(size = 7.dp, modifier = Modifier.padding(bottom = 2.dp))
+        // Il logo porta al progetto su GitHub; se c'è una versione più nuova il
+        // pallino pulsa e il clic apre direttamente la sua pagina.
+        val update = latest?.takeIf { it.isNewer }
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .pressable {
+                    xaos.desktop.online.ReleaseCheck.open(update?.url ?: xaos.desktop.online.ReleaseCheck.REPO_URL)
+                },
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                DotText("XAOS", color = colors.ink, pitch = 4.dp)
+                Spacer(Modifier.width(8.dp))
+                if (update != null) PulsingDot(Modifier.padding(bottom = 2.dp))
+                else AccentDot(size = 7.dp, modifier = Modifier.padding(bottom = 2.dp))
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (update != null) "NUOVA VERSIONE ${update.version} · SCARICALA" else "MUSIC PLAYER · DESKTOP",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (update != null) colors.accentInk else colors.inkTertiary,
+            )
         }
-        Spacer(Modifier.height(6.dp))
-        Text("MUSIC PLAYER · DESKTOP", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
 
         Spacer(Modifier.height(28.dp))
 
@@ -297,6 +379,28 @@ private fun Sidebar(
             color = colors.inkTertiary,
             modifier = Modifier.padding(start = 12.dp, top = 6.dp),
         )
+    }
+}
+
+/** Il pallino del logo quando c'è un aggiornamento: respira, con un alone. */
+@Composable
+private fun PulsingDot(modifier: Modifier = Modifier) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "update")
+    val t by transition.animateFloat(
+        0f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(1400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Restart,
+        ),
+        label = "pulse",
+    )
+    val colors = Xaos.colors
+    Box(modifier.size(7.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.size(7.dp)) {
+            val r = size.minDimension / 2
+            drawCircle(colors.accent.copy(alpha = (1f - t) * 0.5f), r * (1f + t * 1.6f))
+            drawCircle(colors.accent, r * (0.85f + 0.15f * kotlin.math.sin(t * Math.PI.toFloat())))
+        }
     }
 }
 

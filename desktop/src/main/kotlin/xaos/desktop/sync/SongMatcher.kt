@@ -5,7 +5,14 @@ import java.text.Normalizer
 import kotlin.math.abs
 
 /** Un brano come lo conosce la libreria di Android (MediaStore). */
-data class PhoneSong(val title: String, val artist: String, val durationMs: Long, val path: String = "")
+data class PhoneSong(
+    val title: String,
+    val artist: String,
+    val durationMs: Long,
+    val path: String = "",
+    /** L'_ID di MediaStore: è così che l'app Android identifica i brani. */
+    val id: Long = -1,
+)
 
 /**
  * Riconosce se un brano del PC c'è già sul telefono, a prescindere da dove sta
@@ -21,11 +28,22 @@ data class PhoneSong(val title: String, val artist: String, val durationMs: Long
  *
  * La durata fa da arbitro nei casi ambigui: "Song" e "Song (Live)" hanno lo
  * stesso titolo spogliato, ma quasi mai la stessa lunghezza.
+ *
+ * Ultimo tentativo, lo scheletro ASCII del titolo con la durata: MediaStore
+ * legge male i tag ID3 scritti in Latin-1 con dentro caratteri UTF-8, e
+ * restituisce "Jinuâ€™s Lament" per "Jinu’s Lament" o "Une vie ŕ peindre" per
+ * "Une vie à peindre". Tolti tutti i caratteri non ASCII i due titoli
+ * coincidono. Senza questo passaggio quei brani risultavano sempre mancanti e
+ * rimbalzavano fra PC e telefono a ogni sincronizzazione, moltiplicandosi.
  */
 class SongMatcher(phoneSongs: List<PhoneSong>) {
 
     private val byTitle: Map<String, List<PhoneSong>> = phoneSongs.groupBy { fullKey(it.title) }
     private val byBareTitle: Map<String, List<PhoneSong>> = phoneSongs.groupBy { bareKey(it.title) }
+    private val byAsciiTitle: Map<String, List<PhoneSong>> =
+        phoneSongs.groupBy { asciiKey(it.title) }.filterKeys { it.length >= MIN_ASCII_KEY }
+    private val byAsciiBareTitle: Map<String, List<PhoneSong>> =
+        phoneSongs.groupBy { asciiKey(bareTitle(it.title)) }.filterKeys { it.length >= MIN_ASCII_KEY }
 
     fun isOnPhone(track: Track): Boolean = find(track) != null
 
@@ -49,7 +67,21 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
         byBareTitle[bareKey(title)]?.let { candidates ->
             candidates.filter { closeDuration(it.durationMs, durationMs) }.minByOrNull { abs(it.durationMs - durationMs) }?.let { return it }
         }
+        for ((index, key) in listOf(byAsciiTitle to asciiKey(title), byAsciiBareTitle to asciiKey(bareTitle(title)))) {
+            if (key.length < MIN_ASCII_KEY) continue
+            index[key]?.filter { closeDuration(it.durationMs, durationMs) }
+                ?.minByOrNull { abs(it.durationMs - durationMs) }
+                ?.let { return it }
+        }
         return null
+    }
+
+    /** Tutti i brani dell'elenco che corrispondono, non solo il migliore: servono per i doppioni. */
+    fun findAll(title: String, artist: String, durationMs: Long): List<PhoneSong> {
+        val best = find(title, artist, durationMs) ?: return emptyList()
+        val key = asciiKey(bareTitle(best.title)).ifEmpty { bareKey(best.title) }
+        val pool = byAsciiBareTitle[key] ?: byBareTitle[bareKey(best.title)] ?: listOf(best)
+        return (listOf(best) + pool.filter { it !== best && abs(it.durationMs - best.durationMs) <= SAME_RECORDING_MS }).distinct()
     }
 
     private fun closeDuration(a: Long, b: Long): Boolean =
@@ -70,6 +102,10 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
 
     companion object {
         const val DURATION_TOLERANCE_MS = 3_000L
+        /** Due file dello stesso brano (FLAC e sua copia MP3, o due copie) differiscono di pochi centesimi. */
+        const val SAME_RECORDING_MS = 1_500L
+        /** Sotto questa lunghezza lo scheletro ASCII non distingue abbastanza: "a", "01"… */
+        private const val MIN_ASCII_KEY = 4
 
         private val brackets = Regex("\\([^)]*\\)|\\[[^]]*]|\\{[^}]*}")
         private val featTail = Regex("\\s+(feat\\.?|ft\\.?|featuring)\\s.*$", RegexOption.IGNORE_CASE)
@@ -84,7 +120,29 @@ class SongMatcher(phoneSongs: List<PhoneSong>) {
         fun fullKey(title: String): String = compact(title)
 
         fun bareKey(title: String): String =
-            compact(title.replace(brackets, " ").replace(featTail, "")).ifEmpty { compact(title) }
+            compact(bareTitle(title)).ifEmpty { compact(title) }
+
+        fun bareTitle(title: String): String =
+            title.replace(brackets, " ").replace(featTail, "").ifBlank { title }
+
+        /**
+         * Solo lettere e cifre ASCII, minuscole. Non si scompongono gli accenti
+         * apposta: una lettera accentata e la sua versione storpiata da una
+         * codifica sbagliata spariscono entrambe, e il resto del titolo combacia.
+         */
+        fun asciiKey(s: String): String =
+            s.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }
+
+        /** Lo stesso brano, per quanto si possa dire dai tag: titolo, artista compatibile, durata. */
+        fun sameSong(a: Track, b: Track): Boolean {
+            if (a.durationMs > 0 && b.durationMs > 0 && abs(a.durationMs - b.durationMs) > SAME_RECORDING_MS) return false
+            val titles = fullKey(a.title) == fullKey(b.title) ||
+                asciiKey(a.title).let { it.length >= MIN_ASCII_KEY && it == asciiKey(b.title) }
+            if (!titles) return false
+            val pa = compact(primaryArtist(a.artist))
+            val pb = compact(primaryArtist(b.artist))
+            return pa.isEmpty() || pb.isEmpty() || pa == pb || compact(a.artist).contains(pb) || compact(b.artist).contains(pa)
+        }
 
         fun primaryArtist(artist: String): String = artist.split(artistSplit).firstOrNull().orEmpty()
 

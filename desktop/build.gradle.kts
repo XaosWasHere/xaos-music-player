@@ -1,7 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /** La versione dell'app desktop: da qui la prendono l'installer e la schermata Informazioni. */
-val appVersion = "1.2.1"
+val appVersion = "1.3.0"
 
 plugins {
     kotlin("jvm") version "2.4.20"
@@ -77,6 +77,14 @@ val prepareVlc by tasks.registering(Copy::class) {
     from("$vlcDir/plugins") {
         vlcAudioPluginDirs.forEach { include("$it/**") }
         include("access/libfilesystem_plugin.dll")
+        // Per disegnare le onde del brano: VLC lo converte in un WAV leggero,
+        // molto più in fretta del tempo reale.
+        include(
+            "stream_out/libstream_out_transcode_plugin.dll",
+            "stream_out/libstream_out_standard_plugin.dll",
+            "mux/libmux_wav_plugin.dll",
+            "access_output/libaccess_output_file_plugin.dll",
+        )
         vlcAudioCodecs.forEach { include("codec/lib${it}_plugin.dll") }
         exclude("**/plugins.dat")
         into("plugins")
@@ -95,6 +103,36 @@ val prepareVlc by tasks.registering(Copy::class) {
 val prepareAdb by tasks.registering(Copy::class) {
     from(platformToolsDir) { include("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll", "libwinpthread-1.dll") }
     into(bundledResources.map { it.dir("common/adb") })
+}
+
+/*
+ * Il ponte con i controlli multimediali di Windows (riquadro audio, tasti
+ * multimediali): un programmino C# compilato con il csc di .NET Framework,
+ * che c'è su ogni Windows. Su un PC senza, l'app si costruisce lo stesso e
+ * semplicemente non ha quei controlli.
+ */
+val buildMediaBridge by tasks.registering(Exec::class) {
+    val framework = File(System.getenv("WINDIR") ?: "C:/Windows", "Microsoft.NET/Framework64/v4.0.30319")
+    val winmd = File(System.getenv("WINDIR") ?: "C:/Windows", "System32/WinMetadata")
+    val source = file("src/native/XaosMedia.cs")
+    val icon = file("src/main/resources/xaos.ico")
+    val out = bundledResources.map { it.file("common/media/XaosMedia.exe") }
+    inputs.files(source, icon)
+    outputs.file(out)
+    onlyIf { File(framework, "csc.exe").isFile }
+    doFirst { out.get().asFile.parentFile.mkdirs() }
+    executable = File(framework, "csc.exe").path
+    args(
+        "-nologo", "-target:winexe", "-optimize",
+        "-out:" + out.get().asFile.path,
+        "-win32icon:" + icon.path,
+        "-r:" + File(winmd, "Windows.Media.winmd").path,
+        "-r:" + File(winmd, "Windows.Storage.winmd").path,
+        "-r:" + File(winmd, "Windows.Foundation.winmd").path,
+        "-r:" + File(framework, "System.Runtime.dll").path,
+        "-r:" + File(framework, "System.Runtime.InteropServices.WindowsRuntime.dll").path,
+        source.path,
+    )
 }
 
 val prepareLicenses by tasks.registering {
@@ -120,7 +158,7 @@ val prepareLicenses by tasks.registering {
 }
 
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
-    dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses)
+    dependsOn(prepareAndroidApk, prepareVlc, prepareAdb, prepareLicenses, buildMediaBridge)
 }
 
 compose.desktop {
@@ -130,8 +168,9 @@ compose.desktop {
 
         nativeDistributions {
             appResourcesRootDir.set(bundledResources)
-            // jdk.unsupported serve a JNA (vlcj), java.logging a jaudiotagger.
-            modules("java.instrument", "jdk.unsupported", "java.logging")
+            // jdk.unsupported serve a JNA (vlcj), java.logging a jaudiotagger,
+            // java.net.http alle ricerche in rete (testi su LRCLIB, aggiornamenti).
+            modules("java.instrument", "jdk.unsupported", "java.logging", "java.net.http")
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Xaos"
             packageVersion = appVersion

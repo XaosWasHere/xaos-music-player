@@ -7,6 +7,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,6 +77,9 @@ fun FullscreenPlayer(
     background: FullscreenBackground,
     onBackgroundChange: (FullscreenBackground) -> Unit,
     onClose: () -> Unit,
+    lyricsOpen: Boolean,
+    onToggleLyrics: () -> Unit,
+    onEditLyrics: (Track) -> Unit,
 ) {
     val colors = Xaos.colors
     val current by player.current.collectAsState()
@@ -92,10 +99,12 @@ fun FullscreenPlayer(
     Box(Modifier.fillMaxSize().background(colors.background)) {
         when (background) {
             FullscreenBackground.ARTWORK -> ArtworkWash(track, colors.background)
+            // Le onde non stanno dietro: prendono il posto della barra di avanzamento.
+            FullscreenBackground.WAVEFORM -> Box(Modifier.fillMaxSize().dotGrid(colors.dot.copy(alpha = colors.dot.alpha * 0.6f), spacing = 20.dp))
             FullscreenBackground.OFF -> Box(Modifier.fillMaxSize().dotGrid(colors.dot.copy(alpha = colors.dot.alpha * 0.6f), spacing = 20.dp))
             else -> DotMatrix(
                 colors = artColors,
-                animated = background == FullscreenBackground.ANIMATED,
+                animated = false,
                 isPlaying = isPlaying,
                 baseDot = colors.dot,
                 backdrop = colors.background,
@@ -134,13 +143,39 @@ fun FullscreenPlayer(
             // ---- copertina e informazioni
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val art = minOf(maxHeight * 0.86f, maxWidth * 0.42f)
+                val narrowArt = minOf(art, maxWidth * 0.32f)
                 Row(
                     Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ArtworkImage(track, size = art, corner = 28.dp)
+                    // Col testo aperto la copertina si fa più piccola e lascia spazio alle righe.
+                    ArtworkImage(track, size = if (lyricsOpen) narrowArt else art, corner = 28.dp)
                     Spacer(Modifier.width(56.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (lyricsOpen) {
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        track?.title ?: "Niente in riproduzione",
+                                        style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp),
+                                        color = colors.ink,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        track?.artist ?: "",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = if (colors.isDark) colors.accentInk else colors.inkSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                if (track != null) FavoriteButton(track, size = 44.dp)
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            LyricsView(player, track, Modifier.weight(1f).fillMaxWidth(), large = true, onEdit = onEditLyrics)
+                        }
+                    } else Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             AccentDot(size = 7.dp, color = if (isPlaying) colors.accent else colors.inkTertiary)
                             Spacer(Modifier.width(10.dp))
@@ -150,13 +185,20 @@ fun FullscreenPlayer(
                                 color = colors.inkSecondary,
                             )
                         }
-                        Text(
-                            track?.title ?: "Niente in riproduzione",
-                            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 44.sp, lineHeight = 52.sp),
-                            color = colors.ink,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                track?.title ?: "Niente in riproduzione",
+                                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 44.sp, lineHeight = 52.sp),
+                                color = colors.ink,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (track != null) {
+                                Spacer(Modifier.width(16.dp))
+                                FavoriteButton(track, size = 48.dp)
+                            }
+                        }
                         Text(
                             track?.artist ?: "",
                             style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
@@ -183,7 +225,19 @@ fun FullscreenPlayer(
             }
 
             // ---- avanzamento e comandi
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (background == FullscreenBackground.WAVEFORM) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(formatDuration(position), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.width(64.dp).padding(bottom = 22.dp))
+                    WaveformBar(player, track, position, duration, Modifier.weight(1f).height(150.dp))
+                    Text(
+                        formatDuration(duration),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.inkSecondary,
+                        modifier = Modifier.width(64.dp).padding(start = 14.dp, bottom = 22.dp),
+                    )
+                }
+            } else Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDuration(position), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.width(64.dp))
                 DotSlider(
                     value = if (duration > 0) position.toFloat() / duration else 0f,
@@ -228,6 +282,8 @@ fun FullscreenPlayer(
                     ) { player.cycleRepeat() }
                 }
                 Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+                    BigModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onToggleLyrics)
+                    Spacer(Modifier.width(18.dp))
                     Icon(if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume, "Volume", tint = colors.inkSecondary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     DotSlider(
@@ -254,7 +310,7 @@ private const val VOLUME_STEP = 5
 
 private val FullscreenBackground.icon: ImageVector
     get() = when (this) {
-        FullscreenBackground.ANIMATED -> XaosIcons.GlowAnimated
+        FullscreenBackground.WAVEFORM -> XaosIcons.Waveform
         FullscreenBackground.STATIC -> XaosIcons.GlowStatic
         FullscreenBackground.ARTWORK -> XaosIcons.GlowArtwork
         FullscreenBackground.OFF -> XaosIcons.GlowOff
@@ -287,6 +343,73 @@ private fun BigModeButton(icon: ImageVector, description: String, active: Boolea
         if (active) AccentDot(size = 5.dp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp))
     }
 }
+
+/**
+ * Le onde del brano, alla SoundCloud ma a punti, come la matrice di Nothing:
+ * una colonna per ogni tratto della canzone, alta quanto è forte in quel
+ * punto, con il riflesso sotto. La parte già ascoltata è accesa, il resto
+ * spento, la colonna in corso è d'accento. Fa da barra di avanzamento: un
+ * clic ci porta la riproduzione.
+ */
+@Composable
+private fun WaveformBar(player: Player, track: Track?, position: Long, duration: Long, modifier: Modifier) {
+    val colors = Xaos.colors
+    val bins by produceState<FloatArray?>(null, track?.path, track?.modified) {
+        value = null
+        value = track?.let { xaos.desktop.library.Waveforms.load(it, player) }
+    }
+    // Le colonne crescono da zero quando arrivano le onde di un brano nuovo.
+    val grow by androidx.compose.animation.core.animateFloatAsState(
+        if (bins == null) 0f else 1f,
+        tween(700),
+        label = "wave-grow",
+    )
+    val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    Canvas(
+        modifier
+            .pointerHoverIcon(androidx.compose.ui.input.pointer.PointerIcon.Hand)
+            .pointerInput(duration) {
+                detectTapGestures { offset -> if (duration > 0) player.seekTo(offset.x / size.width) }
+            },
+    ) {
+        val step = 7.dp.toPx().let { kotlin.math.round(it) }
+        val r = 1.4.dp.toPx()
+        val baseline = size.height * 0.74f
+        val up = size.height * 0.74f - r
+        val down = size.height * 0.26f - r
+        val columns = (size.width / step).toInt()
+        val startX = (size.width - (columns - 1) * step) / 2f
+        val playedColumns = progress * columns
+        val data = bins
+        for (c in 0 until columns) {
+            val x = startX + c * step
+            val v = if (data == null) 0f else {
+                // Si campiona il valore più alto fra quelli che cadono nella colonna.
+                val from = (c.toFloat() / columns * data.size).toInt()
+                val to = (((c + 1).toFloat() / columns) * data.size).toInt().coerceAtLeast(from + 1).coerceAtMost(data.size)
+                var m = 0f
+                for (i in from until to) m = maxOf(m, data[i])
+                m * grow
+            }
+            val played = c < playedColumns
+            val head = c == playedColumns.toInt()
+            val color = when {
+                head -> colors.accent
+                played -> colors.ink.copy(alpha = 0.85f)
+                else -> colors.ink.copy(alpha = 0.18f)
+            }
+            // Sopra: dal basso verso l'alto, almeno un punto anche nel silenzio.
+            val upDots = (v * up / step).toInt().coerceAtLeast(1)
+            for (d in 0 until upDots) drawCircle(color, r, Offset(x, baseline - d * step))
+            // Sotto: il riflesso, più corto e più tenue.
+            val downDots = (v * down / step).toInt()
+            for (d in 1..downDots) {
+                drawCircle(color.copy(alpha = color.alpha * (0.45f - 0.3f * d / (downDots + 1))), r, Offset(x, baseline + d * step))
+            }
+        }
+    }
+}
+
 
 /** La copertina a tutto schermo, velata e sfumata nel fondo in alto e in basso. */
 @Composable

@@ -10,7 +10,8 @@ import java.io.File
 /** Lo sfondo del player a schermo intero: le stesse scelte del telefono. */
 @Serializable
 enum class FullscreenBackground(val label: String) {
-    ANIMATED("ANIMATA"),
+    /** Le onde di tutto il brano, alla SoundCloud, che si accendono man mano. */
+    WAVEFORM("ONDE"),
     STATIC("FISSA"),
     ARTWORK("COPERTINA"),
     OFF("SPENTA"),
@@ -42,7 +43,7 @@ data class SettingsData(
     val equalizer: EqualizerSettings = EqualizerSettings(),
     /** Il dispositivo d'uscita audio; null = quello predefinito di Windows. */
     val outputDevice: String? = null,
-    val fullscreenBackground: FullscreenBackground = FullscreenBackground.ANIMATED,
+    val fullscreenBackground: FullscreenBackground = FullscreenBackground.WAVEFORM,
     /** Dove finiscono i brani scaricati; null = "Xaos" dentro la prima cartella della libreria. */
     val downloadFolder: String? = null,
     /** Dove finiscono i brani importati dal telefono; null = "Dal telefono" nella prima cartella. */
@@ -72,7 +73,9 @@ data class SettingsData(
  */
 class Settings(private val file: File) {
 
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+    // coerceInputValues: un valore che non esiste più (lo sfondo "animata",
+    // per esempio) torna al predefinito invece di far perdere tutte le impostazioni.
+    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true; coerceInputValues = true }
 
     private val _data = MutableStateFlow(read())
     val data: StateFlow<SettingsData> = _data.asStateFlow()

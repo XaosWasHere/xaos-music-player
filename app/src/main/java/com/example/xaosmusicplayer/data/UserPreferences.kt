@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
@@ -193,7 +194,71 @@ class UserPreferences(private val context: Context) {
     }
 
     suspend fun clearHistory() {
-        context.dataStore.edit { it.remove(KEY_PLAY_EVENTS) }
+        context.dataStore.edit {
+            it.remove(KEY_PLAY_EVENTS)
+            // Il PC deve saperlo, altrimenti alla prossima sincronizzazione
+            // rimanderebbe indietro tutti gli ascolti appena cancellati.
+            it[KEY_HISTORY_CLEARED_AT] = System.currentTimeMillis()
+        }
+    }
+
+    // ---------- Sincronizzazione con Xaos desktop ----------
+
+    /** Preferiti, playlist e ascolti così come sono ora, con la loro impronta. */
+    data class SyncSnapshot(
+        val favorites: Set<Long>,
+        val playlists: List<Playlist>,
+        val events: List<PlayEvent>,
+        val historyClearedAt: Long,
+        val stamp: String,
+    )
+
+    suspend fun syncSnapshot(): SyncSnapshot {
+        val prefs = context.dataStore.data.first()
+        return SyncSnapshot(
+            favorites = prefs[KEY_FAVORITES].toLongSet(),
+            playlists = parsePlaylists(prefs[KEY_PLAYLISTS]),
+            events = parseEvents(prefs[KEY_PLAY_EVENTS]),
+            historyClearedAt = prefs[KEY_HISTORY_CLEARED_AT] ?: 0L,
+            stamp = stampOf(prefs),
+        )
+    }
+
+    /**
+     * Sostituisce preferiti, playlist e ascolti con quelli calcolati dal PC, ma
+     * solo se da quando il PC li ha letti ([expectedStamp]) non è cambiato
+     * niente: una modifica fatta in quell'istante non va persa. Restituisce
+     * false se i dati erano cambiati.
+     */
+    suspend fun applySync(
+        expectedStamp: String,
+        favorites: Set<Long>,
+        playlists: List<Playlist>,
+        events: List<PlayEvent>,
+        historyClearedAt: Long,
+    ): Boolean {
+        var applied = false
+        context.dataStore.edit { prefs ->
+            if (stampOf(prefs) != expectedStamp) return@edit
+            prefs[KEY_FAVORITES] = favorites.toJsonArrayString()
+            prefs[KEY_PLAYLISTS] = serializePlaylists(playlists)
+            prefs[KEY_PLAY_EVENTS] = serializeEvents(events.sortedBy { it.timestampMs }.takeLast(MAX_EVENTS))
+            prefs[KEY_HISTORY_CLEARED_AT] = historyClearedAt
+            applied = true
+        }
+        return applied
+    }
+
+    /** L'impronta dei dati sincronizzati: cambia con qualunque modifica. */
+    private fun stampOf(prefs: Preferences): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-1")
+        listOf(
+            prefs[KEY_FAVORITES].orEmpty(),
+            prefs[KEY_PLAYLISTS].orEmpty(),
+            prefs[KEY_PLAY_EVENTS].orEmpty(),
+            (prefs[KEY_HISTORY_CLEARED_AT] ?: 0L).toString(),
+        ).forEach { digest.update(it.toByteArray()); digest.update(0) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     // ---------- Correzioni ai metadati ----------
@@ -403,6 +468,7 @@ class UserPreferences(private val context: Context) {
         private val KEY_REPEAT = intPreferencesKey("repeat")
         private val KEY_GLOW_MODE = stringPreferencesKey("glow_mode")
         private val KEY_PLAY_EVENTS = stringPreferencesKey("play_events")
+        private val KEY_HISTORY_CLEARED_AT = androidx.datastore.preferences.core.longPreferencesKey("history_cleared_at")
         private val KEY_OVERRIDES = stringPreferencesKey("song_overrides")
     }
 }

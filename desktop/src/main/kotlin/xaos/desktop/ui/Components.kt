@@ -517,6 +517,38 @@ class TrackActions(
     val onEdit: (xaos.desktop.library.Track) -> Unit,
     val onLyrics: (xaos.desktop.library.Track) -> Unit,
     val onShowInFolder: (xaos.desktop.library.Track) -> Unit,
+    val onToggleFavorite: (xaos.desktop.library.Track) -> Unit,
+    /** Apre la scelta della playlist per questi brani. */
+    val onAddToPlaylist: (List<xaos.desktop.library.Track>) -> Unit,
 )
 
 val LocalTrackActions = androidx.compose.runtime.staticCompositionLocalOf<TrackActions?> { null }
+
+/** I percorsi dei brani preferiti (già risolti sui brani della libreria). */
+val LocalFavorites = androidx.compose.runtime.compositionLocalOf<Set<String>> { emptySet() }
+
+/** Il cuore dei preferiti: pieno e d'accento se il brano è fra i preferiti. */
+@Composable
+fun FavoriteButton(
+    track: xaos.desktop.library.Track,
+    modifier: Modifier = Modifier,
+    size: Dp = 30.dp,
+    visible: Boolean = true,
+) {
+    val c = Xaos.colors
+    val actions = LocalTrackActions.current ?: return
+    val on = track.path in LocalFavorites.current
+    Box(
+        modifier.size(size).clip(CircleShape).pressable { actions.onToggleFavorite(track) },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (on || visible) {
+            Icon(
+                if (on) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
+                if (on) "Togli dai preferiti" else "Aggiungi ai preferiti",
+                tint = if (on) c.accentInk else c.inkSecondary,
+                modifier = Modifier.size(size * 0.56f),
+            )
+        }
+    }
+}

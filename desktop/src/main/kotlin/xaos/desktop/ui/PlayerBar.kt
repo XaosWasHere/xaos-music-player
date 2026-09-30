@@ -35,7 +35,14 @@ import xaos.desktop.theme.Xaos
  * con i controlli a punti e il play nel colore d'accento.
  */
 @Composable
-fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: () -> Unit) {
+fun PlayerBar(
+    player: Player,
+    onVolumeChange: (Int) -> Unit,
+    onOpenFullscreen: () -> Unit,
+    lyricsOpen: Boolean,
+    onToggleLyrics: () -> Unit,
+    onOpenMini: () -> Unit,
+) {
     val colors = Xaos.colors
     val current by player.current.collectAsState()
     val isPlaying by player.isPlaying.collectAsState()
@@ -59,10 +66,13 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: (
                     // Copertina e titolo aprono lo schermo intero, come su Spotify.
                     ArtworkImage(track, size = 58.dp, corner = 10.dp, modifier = Modifier.pressable(onOpenFullscreen))
                     Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f).pressable(onOpenFullscreen)) {
+                    Column(Modifier.weight(1f, fill = false).pressable(onOpenFullscreen)) {
                         Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
+                    Spacer(Modifier.width(8.dp))
+                    FavoriteButton(track, size = 34.dp)
+                    Spacer(Modifier.width(12.dp))
                 } else if (engine == Player.Engine.Starting) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DotSpinner(size = 16.dp)
@@ -147,6 +157,10 @@ fun PlayerBar(player: Player, onVolumeChange: (Int) -> Unit, onOpenFullscreen: (
                     },
                 )
                 Spacer(Modifier.width(14.dp))
+                ModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onToggleLyrics)
+                Spacer(Modifier.width(6.dp))
+                CircleIconButton(XaosIcons.MiniPlayer, "Miniplayer", onOpenMini, size = 34.dp, outlined = false)
+                Spacer(Modifier.width(6.dp))
                 CircleIconButton(XaosIcons.Fullscreen, "Schermo intero", onOpenFullscreen, size = 34.dp)
             }
         }

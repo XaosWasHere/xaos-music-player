@@ -55,6 +55,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Scambio di preferiti, playlist e ascolti con Xaos desktop, via adb.
+             DUMP ce l'hanno solo il sistema e la shell di adb: nessuna app
+             può mandare questi comandi. -->
+        <receiver
+            android:name=".sync.DesktopSyncReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.example.xaosmusicplayer.sync.EXPORT" />
+                <action android:name="com.example.xaosmusicplayer.sync.APPLY" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"

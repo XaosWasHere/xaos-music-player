@@ -15,6 +15,7 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import xaos.desktop.sync.SongMatcher
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
@@ -44,8 +45,17 @@ data class Track(
      * al telefono si può mandare questa, che pesa un quinto.
      */
     @Transient val mobilePath: String? = null,
+    /**
+     * Gli altri file che la libreria ha riconosciuto come questo stesso brano
+     * (la copia MP3, un doppione in un'altra cartella). Preferiti, playlist e
+     * ascolti salvati con uno di questi percorsi valgono per questo brano.
+     */
+    @Transient val aliases: List<String> = emptyList(),
 ) {
     val file: File get() = File(path)
+
+    /** Il percorso principale e tutti quelli dei file uniti a lui. */
+    val allPaths: List<String> get() = listOf(path) + aliases
 }
 
 /** Se accanto al brano c'è un file .lrc con il testo. */
@@ -67,12 +77,22 @@ data class Artist(val name: String, val albums: List<Album>) {
     val trackCount: Int get() = albums.sumOf { it.tracks.size }
 }
 
+/** Un brano presente in più file: quello che la libreria mostra e le copie che nasconde. */
+data class DuplicateGroup(val kept: Track, val copies: List<Track>)
+
 data class LibrarySnapshot(
     val roots: List<File>,
     val tracks: List<Track>,
     val albums: List<Album>,
     val artists: List<Artist>,
+    /** I file doppi nascosti dalla libreria, per poterli ripulire dalle impostazioni. */
+    val duplicates: List<DuplicateGroup> = emptyList(),
 ) {
+    /** Percorso (anche di una copia) → brano mostrato in libreria. */
+    val byPath: Map<String, Track> by lazy {
+        buildMap { tracks.forEach { t -> t.allPaths.forEach { put(it, t) } } }
+    }
+
     companion object {
         val Empty = LibrarySnapshot(emptyList(), emptyList(), emptyList(), emptyList())
     }
@@ -149,7 +169,8 @@ class Library(private val indexFile: File) {
     }
 
     private fun publish(roots: List<File>, all: List<Track>) {
-        val tracks = mergeTwins(all)
+        val duplicates = mutableListOf<DuplicateGroup>()
+        val tracks = mergeDuplicates(mergeTwins(all), duplicates)
         val albums = tracks
             .groupBy { albumKey(it) }
             .map { (key, list) ->
@@ -172,8 +193,57 @@ class Library(private val indexFile: File) {
             .sortedBy { it.name.lowercase() }
 
         val ordered = albums.flatMap { it.tracks }
-        _snapshot.value = LibrarySnapshot(roots, ordered, albums, artists)
+        _snapshot.value = LibrarySnapshot(roots, ordered, albums, artists, duplicates.sortedBy { it.kept.title.lowercase() })
     }
+
+    /**
+     * Unisce i file che sono lo stesso brano dello stesso album, ovunque
+     * stiano: la versione iTunes in M4A accanto al FLAC, la copia tornata dal
+     * telefono accanto all'originale. Si tiene il formato migliore; gli altri
+     * restano sul disco ma non compaiono due volte, e finiscono in
+     * [duplicates] perché l'utente possa decidere se eliminarli.
+     */
+    private fun mergeDuplicates(tracks: List<Track>, duplicates: MutableList<DuplicateGroup>): List<Track> {
+        val result = ArrayList<Track>(tracks.size)
+        tracks.groupBy { albumKey(it) + "|" + songKey(it) }.values.forEach { group ->
+            if (group.size == 1) { result += group.first(); return@forEach }
+            val clusters = mutableListOf<MutableList<Track>>()
+            group.sortedWith(preference).forEach { t ->
+                clusters.firstOrNull { SongMatcher.sameSong(it.first(), t) }?.add(t) ?: clusters.add(mutableListOf(t))
+            }
+            clusters.forEach { cluster ->
+                var kept = cluster.first()
+                if (cluster.size == 1) { result += kept; return@forEach }
+                // Un MP3 nella sottocartella "MP3" dello stesso album è la copia
+                // per il telefono anche se ha un altro nome: non è un doppione.
+                val twin = cluster.drop(1).firstOrNull { c ->
+                    kept.mobilePath == null && c.mobilePath == null &&
+                        File(c.path).extension.equals("mp3", true) &&
+                        File(c.path).parentFile?.name.equals("mp3", true) &&
+                        collapsedParent(File(c.path)) == File(kept.path).parentFile
+                }
+                if (twin != null) kept = kept.copy(mobilePath = twin.path)
+                val copies = cluster.drop(1).filter { it !== twin }
+                if (copies.isNotEmpty()) duplicates += DuplicateGroup(kept, copies)
+                result += kept.copy(
+                    aliases = kept.aliases + cluster.drop(1).flatMap { it.allPaths },
+                    hasLyrics = cluster.any { it.hasLyrics },
+                )
+            }
+        }
+        return result
+    }
+
+    /** Prima il formato migliore, poi il percorso più corto: di solito è l'originale. */
+    private val preference = compareBy<Track>(
+        { FORMAT_RANK[File(it.path).extension.lowercase()] ?: 50 },
+        { it.path.count { c -> c == File.separatorChar } },
+        { it.path },
+    )
+
+    private fun songKey(track: Track): String =
+        SongMatcher.asciiKey(SongMatcher.bareTitle(track.title)).takeIf { it.length >= 4 }
+            ?: SongMatcher.bareKey(track.title)
 
     /**
      * Unisce le due versioni dello stesso brano: `Album/brano.flac` e
@@ -186,16 +256,22 @@ class Library(private val indexFile: File) {
             if (group.size == 1) return@map group.first()
             val primary = group.minBy { FORMAT_RANK[File(it.path).extension.lowercase()] ?: 50 }
             val mp3 = group.firstOrNull { it !== primary && File(it.path).extension.equals("mp3", true) }
-            primary.copy(mobilePath = mp3?.path, hasLyrics = group.any { it.hasLyrics })
+            primary.copy(
+                mobilePath = mp3?.path,
+                hasLyrics = group.any { it.hasLyrics },
+                aliases = group.filter { it !== primary }.map { it.path },
+            )
         }
 
     /**
-     * Stesso album se stesso titolo e stessa cartella: il solo titolo
-     * confonderebbe due "Greatest Hits" di artisti diversi, il solo artista
-     * spezzerebbe le compilation.
+     * Un album è il suo nome, a prescindere da cartella e artisti: le tracce
+     * dello stesso disco sparse in più cartelle (iTunes, la copia tornata dal
+     * telefono) o con artisti diversi (colonne sonore, featuring) restano un
+     * album solo. Maiuscole e punteggiatura non contano: "Clair Obscur:
+     * Expedition 33" e "Clair Obscur_ Expedition 33" sono lo stesso disco.
      */
     private fun albumKey(track: Track): String =
-        track.album.lowercase() + "|" + (collapsedParent(File(track.path))?.path ?: "")
+        SongMatcher.compact(track.album).ifEmpty { track.album.trim().lowercase() }
 
     private fun readTrack(file: File): Track? = runCatching {
         val audio = AudioFileIO.read(file)

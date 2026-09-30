@@ -42,6 +42,8 @@ import xaos.desktop.library.Library
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.draw.rotate
 import xaos.desktop.sync.SyncStatus
+import xaos.desktop.sync.DataSync
+import xaos.desktop.sync.DataSyncStatus
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 import java.util.Locale
@@ -49,6 +51,7 @@ import java.util.Locale
 @Composable
 fun PhoneScreen(
     phone: PhoneSync,
+    dataSync: DataSync,
     snapshot: LibrarySnapshot,
     preferMp3: Boolean,
     phoneFolder: String,
@@ -156,6 +159,7 @@ fun PhoneScreen(
                         onLaunch = phone::launchApp,
                         onDismiss = phone::dismissInstall,
                     )
+                    DataSyncCard(dataSync, onSync = { dataSync.run(snapshot, roots) })
                     ConnectedPanel(
                         state = s,
                         remoteRoot = phone.remoteRoot,
@@ -868,6 +872,70 @@ private fun ConfirmInstallDialog(
         confirmButton = { PillButton(if (isUpdate) "AGGIORNA" else "INSTALLA", onClick = onConfirm, filled = true) },
         dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
     )
+}
+
+/**
+ * Preferiti, playlist e ascolti: si scambiano da soli appena il telefono è
+ * collegato; il bottone serve a rifarlo subito dopo una modifica.
+ */
+@Composable
+private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
+    val colors = Xaos.colors
+    val status by dataSync.status.collectAsState()
+    Row(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(XaosIcons.Favorite, null, tint = colors.ink, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("PREFERITI · PLAYLIST · ASCOLTI", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            when (val st = status) {
+                DataSyncStatus.Idle -> Text("Si scambiano nei due sensi a ogni collegamento.", style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
+                DataSyncStatus.NoApp -> Text("Serve Xaos anche sul telefono: installalo qui sopra.", style = MaterialTheme.typography.bodySmall, color = colors.inkSecondary)
+                DataSyncStatus.NeedsAppUpdate -> Text(
+                    "L'app sul telefono è troppo vecchia per scambiare questi dati: aggiornala qui sopra (restano tutti).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.accentInk,
+                )
+                is DataSyncStatus.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    DotSpinner(size = 12.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(st.step, style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+                }
+                is DataSyncStatus.Done -> {
+                    val r = st.report
+                    val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+                        .format(java.time.Instant.ofEpochMilli(st.at).atZone(java.time.ZoneId.systemDefault()))
+                    Text(
+                        if (r.nothingChanged) "ALLINEATI ALLE $time · [${r.playlists}] PLAYLIST IN COMUNE"
+                        else buildList {
+                            if (r.favoritesToPc > 0) add("+${r.favoritesToPc} PREFERITI SUL PC")
+                            if (r.favoritesToPhone > 0) add("+${r.favoritesToPhone} SUL TELEFONO")
+                            if (r.favoritesRemoved > 0) add("${r.favoritesRemoved} TOLTI")
+                            if (r.playsToPc > 0) add("${r.playsToPc} ASCOLTI → PC")
+                            if (r.playsToPhone > 0) add("${r.playsToPhone} → TELEFONO")
+                            add("[${r.playlists}] PLAYLIST")
+                        }.joinToString(" · ", prefix = "SINCRONIZZATI ALLE $time · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkSecondary,
+                    )
+                    if (r.unmatched > 0) {
+                        Text(
+                            "${r.unmatched} preferiti riguardano brani che ci sono solo da una parte: restano dove sono.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.inkTertiary,
+                        )
+                    }
+                }
+                is DataSyncStatus.Failed -> Text("NON RIUSCITO · ${st.message}", style = MaterialTheme.typography.labelSmall, color = colors.accentInk)
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        PillButton(
+            "SINCRONIZZA ORA",
+            onClick = onSync,
+            icon = XaosIcons.Sync,
+            enabled = status !is DataSyncStatus.Running && status != DataSyncStatus.NeedsAppUpdate && status != DataSyncStatus.NoApp,
+        )
+    }
 }
 
 /**
