@@ -2,7 +2,7 @@
 
 A music player for Android and Windows, designed after Nothing OS: black and white, dot-matrix type, a single red (or yellow) accent, and nothing that does not need to be there.
 
-The phone app plays your local library. The desktop app is where the library lives: it plays it, edits it, and sends it to the phone over USB. Favorites, playlists, listening history and your custom theme stay in sync between the two.
+The phone app plays your local library. The desktop app is where the library lives: it plays it, edits it, and sends it to the phone over USB. Favorites, playlists, listening history and theme presets stay in sync between the two.
 
 **[Download the latest release](https://github.com/XaosWasHere/xaos-music-player/releases/latest)**
 
@@ -19,7 +19,8 @@ The phone app plays your local library. The desktop app is where the library liv
 - Equalizer, bass boost, virtualizer, preamp and a sleep timer.
 - Search and download from YouTube with yt-dlp, saved as tagged MP3 with cover art.
 - Metadata editing inside the app.
-- Light and dark theme, or a custom theme: pick the background (plain or gradient), panels, text and accent colors, and turn the background dots on or off.
+- Light and dark theme, or a custom theme: pick the background (plain or gradient), panels, text and accent colors, and turn the background dots on or off. Save your themes as named presets.
+- Settings one tap away: the gear at the top right of every section.
 
 ### Windows
 
@@ -34,7 +35,7 @@ The phone app plays your local library. The desktop app is where the library liv
 - Search and download from YouTube; Xaos keeps its own yt-dlp up to date. Downloaded songs get their lyrics automatically when LRCLIB has a version with the same duration.
 - Windows media controls: taskbar thumbnail buttons, the system media flyout and the keyboard media keys.
 - Equalizer, output device choice, adjustable interface size.
-- Light and dark theme, or a custom theme with a live color picker: background (plain or gradient), panels, text, accent and background dots.
+- Light and dark theme, or a custom theme with a live color picker: background (plain or gradient), panels, text, accent and background dots. Save your themes as named presets.
 - Only one copy runs at a time.
 
 ### Sync over USB
@@ -45,7 +46,7 @@ Plug the phone in with USB debugging enabled and open the Phone screen.
 - **Import from phone**: copies to the PC the music that only exists on the phone.
 - **Lyrics**: lyrics added on the PC can be written into the phone's copies.
 - **Favorites, playlists and listening history**: exchanged both ways at every connection. Each side keeps its own changes, and a playlist deleted on one side disappears from the other.
-- **Custom theme**: the colors chosen on one side show up on the other. If both changed since the last sync, the phone wins.
+- **Themes**: named presets sync both ways, like playlists. The theme in use stays on each device; from the Phone screen you choose whether to copy the PC's theme to the phone or the other way round.
 - **App install and updates**: the desktop app carries the Android app and offers to install or update it on the phone.
 
 ## Requirements
