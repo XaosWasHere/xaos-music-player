@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -158,7 +159,7 @@ fun MiniPlayerCard(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -177,7 +178,7 @@ fun MiniPlayerCard(
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         DotSlider(
             value = if (duration > 0) position.toFloat() / duration else 0f,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -186,14 +187,21 @@ fun MiniPlayerCard(
         )
         Spacer(Modifier.height(6.dp))
         Row(
-            Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            Modifier.fillMaxWidth().padding(bottom = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeButton(XaosIcons.Shuffle, "Casuale", shuffle, size = 30.dp) { player.toggleShuffle() }
             CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, size = 34.dp, outlined = false)
+            // Tondo per costruzione: se in altezza ci fosse meno spazio del
+            // previsto il diametro si riduce, invece di schiacciarsi in un ovale.
             Box(
-                Modifier.size(44.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { player.togglePlayPause() },
+                Modifier
+                    .heightIn(max = 44.dp)
+                    .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                    .clip(CircleShape)
+                    .background(colors.accent, CircleShape)
+                    .pressable { player.togglePlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
                 PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 22.dp)
