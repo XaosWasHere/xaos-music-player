@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,8 +38,9 @@ import xaos.desktop.theme.Xaos
 /**
  * Il miniplayer: la stessa card degli album — copertina quadrata, titolo in
  * maiuscolo, artista sotto — con i comandi essenziali e l'avanzamento a punti.
- * Sulla copertina, col mouse sopra, i pulsanti per tornare alla finestra
- * intera o chiudere. Si trascina da qualunque punto.
+ * Sulla copertina, col mouse sopra, i pulsanti (testo, finestra intera) e il
+ * volume; la rotella regola il volume da tutta la card. Si trascina da
+ * qualunque punto.
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -47,6 +49,10 @@ fun MiniPlayerCard(
     onExpand: () -> Unit,
     showLyrics: Boolean,
     onToggleLyrics: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    /** Il volume scelto, da salvare nelle impostazioni. */
+    onVolumeChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = Xaos.colors
@@ -54,6 +60,8 @@ fun MiniPlayerCard(
     val isPlaying by player.isPlaying.collectAsState()
     val position by player.positionMs.collectAsState()
     val duration by player.durationMs.collectAsState()
+    val volume by player.volume.collectAsState()
+    val shuffle by player.shuffle.collectAsState()
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
 
@@ -63,6 +71,20 @@ fun MiniPlayerCard(
             // del sistema, così il trascinamento della card resta libero.
             .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) { event: androidx.compose.ui.input.pointer.PointerEvent ->
                 if ((event.nativeEvent as? java.awt.event.MouseEvent)?.clickCount == 2) onExpand()
+            }
+            // La rotella ovunque sulla card regola il volume, cinque punti per
+            // scatto come nella barra. Se l'ha già usata qualcun altro (il testo
+            // senza tempi, che scorre) la si lascia a lui.
+            .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Scroll) { event: androidx.compose.ui.input.pointer.PointerEvent ->
+                val change = event.changes.firstOrNull() ?: return@onPointerEvent
+                if (change.isConsumed) return@onPointerEvent
+                val dy = change.scrollDelta.y
+                if (dy != 0f) {
+                    val v = (player.volume.value - (dy * 5).toInt()).coerceIn(0, 100)
+                    player.setVolume(v)
+                    onVolumeChange(v)
+                    change.consume()
+                }
             }
             .shadow(18.dp, CardShape)
             // La card del tema è velata, pensata per stare sullo sfondo dell'app:
@@ -99,6 +121,41 @@ fun MiniPlayerCard(
                     )
                     OverlayButton(XaosIcons.Fullscreen, "Torna a Xaos (anche con doppio clic)", onExpand)
                 }
+                // Il volume, sopra la copertina: compare solo col mouse sulla
+                // card, così il miniplayer non cresce di un millimetro.
+                Row(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp)
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(colors.background.copy(alpha = 0.82f))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume,
+                        "Volume",
+                        tint = colors.inkSecondary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    DotSlider(
+                        value = volume / 100f,
+                        modifier = Modifier.weight(1f),
+                        color = colors.ink,
+                        onChange = { player.setVolume((it * 100).toInt()) },
+                        onChangeFinished = { onVolumeChange((it * 100).toInt()) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "$volume",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.width(22.dp),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -133,7 +190,8 @@ fun MiniPlayerCard(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, size = 38.dp, outlined = false)
+            ModeButton(XaosIcons.Shuffle, "Casuale", shuffle, size = 30.dp) { player.toggleShuffle() }
+            CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, size = 34.dp, outlined = false)
             Box(
                 Modifier.size(44.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { player.togglePlayPause() },
                 contentAlignment = Alignment.Center,
@@ -145,7 +203,20 @@ fun MiniPlayerCard(
                     modifier = Modifier.size(22.dp),
                 )
             }
-            CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 38.dp, outlined = false)
+            CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 34.dp, outlined = false)
+            // Il cuore: lo stesso della barra, ma i preferiti arrivano da fuori
+            // perché questa è un'altra finestra.
+            Box(
+                Modifier.size(30.dp).clip(CircleShape).pressable { if (track != null) onToggleFavorite() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (isFavorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
+                    if (isFavorite) "Togli dai preferiti" else "Aggiungi ai preferiti",
+                    tint = if (isFavorite) colors.accentInk else colors.inkTertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }

@@ -185,7 +185,7 @@ fun PlayerBar(
                     },
                 )
                 Spacer(Modifier.width(14.dp))
-                ModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onToggleLyrics)
+                ModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onClick = onToggleLyrics)
                 Spacer(Modifier.width(6.dp))
                 CircleIconButton(XaosIcons.MiniPlayer, "Miniplayer", onOpenMini, size = 34.dp, outlined = false)
                 Spacer(Modifier.width(6.dp))
@@ -198,11 +198,17 @@ fun PlayerBar(
 
 /** Casuale e ripeti: icona piena e punto d'accento sotto quando sono attivi. */
 @Composable
-private fun ModeButton(icon: ImageVector, description: String, active: Boolean, onClick: () -> Unit) {
+internal fun ModeButton(
+    icon: ImageVector,
+    description: String,
+    active: Boolean,
+    size: androidx.compose.ui.unit.Dp = 36.dp,
+    onClick: () -> Unit,
+) {
     val colors = Xaos.colors
     val tint by animateColorAsState(if (active) colors.ink else colors.inkTertiary, label = "mode")
-    Box(Modifier.size(36.dp).clip(CircleShape).pressable(onClick), contentAlignment = Alignment.Center) {
-        Icon(icon, description, tint = tint, modifier = Modifier.size(18.dp))
+    Box(Modifier.size(size).clip(CircleShape).pressable(onClick), contentAlignment = Alignment.Center) {
+        Icon(icon, description, tint = tint, modifier = Modifier.size(size / 2))
         if (active) AccentDot(size = 4.dp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp))
     }
 }

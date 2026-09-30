@@ -244,6 +244,7 @@ private fun runApp() = application {
             icon = appIcon,
             onExpand = ::expandFromMini,
             scope = scope,
+            userData = userData,
         )
     }
 }
@@ -260,8 +261,12 @@ private fun MiniPlayerWindow(
     icon: BitmapPainter,
     onExpand: () -> Unit,
     scope: kotlinx.coroutines.CoroutineScope,
+    userData: xaos.desktop.library.UserData,
 ) {
     val prefs by settings.data.collectAsState()
+    val track by player.current.collectAsState()
+    val userState by userData.state.collectAsState()
+    val isFavorite = track?.let { userData.isFavorite(it, userState) } ?: false
     val width = 232.dp * prefs.uiScale
     // Card quadrata più titolo e comandi, più il margine per l'ombra.
     val height = 346.dp * prefs.uiScale
@@ -300,6 +305,9 @@ private fun MiniPlayerWindow(
                         onExpand = onExpand,
                         showLyrics = prefs.miniShowsLyrics,
                         onToggleLyrics = { settings.update { it.copy(miniShowsLyrics = !it.miniShowsLyrics) } },
+                        isFavorite = isFavorite,
+                        onToggleFavorite = { track?.let(userData::toggleFavorite) },
+                        onVolumeChange = { v -> settings.update { it.copy(volume = v) } },
                         modifier = androidx.compose.ui.Modifier.padding(12.dp),
                     )
                 }
