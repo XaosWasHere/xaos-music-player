@@ -60,7 +60,6 @@ import com.example.xaosmusicplayer.ui.screens.EditAlbumScreen
 import com.example.xaosmusicplayer.ui.screens.EditSongScreen
 import com.example.xaosmusicplayer.ui.screens.EqualizerScreen
 import com.example.xaosmusicplayer.ui.screens.HomeScreen
-import com.example.xaosmusicplayer.ui.screens.LibraryMenuAction
 import com.example.xaosmusicplayer.ui.screens.LibraryScreen
 import com.example.xaosmusicplayer.ui.screens.NowPlayingScreen
 import com.example.xaosmusicplayer.ui.screens.PlaylistsScreen
@@ -79,6 +78,7 @@ import com.example.xaosmusicplayer.ui.theme.ThemeStore
 import com.example.xaosmusicplayer.ui.theme.CustomTheme
 import com.example.xaosmusicplayer.ui.theme.customized
 import com.example.xaosmusicplayer.ui.screens.ThemeScreen
+import com.example.xaosmusicplayer.ui.screens.SettingsScreen
 import com.example.xaosmusicplayer.ui.theme.XaosMusicPlayerTheme
 import android.graphics.drawable.ColorDrawable
 import androidx.activity.SystemBarStyle
@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
             val custom by themeStore.custom.collectAsStateWithLifecycle()
             LaunchedEffect(dark, custom) { applySystemBars(dark, custom) }
             XaosMusicPlayerTheme(darkTheme = dark, custom = custom) {
-                XaosApp(isDark = dark, onToggleTheme = themeStore::toggle)
+                XaosApp()
             }
         }
     }
@@ -135,6 +135,7 @@ private sealed interface Destination {
     data object Playlists : Destination
     data object Equalizer : Destination
     data object Theme : Destination
+    data object Settings : Destination
     data object Queue : Destination
     data class EditSong(val songId: Long) : Destination
     data class EditAlbum(val albumId: Long, val title: String) : Destination
@@ -148,8 +149,6 @@ private enum class AutoPlaylistKind(val title: String) {
 
 @Composable
 private fun XaosApp(
-    isDark: Boolean,
-    onToggleTheme: () -> Unit,
     viewModel: PlayerViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -204,6 +203,8 @@ private fun XaosApp(
     var albumMenuTarget by remember { mutableStateOf<Album?>(null) }
     var addToPlaylistTarget by remember { mutableStateOf<Song?>(null) }
     var sleepSheetOpen by remember { mutableStateOf(false) }
+    // L'ingranaggio di ogni sezione: le impostazioni una volta sola in cima alla pila.
+    val openSettings = { if (backStack.lastOrNull() != Destination.Settings) backStack += Destination.Settings }
 
     // ---------- Eliminazione ----------
 
@@ -360,8 +361,7 @@ private fun XaosApp(
                             backStack += Destination.AutoPlaylist(AutoPlaylistKind.LEAST_PLAYED)
                         },
                         onExportRecap = viewModel::exportYearlyRecap,
-                        isDark = isDark,
-                        onToggleTheme = onToggleTheme,
+                        onOpenSettings = openSettings,
                     )
 
                     Section.LIBRARY -> LibraryScreen(
@@ -377,19 +377,7 @@ private fun XaosApp(
                         onAlbumClick = { backStack += Destination.Album(it.id, it.title) },
                         onAlbumLongClick = { albumMenuTarget = it },
                         onArtistClick = { backStack += Destination.Artist(it.name) },
-                        onMenuAction = { action ->
-                            when (action) {
-                                LibraryMenuAction.PLAYLISTS -> selectSection(Section.PLAYLISTS)
-                                LibraryMenuAction.FAVORITES -> backStack += Destination.Favorites
-                                LibraryMenuAction.EQUALIZER -> backStack += Destination.Equalizer
-                                LibraryMenuAction.SLEEP_TIMER -> sleepSheetOpen = true
-                                LibraryMenuAction.RESCAN -> viewModel.refresh()
-                                LibraryMenuAction.UPDATE_ENGINE -> viewModel.updateEngine()
-                                LibraryMenuAction.THEME -> onToggleTheme()
-                                LibraryMenuAction.CUSTOM_THEME -> backStack += Destination.Theme
-                            }
-                        },
-                        isDark = isDark,
+                        onOpenSettings = openSettings,
                         onRequestPermission = { requestLibraryPermissions() },
                     )
 
@@ -401,6 +389,7 @@ private fun XaosApp(
                         onOpen = { backStack += Destination.PlaylistDetail(it.id, it.name) },
                         onCreate = { viewModel.createPlaylist(it) },
                         onDelete = { viewModel.deletePlaylist(it.id) },
+                        onOpenSettings = openSettings,
                     )
 
                     Section.SEARCH -> SearchScreen(
@@ -422,6 +411,7 @@ private fun XaosApp(
                         onSearchOnline = { viewModel.searchOnline(query) },
                         onDownload = viewModel::downloadTrack,
                         onCancelDownload = viewModel::cancelDownload,
+                        onOpenSettings = openSettings,
                     )
                 }
 
@@ -450,6 +440,9 @@ private fun XaosApp(
                             knownGenres = knownGenres,
                             songOverrides = songOverrides,
                             onSongMenu = { songMenuTarget = it },
+                            sleepRemainingMs = sleepRemaining,
+                            onOpenSleepTimer = { sleepSheetOpen = true },
+                            onOpenSettings = openSettings,
                         )
                     }
                 }
@@ -589,6 +582,9 @@ private fun DestinationContent(
     knownGenres: List<String>,
     songOverrides: Map<Long, SongOverride>,
     onSongMenu: (Song) -> Unit,
+    sleepRemainingMs: Long?,
+    onOpenSleepTimer: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val pop = { backStack.removeLastOrNull(); Unit }
 
@@ -710,6 +706,7 @@ private fun DestinationContent(
             onOpen = { backStack += Destination.PlaylistDetail(it.id, it.name) },
             onCreate = { viewModel.createPlaylist(it) },
             onDelete = { viewModel.deletePlaylist(it.id) },
+            onOpenSettings = onOpenSettings,
         )
 
         is Destination.EditSong -> {
@@ -787,5 +784,15 @@ private fun DestinationContent(
         )
 
         Destination.Theme -> ThemeScreen(onBack = pop)
+
+        Destination.Settings -> SettingsScreen(
+            sleepRemainingMs = sleepRemainingMs,
+            onBack = pop,
+            onOpenTheme = { backStack += Destination.Theme },
+            onOpenEqualizer = { backStack += Destination.Equalizer },
+            onOpenSleepTimer = onOpenSleepTimer,
+            onRescan = viewModel::refresh,
+            onUpdateEngine = viewModel::updateEngine,
+        )
     }
 }

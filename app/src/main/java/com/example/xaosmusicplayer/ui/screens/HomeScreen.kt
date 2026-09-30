@@ -75,8 +75,7 @@ fun HomeScreen(
     onOpenMostPlayed: () -> Unit,
     onOpenLeastPlayed: () -> Unit,
     onExportRecap: () -> Unit,
-    isDark: Boolean,
-    onToggleTheme: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -89,10 +88,9 @@ fun HomeScreen(
                 caption = rememberTodayCaption(),
                 trailing = {
                     CircleIconButton(
-                        icon = XaosIcons.Contrast,
-                        contentDescription = if (isDark) "Passa al tema chiaro"
-                        else "Passa al tema scuro",
-                        onClick = onToggleTheme,
+                        icon = XaosIcons.Settings,
+                        contentDescription = "Impostazioni",
+                        onClick = onOpenSettings,
                     )
                 },
             )

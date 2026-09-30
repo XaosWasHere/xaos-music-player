@@ -48,6 +48,7 @@ import com.example.xaosmusicplayer.online.OnlineTrack
 import com.example.xaosmusicplayer.ui.components.Artwork
 import com.example.xaosmusicplayer.ui.components.SongRow
 import com.example.xaosmusicplayer.ui.components.formatDuration
+import com.example.xaosmusicplayer.ui.components.CircleIconButton
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.components.DotProgressLine
 import com.example.xaosmusicplayer.ui.components.DotSpinner
@@ -79,12 +80,23 @@ fun SearchScreen(
     onSearchOnline: () -> Unit,
     onDownload: (OnlineTrack) -> Unit,
     onCancelDownload: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
 
     Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenTitle(title = "CERCA", caption = "LIBRERIA · RETE")
+        ScreenTitle(
+            title = "CERCA",
+            caption = "LIBRERIA · RETE",
+            trailing = {
+                CircleIconButton(
+                    icon = XaosIcons.Settings,
+                    contentDescription = "Impostazioni",
+                    onClick = onOpenSettings,
+                )
+            },
+        )
 
         SearchField(
             query = query,

@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -51,6 +53,7 @@ fun PlaylistsScreen(
     onOpen: (Playlist) -> Unit,
     onCreate: (String) -> Unit,
     onDelete: (Playlist) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -76,6 +79,12 @@ fun PlaylistsScreen(
                 contentDescription = "Nuova playlist",
                 onClick = { showCreateDialog = true },
                 filled = true,
+            )
+            Spacer(Modifier.width(10.dp))
+            CircleIconButton(
+                icon = XaosIcons.Settings,
+                contentDescription = "Impostazioni",
+                onClick = onOpenSettings,
             )
         }
         LazyVerticalGrid(

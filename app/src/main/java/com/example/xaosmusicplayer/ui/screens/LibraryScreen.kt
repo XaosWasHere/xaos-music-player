@@ -53,10 +53,6 @@ import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 
 /** Voci del menu in alto a destra della libreria. */
-enum class LibraryMenuAction {
-    PLAYLISTS, FAVORITES, EQUALIZER, SLEEP_TIMER, THEME, CUSTOM_THEME, RESCAN, UPDATE_ENGINE
-}
-
 @Composable
 fun LibraryScreen(
     state: LibraryState,
@@ -71,16 +67,21 @@ fun LibraryScreen(
     onAlbumClick: (Album) -> Unit,
     onAlbumLongClick: (Album) -> Unit,
     onArtistClick: (Artist) -> Unit,
-    onMenuAction: (LibraryMenuAction) -> Unit,
+    onOpenSettings: () -> Unit,
     onRequestPermission: () -> Unit,
-    isDark: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
         ScreenTitle(
             title = "LIBRERIA",
             caption = "${songs.size} BRANI · ${albums.size} ALBUM · ${artists.size} ARTISTI",
-            trailing = { LibraryMenu(isDark = isDark, onMenuAction = onMenuAction) },
+            trailing = {
+                CircleIconButton(
+                    icon = XaosIcons.Settings,
+                    contentDescription = "Impostazioni",
+                    onClick = onOpenSettings,
+                )
+            },
         )
         LibraryTabs(
             selected = tab,
@@ -102,54 +103,6 @@ fun LibraryScreen(
             }
         }
     }
-}
-
-@Composable
-private fun LibraryMenu(isDark: Boolean, onMenuAction: (LibraryMenuAction) -> Unit) {
-    var menuOpen by remember { mutableStateOf(false) }
-    val colors = Xaos.colors
-
-    Box {
-        CircleIconButton(
-            icon = XaosIcons.Sort,
-            contentDescription = "Menu",
-            onClick = { menuOpen = true },
-        )
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            containerColor = colors.surface,
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.line),
-        ) {
-            LibraryMenuAction.entries.forEach { action ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = action.label(isDark),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.ink,
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onMenuAction(action)
-                    },
-                )
-            }
-        }
-    }
-}
-
-private fun LibraryMenuAction.label(isDark: Boolean): String = when (this) {
-    LibraryMenuAction.PLAYLISTS -> "PLAYLIST"
-    LibraryMenuAction.FAVORITES -> "PREFERITI"
-    LibraryMenuAction.EQUALIZER -> "EQUALIZZATORE"
-    LibraryMenuAction.SLEEP_TIMER -> "SLEEP TIMER"
-    LibraryMenuAction.THEME -> if (isDark) "TEMA CHIARO" else "TEMA SCURO"
-    LibraryMenuAction.CUSTOM_THEME -> "PERSONALIZZA TEMA"
-    LibraryMenuAction.RESCAN -> "RISCANSIONA"
-    LibraryMenuAction.UPDATE_ENGINE -> "AGGIORNA MOTORE DOWNLOAD"
 }
 
 private val LibraryTab.label: String
