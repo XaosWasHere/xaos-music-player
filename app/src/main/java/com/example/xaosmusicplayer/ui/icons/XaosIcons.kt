@@ -144,6 +144,11 @@ object XaosIcons {
 
     val Home: ImageVector by lazy { icon("M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z") }
 
+    /** Il PC: Xaos Beam e i dispositivi in rete. */
+    val Computer: ImageVector by lazy {
+        icon("M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z")
+    }
+
     /** Altre opzioni: tre punti in fila. */
     val More: ImageVector by lazy {
         icon(

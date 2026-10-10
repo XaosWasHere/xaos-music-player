@@ -88,10 +88,12 @@ fun FullscreenPlayer(
     onOpenSource: () -> Unit,
 ) {
     val colors = Xaos.colors
-    val current by player.current.collectAsState()
-    val isPlaying by player.isPlaying.collectAsState()
-    val position by player.positionMs.collectAsState()
-    val duration by player.durationMs.collectAsState()
+    // Chi suona: il PC, o il telefono quando è lui il dispositivo attivo.
+    val shown = rememberShownPlayback(player)
+    val current = shown.track
+    val isPlaying = shown.playing
+    val position = shown.positionMs
+    val duration = shown.durationMs
     val shuffle by player.shuffle.collectAsState()
     val repeat by player.repeat.collectAsState()
     val volume by player.volume.collectAsState()
@@ -124,7 +126,7 @@ fun FullscreenPlayer(
                     ) {
                     Text("IN RIPRODUZIONE DA", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                     Text(
-                        (source?.label ?: track?.album)?.uppercase() ?: "—",
+                        (shown.phone?.let { "SUL TELEFONO · ${it.name}" } ?: source?.label ?: track?.album)?.uppercase() ?: "—",
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.ink,
                         maxLines = 1,
@@ -265,7 +267,7 @@ fun FullscreenPlayer(
                     color = colors.ink,
                     spacing = 7.dp,
                     radius = 2.dp,
-                    onChangeFinished = { player.seekTo(it) },
+                    onChangeFinished = { shown.seekTo(it) },
                 )
                 Text(
                     formatDuration(duration),
@@ -281,20 +283,20 @@ fun FullscreenPlayer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
-                    BigModeButton(XaosIcons.Shuffle, "Casuale", shuffle) { player.toggleShuffle() }
-                    CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, size = 56.dp, outlined = false)
+                    BigModeButton(XaosIcons.Shuffle, "Casuale", shuffle && !shown.remote) { shown.toggleShuffle() }
+                    CircleIconButton(XaosIcons.Previous, "Precedente", { shown.previous() }, size = 56.dp, outlined = false)
                     Box(
-                        Modifier.size(76.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { player.togglePlayPause() },
+                        Modifier.size(76.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { shown.togglePlayPause() },
                         contentAlignment = Alignment.Center,
                     ) {
                         PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa (spazio)" else "Riproduci (spazio)", colors.onAccent, glyphSize = 36.dp)
                     }
-                    CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 56.dp, outlined = false)
+                    CircleIconButton(XaosIcons.Next, "Successivo", { shown.next() }, size = 56.dp, outlined = false)
                     BigModeButton(
                         if (repeat == RepeatMode.ONE) XaosIcons.RepeatOne else XaosIcons.Repeat,
                         "Ripeti",
-                        repeat != RepeatMode.OFF,
-                    ) { player.cycleRepeat() }
+                        repeat != RepeatMode.OFF && !shown.remote,
+                    ) { shown.cycleRepeat() }
                 }
                 Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
                     BigModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onToggleLyrics)
@@ -384,7 +386,10 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
     // VLC aggiorna la posizione qualche volta al secondo: fra un aggiornamento
     // e l'altro la si fa avanzare a ogni fotogramma, così la testina scorre
     // fluida invece di andare a scatti.
-    val playing by player.isPlaying.collectAsState()
+    val shownForWave = rememberShownPlayback(player)
+    // Il tocco si registra una volta: deve saltare su chi suona adesso.
+    val shownNow by androidx.compose.runtime.rememberUpdatedState(shownForWave)
+    val playing = shownForWave.playing
     var smooth by remember { androidx.compose.runtime.mutableLongStateOf(position) }
     LaunchedEffect(position, playing) {
         smooth = position
@@ -402,7 +407,7 @@ private fun WaveformBar(player: Player, track: Track?, position: Long, duration:
         modifier
             .pointerHoverIcon(androidx.compose.ui.input.pointer.PointerIcon.Hand)
             .pointerInput(duration) {
-                detectTapGestures { offset -> if (duration > 0) player.seekTo(offset.x / size.width) }
+                detectTapGestures { offset -> if (duration > 0) shownNow.seekTo(offset.x / size.width) }
             },
     ) {
         val step = 7.dp.toPx().let { kotlin.math.round(it) }

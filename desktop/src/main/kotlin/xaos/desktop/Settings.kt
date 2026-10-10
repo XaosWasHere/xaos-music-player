@@ -67,6 +67,14 @@ data class ThemePreset(
     fun normalized(): ThemePreset = copy(theme = theme.normalized())
 }
 
+/** Un telefono abbinato a Xaos Beam: la chiave è quella che manda a ogni richiesta. */
+@Serializable
+data class BeamDevice(
+    val name: String,
+    val token: String,
+    val pairedAt: Long,
+)
+
 /** Come si ordinano i brani nella schermata Brani. */
 @Serializable
 enum class SongSort { LIBRARY, TITLE, ARTIST, ALBUM, DURATION }
@@ -104,6 +112,12 @@ data class SettingsData(
     val minimizeToMini: Boolean = false,
     /** Il miniplayer mostra il testo al posto della copertina. */
     val miniShowsLyrics: Boolean = false,
+    /** Xaos Beam: la libreria si ascolta dal telefono, in streaming sulla rete di casa. */
+    val beamEnabled: Boolean = false,
+    /** I telefoni abbinati a Beam, ciascuno con la sua chiave. */
+    val beamDevices: List<BeamDevice> = emptyList(),
+    /** L'identità di questo PC per Beam: il telefono lo ritrova anche se cambia indirizzo. */
+    val beamServerId: String? = null,
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }

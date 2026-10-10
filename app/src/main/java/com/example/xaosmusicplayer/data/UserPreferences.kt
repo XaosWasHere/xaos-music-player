@@ -317,6 +317,33 @@ class UserPreferences(private val context: Context) {
         setSongOverride(songId, SongOverride())
     }
 
+    /**
+     * Passa preferiti, playlist, ascolti e correzioni da un id all'altro.
+     *
+     * Serve quando un brano del PC (id negativo) viene scaricato sul telefono e
+     * diventa un brano di MediaStore: per chi ascolta è sempre lo stesso brano,
+     * e non deve perdere né il cuore né il posto nelle playlist. Una correzione
+     * già presente sul brano locale ha la precedenza su quella del PC.
+     */
+    suspend fun remapSongIds(map: Map<Long, Long>) {
+        if (map.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            prefs[KEY_FAVORITES] = prefs[KEY_FAVORITES].toLongSet().map { map[it] ?: it }.toSet().toJsonArrayString()
+            prefs[KEY_PLAYLISTS] = serializePlaylists(
+                parsePlaylists(prefs[KEY_PLAYLISTS]).map { pl -> pl.copy(songIds = pl.songIds.map { map[it] ?: it }.distinct()) }
+            )
+            prefs[KEY_PLAY_EVENTS] = serializeEvents(
+                parseEvents(prefs[KEY_PLAY_EVENTS]).map { e -> map[e.songId]?.let { e.copy(songId = it) } ?: e }
+            )
+            val overrides = parseOverrides(prefs[KEY_OVERRIDES]).toMutableMap()
+            map.forEach { (from, to) ->
+                val moved = overrides.remove(from) ?: return@forEach
+                if (to !in overrides) overrides[to] = moved
+            }
+            prefs[KEY_OVERRIDES] = serializeOverrides(overrides)
+        }
+    }
+
     suspend fun setShuffle(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SHUFFLE] = enabled }
     }

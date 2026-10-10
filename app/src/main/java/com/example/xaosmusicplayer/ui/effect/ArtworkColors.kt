@@ -139,7 +139,7 @@ private fun Bitmap.averageColor(): Color {
  */
 private fun loadDownsampledBitmap(context: Context, uri: Uri): Bitmap? = runCatching {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri)?.use {
+    com.example.xaosmusicplayer.beam.Beam.openStream(context, uri)?.use {
         BitmapFactory.decodeStream(it, null, bounds)
     }
     if (bounds.outWidth <= 0) return null
@@ -148,7 +148,7 @@ private fun loadDownsampledBitmap(context: Context, uri: Uri): Bitmap? = runCatc
     while (bounds.outWidth / sample > PALETTE_SIZE_PX) sample *= 2
 
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    context.contentResolver.openInputStream(uri)?.use {
+    com.example.xaosmusicplayer.beam.Beam.openStream(context, uri)?.use {
         BitmapFactory.decodeStream(it, null, options)
     }
 }.getOrNull()

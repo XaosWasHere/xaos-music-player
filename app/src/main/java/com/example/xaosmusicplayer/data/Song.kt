@@ -3,7 +3,11 @@ package com.example.xaosmusicplayer.data
 import android.content.ContentUris
 import android.net.Uri
 
-/** Un brano audio presente sulla memoria del dispositivo. */
+/**
+ * Un brano: della memoria del dispositivo, oppure della libreria del PC
+ * ascoltata con Xaos Beam. Questi ultimi hanno l'id negativo, per non
+ * scontrarsi mai con quelli di MediaStore, e un indirizzo da cui suonarli.
+ */
 data class Song(
     val id: Long,
     val title: String,
@@ -28,14 +32,29 @@ data class Song(
     val genre: String? = null,
     /** Copertina scelta dall'utente, che ha la precedenza su quella dell'album. */
     val artworkPath: String? = null,
+    /** Per i brani del PC: l'indirizzo da cui il player lo scarica mentre suona. */
+    val remoteUrl: String? = null,
+    /** Per i brani del PC: la copertina, servita dal PC. */
+    val remoteArtworkUrl: String? = null,
+    /**
+     * L'album com'è in MediaStore, da cui viene la copertina. Resta quello
+     * anche quando il brano finisce sotto un altro id d'album (album uniti,
+     * album rinominati, album completati dai brani del PC): MediaStore la
+     * copertina la conosce solo col suo id.
+     */
+    val artworkAlbumId: Long = albumId,
 ) {
-    val uri: Uri
-        get() = ContentUris.withAppendedId(AUDIO_COLLECTION, id)
+    /** Un brano della libreria del PC, ascoltato in streaming con Xaos Beam. */
+    val isRemote: Boolean get() = remoteUrl != null
 
-    /** Copertina dell'album servita da MediaStore. Può non esistere: Coil gestisce il fallback. */
+    val uri: Uri
+        get() = remoteUrl?.let(Uri::parse) ?: ContentUris.withAppendedId(AUDIO_COLLECTION, id)
+
+    /** Copertina dell'album servita da MediaStore (o dal PC). Può non esistere: Coil gestisce il fallback. */
     val artworkUri: Uri
         get() = artworkPath?.let { Uri.fromFile(java.io.File(it)) }
-            ?: ContentUris.withAppendedId(ALBUM_ART_COLLECTION, albumId)
+            ?: remoteArtworkUrl?.let(Uri::parse)
+            ?: ContentUris.withAppendedId(ALBUM_ART_COLLECTION, artworkAlbumId)
 
     companion object {
         val AUDIO_COLLECTION: Uri =
@@ -53,6 +72,8 @@ data class Album(
     val artist: String,
     val songCount: Int,
     val artworkUri: Uri,
+    /** Quanti brani dell'album stanno solo sul PC, con Xaos Beam. */
+    val pcOnlyCount: Int = 0,
 )
 
 /** Un artista, ricavato raggruppando i brani. */

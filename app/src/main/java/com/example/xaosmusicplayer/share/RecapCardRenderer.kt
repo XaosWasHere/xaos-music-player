@@ -234,7 +234,7 @@ class RecapCardRenderer(private val context: Context) {
      */
     private fun loadBitmap(uri: Uri): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
+        com.example.xaosmusicplayer.beam.Beam.openStream(context, uri)?.use {
             BitmapFactory.decodeStream(it, null, bounds)
         }
         if (bounds.outWidth <= 0) return null
@@ -243,7 +243,7 @@ class RecapCardRenderer(private val context: Context) {
         while (bounds.outWidth / sample > COVER) sample *= 2
 
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        context.contentResolver.openInputStream(uri)?.use {
+        com.example.xaosmusicplayer.beam.Beam.openStream(context, uri)?.use {
             BitmapFactory.decodeStream(it, null, options)
         }
     }.getOrNull()

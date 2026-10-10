@@ -129,6 +129,9 @@ fun NowPlayingScreen(
     onGoToAlbum: () -> Unit,
     onGoToArtist: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenDevices: (() -> Unit)? = null,
+    /** Il dispositivo su cui suona, se non è questo telefono (il PC, con Beam). */
+    device: String? = null,
 ) {
     val artworkColors by rememberArtworkColors(song.artworkUri)
     // Il fondo insegue la copertina con calma: cambiando brano, un salto secco
@@ -271,6 +274,7 @@ fun NowPlayingScreen(
                 content = content,
                 onCollapse = onCollapse,
                 onOpenOptions = { optionsOpen = true },
+                device = device,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -392,6 +396,7 @@ fun NowPlayingScreen(
                 content = content,
                 onOpenSleepTimer = onOpenSleepTimer,
                 onOpenQueue = onOpenQueue,
+                onOpenDevices = onOpenDevices,
             )
 
             Spacer(Modifier.height(8.dp))
@@ -723,6 +728,7 @@ private fun TopBar(
     content: Color,
     onCollapse: () -> Unit,
     onOpenOptions: () -> Unit,
+    device: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -740,12 +746,12 @@ private fun TopBar(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "IN RIPRODUZIONE DA",
+                text = if (device != null) "IN RIPRODUZIONE SU" else "IN RIPRODUZIONE DA",
                 style = MaterialTheme.typography.labelSmall,
                 color = content.copy(alpha = 0.55f),
             )
             Text(
-                text = song.album.uppercase(),
+                text = (device ?: song.album).uppercase(),
                 style = MaterialTheme.typography.labelLarge,
                 color = content,
                 maxLines = 1,
@@ -1016,6 +1022,7 @@ private fun BottomRow(
     content: Color,
     onOpenSleepTimer: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenDevices: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1047,6 +1054,17 @@ private fun BottomRow(
         }
 
         Spacer(Modifier.weight(1f))
+
+        if (onOpenDevices != null) {
+            IconButton(onClick = onOpenDevices) {
+                Icon(
+                    imageVector = XaosIcons.Computer,
+                    contentDescription = "Dispositivi",
+                    tint = content,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
 
         IconButton(onClick = onOpenQueue) {
             Icon(

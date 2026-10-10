@@ -65,6 +65,7 @@ fun SettingsScreen(
     player: Player,
     phone: PhoneSync,
     ytdlp: YtDlp,
+    beam: xaos.desktop.beam.BeamServer,
     onAddFolder: () -> Unit,
     onRescan: () -> Unit,
     onPickDownloadFolder: () -> Unit,
@@ -203,6 +204,8 @@ fun SettingsScreen(
         }
 
         item { PhoneCard(prefs, settings, onPickImportFolder) }
+
+        item { BeamCard(prefs, settings, beam) }
 
         item {
             SettingsCard("ASPETTO") {
@@ -601,5 +604,93 @@ private fun InfoLine(label: String, value: String) {
     Row {
         Text(label, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.width(110.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
+    }
+}
+
+/**
+ * Xaos Beam: la libreria del PC ascoltata dal telefono, in streaming sulla
+ * rete di casa. Qui si accende, si legge il PIN per abbinare un telefono e si
+ * tolgono quelli che non devono più entrare.
+ */
+@Composable
+private fun BeamCard(prefs: SettingsData, settings: Settings, beam: xaos.desktop.beam.BeamServer) {
+    val colors = Xaos.colors
+    val state by beam.state.collectAsState()
+    val pin by beam.pin.collectAsState()
+    val active by beam.active.collectAsState()
+    // L'elenco "in ascolto ora" si rinfresca da solo anche senza richieste nuove.
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+        while (true) { kotlinx.coroutines.delay(5_000); value = System.currentTimeMillis() }
+    }
+    SettingsCard("XAOS BEAM") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when (val s = state) {
+                        is xaos.desktop.beam.BeamState.Running -> "ATTIVO"
+                        is xaos.desktop.beam.BeamState.Failed -> "NON PARTITO: ${s.message}"
+                        xaos.desktop.beam.BeamState.Off -> "SPENTO"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.ink,
+                )
+                Text(
+                    "Ascolta la libreria del PC dal telefono, in streaming sulla rete di casa, senza copiarla.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkSecondary,
+                )
+            }
+            XaosSwitch(prefs.beamEnabled, onChange = { on -> settings.update { it.copy(beamEnabled = on) } })
+        }
+        val running = state as? xaos.desktop.beam.BeamState.Running
+        if (running != null) {
+            Hairline()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("PIN PER ABBINARE UN TELEFONO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                    xaos.desktop.theme.DotText(pin, color = colors.ink, pitch = 4.dp)
+                    Text(
+                        "Sul telefono: Impostazioni → Xaos Beam → Dispositivi, tocca questo PC e scrivi il PIN. Dopo l'abbinamento il PIN cambia.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkTertiary,
+                    )
+                }
+                PillButton("NUOVO PIN", onClick = beam::newPin, icon = XaosIcons.Sync)
+            }
+            InfoLine("INDIRIZZO", running.addresses.ifEmpty { listOf("—") }.joinToString("  ·  ") { "$it:${running.port}" })
+        }
+        if (prefs.beamDevices.isNotEmpty()) {
+            Hairline()
+            Text("TELEFONI ABBINATI", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+            Column(Modifier.fillMaxWidth()) {
+                prefs.beamDevices.forEach { device ->
+                    val listening = active[device.name]?.let { now - it < 45_000 } == true
+                    Row(
+                        Modifier.fillMaxWidth().hoverRow().padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.width(20.dp)) {
+                            AccentDot(size = 8.dp, color = if (listening) colors.accent else colors.track)
+                        }
+                        Icon(XaosIcons.Phone, null, tint = colors.ink, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(device.name.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (listening) "COLLEGATO ORA" else "ABBINATO",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.inkTertiary,
+                            )
+                        }
+                        PillButton("TOGLI", onClick = { beam.forget(device) })
+                    }
+                }
+            }
+        }
+        Text(
+            "Il PC e il telefono devono stare sulla stessa rete Wi-Fi. La prima volta Windows chiede se Xaos può usare la rete: consenti le reti private.",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkTertiary,
+        )
     }
 }

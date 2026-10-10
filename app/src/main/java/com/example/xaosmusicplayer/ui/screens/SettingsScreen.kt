@@ -50,12 +50,16 @@ fun SettingsScreen(
     onOpenSleepTimer: () -> Unit,
     onRescan: () -> Unit,
     onUpdateEngine: () -> Unit,
+    onOpenBeam: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val store = ThemeStore.get(context)
     val dark by store.isDark.collectAsState()
     val custom by store.custom.collectAsState()
+    val beamOn by com.example.xaosmusicplayer.beam.Beam.enabled.collectAsState()
+    val beamStatus by com.example.xaosmusicplayer.beam.Beam.status.collectAsState()
+    val beamPc by com.example.xaosmusicplayer.beam.Beam.pairing.collectAsState()
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
@@ -122,6 +126,28 @@ fun SettingsScreen(
                 title = "AGGIORNA MOTORE DOWNLOAD",
                 hint = "Scarica l'ultima versione di yt-dlp, se i download non vanno",
                 onClick = onUpdateEngine,
+            )
+
+            Group("XAOS BEAM")
+            SettingRow(
+                icon = XaosIcons.Computer,
+                title = "XAOS BEAM",
+                hint = if (!beamOn) "Ascolta la libreria del PC in Wi-Fi, senza copiarla"
+                else beamPc?.let { "${it.name} · ${statusText(beamStatus).lowercase()}" } ?: "Acceso · nessun PC abbinato",
+                onClick = onOpenBeam,
+                trailing = {
+                    Switch(
+                        checked = beamOn,
+                        onCheckedChange = com.example.xaosmusicplayer.beam.Beam::setEnabled,
+                        colors = beamSwitchColors(),
+                    )
+                },
+            )
+            SettingRow(
+                icon = XaosIcons.Sync,
+                title = "DISPOSITIVI",
+                hint = "Cerca i PC in rete e abbina questo telefono",
+                onClick = onOpenBeam,
             )
 
             Group("INFO")

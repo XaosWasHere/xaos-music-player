@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -185,7 +186,9 @@ fun CircleIconButton(
     val c = Xaos.colors
     Box(
         modifier = modifier
-            .size(size)
+            // Sempre un cerchio: se la fila è stretta, il pulsante non si
+            // lascia schiacciare in un ovale.
+            .requiredSize(size)
             .clip(CircleShape)
             .background(if (filled) c.accent else Color.Transparent, CircleShape)
             .then(if (!filled && outlined) Modifier.border(1.dp, c.line, CircleShape) else Modifier)
@@ -307,6 +310,12 @@ fun DotSlider(
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
     val shown = if (dragging) dragValue else value.coerceIn(0f, 1f)
+    // I gesti si registrano una volta sola: devono chiamare sempre l'azione più
+    // recente, non quella del primo disegno (la barra del player, per esempio,
+    // passa dal PC al telefono senza ridisegnare il cursore da capo).
+    val onChangeNow by androidx.compose.runtime.rememberUpdatedState(onChange)
+    val onChangeFinishedNow by androidx.compose.runtime.rememberUpdatedState(onChangeFinished)
+    val onScrollNow by androidx.compose.runtime.rememberUpdatedState(onScroll)
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
 
@@ -320,7 +329,7 @@ fun DotSlider(
                 else Modifier.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Scroll) { event ->
                     val dy = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                     if (dy != 0f) {
-                        onScroll(dy)
+                        onScrollNow?.invoke(dy)
                         event.changes.forEach { it.consume() }
                     }
                 }
@@ -328,8 +337,8 @@ fun DotSlider(
             .pointerInput(Unit) {
                 detectTapGestures { pos ->
                     val v = (pos.x / size.width).coerceIn(0f, 1f)
-                    onChange?.invoke(v)
-                    onChangeFinished?.invoke(v)
+                    onChangeNow?.invoke(v)
+                    onChangeFinishedNow?.invoke(v)
                 }
             }
             .pointerInput(Unit) {
@@ -340,13 +349,13 @@ fun DotSlider(
                     },
                     onDragEnd = {
                         dragging = false
-                        onChangeFinished?.invoke(dragValue)
+                        onChangeFinishedNow?.invoke(dragValue)
                     },
                     onDragCancel = { dragging = false },
                 ) { change, _ ->
                     change.consume()
                     dragValue = (change.position.x / size.width).coerceIn(0f, 1f)
-                    onChange?.invoke(dragValue)
+                    onChangeNow?.invoke(dragValue)
                 }
             },
         contentAlignment = Alignment.CenterStart,
