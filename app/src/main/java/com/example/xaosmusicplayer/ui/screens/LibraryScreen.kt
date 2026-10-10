@@ -264,6 +264,7 @@ private fun AlbumGrid(
                 artworkUri = album.artworkUri,
                 onClick = { onClick(album) },
                 onLongClick = { onLongClick(album) },
+                onPcOnly = album.pcOnlyCount,
             )
         }
     }

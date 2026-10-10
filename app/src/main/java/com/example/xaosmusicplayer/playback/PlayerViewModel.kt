@@ -10,6 +10,8 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.example.xaosmusicplayer.audio.AudioLevels
+import com.example.xaosmusicplayer.beam.Beam
+import com.example.xaosmusicplayer.beam.BeamConnect
 import com.example.xaosmusicplayer.audio.AudioVisualizer
 import com.example.xaosmusicplayer.audio.AudioSessionHolder
 import com.example.xaosmusicplayer.audio.EqualizerController
@@ -46,6 +48,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
@@ -110,7 +114,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
      * confronto sull'originale, riscrivere il nome di partenza cancella la
      * correzione e il brano torna esattamente dov'era.
      */
-    fun rawSongById(id: Long): Song? = _rawSongs.value.firstOrNull { it.id == id }
+    fun rawSongById(id: Long): Song? =
+        (if (id < 0) Beam.songs.value else _rawSongs.value).firstOrNull { it.id == id }
 
     private val _libraryState = MutableStateFlow(LibraryState.NEEDS_PERMISSION)
     val libraryState: StateFlow<LibraryState> = _libraryState.asStateFlow()
@@ -367,6 +372,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     val queue: StateFlow<List<Song>> = _queue.asStateFlow()
 
+    // Prima del blocco init, che la usa già (observeConnect).
+    private val _remoteActive = MutableStateFlow(false)
+    /**
+     * Se il dispositivo attivo è il PC (Xaos Beam Connect), come su Spotify:
+     * diventa vero quando il PC suona e il telefono no, torna falso quando
+     * riparte il telefono. Fra le due cose resta com'era: mettere in pausa il
+     * PC non riporta la barra sul telefono.
+     */
+    val remoteActive: StateFlow<Boolean> = _remoteActive.asStateFlow()
+
     // ---------- Effetto grafico ----------
 
     val audioLevels: StateFlow<AudioLevels> = visualizer.levels
@@ -516,21 +531,53 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
 
     init {
+        Beam.init(app)
         observeAudioSession()
         observePreamp()
         observeOverrides()
+        observeBeamDownloads()
+        observeConnect()
         restorePlaybackPreferences()
         trackPosition()
     }
 
     /**
-     * La libreria visibile è sempre MediaStore più le correzioni dell'utente:
-     * ricalcolarla qui evita che ogni schermata debba ricordarsene.
+     * Un brano del PC appena scaricato: la libreria si rilegge, la copia
+     * locale prende il suo posto (in libreria il doppione sparisce da solo), e
+     * preferiti, playlist e ascolti passano dall'id del PC a quello nuovo.
+     */
+    private fun observeBeamDownloads() {
+        viewModelScope.launch {
+            Beam.downloaded.collect { downloaded ->
+                val remote = rawSongById(downloaded.id) ?: downloaded
+                // MediaStore legge i tag appena il file è completo, ma non
+                // sempre in tempo per la prima lettura: qualche tentativo.
+                for (attempt in 0 until LOCAL_COPY_ATTEMPTS) {
+                    val fresh = repository.loadSongs()
+                    _rawSongs.value = fresh
+                    val local = fresh.firstOrNull {
+                        sameSongKey(it) == sameSongKey(remote) &&
+                            kotlin.math.abs(it.durationMs - remote.durationMs) <= SAME_SONG_TOLERANCE_MS
+                    }
+                    if (local != null) {
+                        preferences.remapSongIds(mapOf(remote.id to local.id))
+                        break
+                    }
+                    delay(LOCAL_COPY_RETRY_MS)
+                }
+            }
+        }
+    }
+
+    /**
+     * La libreria visibile è sempre MediaStore, più i brani del PC con Xaos
+     * Beam, più le correzioni dell'utente: ricalcolarla qui evita che ogni
+     * schermata debba ricordarsene.
      */
     private fun observeOverrides() {
         viewModelScope.launch {
-            combine(_rawSongs, preferences.songOverrides) { raw, overrides ->
-                mergeAlbums(applyOverrides(raw, overrides))
+            combine(_rawSongs, Beam.songs, preferences.songOverrides) { raw, remote, overrides ->
+                mergeAlbums(applyOverrides(raw + remote.notIn(raw), overrides))
             }.collect {
                 _songs.value = it
                 syncCurrentSong()
@@ -551,7 +598,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
      * Qui l'album torna a essere ciò che è per chi ascolta, cioè un titolo di
      * un artista: stesso titolo e stesso proprietario, stesso album. Vince l'id
      * più basso del gruppo, così la scelta è stabile fra una scansione e
-     * l'altra e i preferiti o le playlist non si accorgono di nulla.
+     * l'altra e i preferiti o le playlist non si accorgono di nulla. Se nel
+     * gruppo c'è un album di MediaStore vince quello: un album completato dai
+     * brani del PC tiene il suo id anche quando il PC non c'è.
      *
      * Gli album senza titolo restano fuori: accorpare per titolo mancante
      * ammucchierebbe brani che non hanno niente in comune.
@@ -560,7 +609,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val canonicalId = songs
             .filter { it.album != MusicRepository.UNKNOWN_ALBUM && it.album.isNotBlank() }
             .groupBy { albumKeyOf(it) }
-            .mapValues { (_, tracks) -> tracks.minOf { it.albumId } }
+            .mapValues { (_, tracks) ->
+                tracks.filter { it.albumId >= 0 }.minOfOrNull { it.albumId } ?: tracks.minOf { it.albumId }
+            }
         if (canonicalId.isEmpty()) return songs
 
         return songs.map { song ->
@@ -568,6 +619,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             if (id == song.albumId) song else song.copy(albumId = id)
         }
     }
+
+    /**
+     * I brani del PC che il telefono non ha già. Lo stesso brano in tutte e due
+     * le librerie si vede una volta sola, e suona dalla copia locale: non serve
+     * la rete, e non consuma la batteria del Wi-Fi.
+     */
+    private fun List<Song>.notIn(local: List<Song>): List<Song> {
+        if (isEmpty() || local.isEmpty()) return this
+        val localByKey = local.groupBy { sameSongKey(it) }
+        return filterNot { remote ->
+            localByKey[sameSongKey(remote)]?.any { kotlin.math.abs(it.durationMs - remote.durationMs) <= SAME_SONG_TOLERANCE_MS } == true
+        }
+    }
+
+    private fun sameSongKey(song: Song): String =
+        song.title.trim().lowercase() + '\u0000' + MusicRepository.primaryArtistOf(song.artist).trim().lowercase()
 
     /**
      * Titolo e proprietario, normalizzati: due album così sono lo stesso album.
@@ -596,17 +663,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         return raw.map { song ->
             val override = overrides[song.id] ?: return@map song
             val album = override.album ?: song.album
+            // Correggendo solo il credito, il proprietario si ricalcola da
+            // quello: altrimenti resterebbe agganciato al vecchio nome.
+            val owner = override.albumArtist
+                ?: override.artist?.let { MusicRepository.primaryArtistOf(it) }
+                ?: song.albumArtist
             song.copy(
                 title = override.title ?: song.title,
                 artist = override.artist ?: song.artist,
-                // Correggendo solo il credito, il proprietario si ricalcola da
-                // quello: altrimenti resterebbe agganciato al vecchio nome.
-                albumArtist = override.albumArtist
-                    ?: override.artist?.let { MusicRepository.primaryArtistOf(it) }
-                    ?: song.albumArtist,
+                albumArtist = owner,
                 album = album,
-                albumId = if (override.album != null) {
-                    albumIdByName[album.trim().lowercase()] ?: song.albumId
+                // Un album che il telefono non ha prende un id suo: tenere
+                // quello vecchio lascerebbe il brano raggruppato con l'album
+                // da cui lo si voleva togliere (i download senza album, per
+                // esempio, stanno tutti sotto lo stesso id "Xaos").
+                albumId = if (override.album != null && !album.trim().equals(song.album.trim(), ignoreCase = true)) {
+                    albumIdByName[album.trim().lowercase()] ?: MusicRepository.syntheticAlbumId(album, owner)
                 } else {
                     song.albumId
                 },
@@ -744,7 +816,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun syncCurrentSong() {
         val mediaId = controller?.currentMediaItem?.mediaId?.toLongOrNull()
         val previousId = _currentSong.value?.id
+        // Un brano del PC resta quello in corso anche se intanto è uscito
+        // dalla libreria (il PC che si scollega): sta ancora suonando.
         _currentSong.value = _songs.value.firstOrNull { it.id == mediaId }
+            ?: _currentSong.value?.takeIf { it.id == mediaId }
         if (mediaId != previousId) loadLyrics(mediaId)
         _durationMs.value = (controller?.duration ?: 0L).coerceAtLeast(0L)
         _positionMs.value = controller?.currentPosition ?: 0L
@@ -857,21 +932,194 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         if (_libraryState.value == LibraryState.NEEDS_PERMISSION) return
         viewModelScope.launch { _rawSongs.value = repository.loadSongs() }
+        Beam.refresh()
     }
 
     // ---------- Comandi di riproduzione ----------
 
-    /** Fa partire [songs] a partire da [startIndex], sostituendo la coda. */
-    fun play(songs: List<Song>, startIndex: Int) {
+    /**
+     * Fa partire [songs] a partire da [startIndex], sostituendo la coda. Se il
+     * dispositivo attivo è il PC (Xaos Beam Connect) suonano lì, come su
+     * Spotify; sul telefono solo se il PC non ha il brano scelto.
+     */
+    fun play(songs: List<Song>, startIndex: Int, startPositionMs: Long = 0L) {
+        if (songs.isEmpty() || startIndex !in songs.indices) return
+        if (_remoteActive.value && sendQueueToPc(songs, startIndex, startPositionMs)) return
+        playHere(songs, startIndex, startPositionMs)
+    }
+
+    /** La coda al PC, con i soli brani che il PC ha. False se non ha quello scelto. */
+    private fun sendQueueToPc(songs: List<Song>, startIndex: Int, startPositionMs: Long): Boolean {
+        val ids = songs.map(BeamConnect::pcIdOf)
+        if (ids[startIndex] == null) return false
+        val known = ids.withIndex().filter { it.value != null }
+        val start = known.indexOfFirst { it.index == startIndex }.coerceAtLeast(0)
+        BeamConnect.control("queue", ms = startPositionMs, ids = known.map { it.value!! }, index = start)
+        return true
+    }
+
+    /** Suona sul telefono, qualunque sia il dispositivo attivo. */
+    private fun playHere(songs: List<Song>, startIndex: Int, startPositionMs: Long = 0L) {
         val player = controller ?: return
         if (songs.isEmpty() || startIndex !in songs.indices) return
 
         _queue.value = songs
-        player.setMediaItems(songs.map { it.toMediaItem() }, startIndex, 0L)
+        player.setMediaItems(songs.map { it.toMediaItem() }, startIndex, startPositionMs)
         player.prepare()
         player.play()
         syncCurrentSong()
     }
+
+    // ---------- Xaos Beam Connect ----------
+
+    /** Cosa sta suonando il PC collegato con Beam; null se non è collegato. */
+    val pcNow: StateFlow<BeamConnect.PcNow?> = BeamConnect.pc
+
+    /** Il brano che suona il PC come brano della libreria, per il mini player. */
+    val pcSong: StateFlow<Song?> = combine(BeamConnect.pc, _songs) { pc, _ -> pc?.let(::songForPc) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Il testo del brano che suona il PC, per il player a schermo intero. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val pcLyrics: StateFlow<LyricsState> = pcSong
+        .map { song -> song?.id?.takeIf { it != Long.MIN_VALUE } }
+        .distinctUntilChanged()
+        .mapLatest { id -> id?.let { lyricsReader.load(it) }?.let(LyricsState::Ready) ?: LyricsState.Missing }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsState.Loading)
+
+    private fun songForPc(pc: BeamConnect.PcNow): Song? {
+        if (!pc.hasTrack) return null
+        pc.pcId?.let { id -> songForPcId(id)?.let { return it } }
+        // Un brano che il telefono non conosce: basta per mostrarlo.
+        return Song(
+            id = Long.MIN_VALUE,
+            title = pc.title.orEmpty(),
+            artist = pc.artist.orEmpty(),
+            albumArtist = pc.artist.orEmpty(),
+            album = pc.album.orEmpty(),
+            albumId = 0,
+            durationMs = pc.durationMs,
+            trackNumber = 0,
+            year = 0,
+            dateAdded = 0,
+            relativePath = "",
+            remoteArtworkUrl = pc.pcId?.let(BeamConnect::artworkUrl),
+        )
+    }
+
+    /** Il brano del telefono che corrisponde a un id del PC: la copia locale se c'è. */
+    private fun songForPcId(pcId: Long): Song? {
+        _songs.value.firstOrNull { it.id == -pcId }?.let { return it }
+        val remote = Beam.songs.value.firstOrNull { it.id == -pcId } ?: return null
+        return _songs.value.firstOrNull {
+            !it.isRemote && sameSongKey(it) == sameSongKey(remote) &&
+                kotlin.math.abs(it.durationMs - remote.durationMs) <= SAME_SONG_TOLERANCE_MS
+        } ?: remote
+    }
+
+    private fun observeConnect() {
+        BeamConnect.commandHandler = ::handleBeamCommand
+        BeamConnect.phoneState = ::phoneStateJson
+        // Brano nuovo, play o pausa: il PC lo vede subito.
+        viewModelScope.launch {
+            combine(_currentSong, _isPlaying) { song, playing -> song?.id to playing }
+                .collect { BeamConnect.phoneChanged() }
+        }
+        viewModelScope.launch {
+            combine(_isPlaying, BeamConnect.pc) { local, pc -> local to pc }.collect { (local, pc) ->
+                _remoteActive.value = when {
+                    pc == null || !pc.hasTrack -> false
+                    local -> false
+                    pc.playing -> true
+                    else -> _remoteActive.value
+                }
+            }
+        }
+    }
+
+    /** Un comando arrivato dal PC per questo telefono. */
+    private fun handleBeamCommand(command: BeamConnect.Command) {
+        val player = controller ?: return
+        when (command.action) {
+            "play" -> player.play()
+            "pause" -> player.pause()
+            "toggle" -> togglePlayPause()
+            "next" -> next()
+            "previous" -> previous()
+            "seek" -> command.ms?.let(::seekTo)
+            "shuffle" -> toggleShuffle()
+            "repeat" -> cycleRepeatMode()
+            "queue" -> playPcQueue(command.ids, command.index, command.ms ?: 0L)
+        }
+    }
+
+    /** Lo stato del telefono per il PC: brano, posizione e coda in id del PC. */
+    private fun phoneStateJson(): org.json.JSONObject? {
+        val player = controller ?: return null
+        val byId = HashMap<Long, Song>(_songs.value.size * 2).apply {
+            Beam.songs.value.forEach { put(it.id, it) }
+            _songs.value.forEach { put(it.id, it) }
+        }
+        val queue = (0 until player.mediaItemCount).map { i ->
+            player.getMediaItemAt(i).mediaId.toLongOrNull()?.let(byId::get)?.let(BeamConnect::pcIdOf)
+        }
+        return org.json.JSONObject().apply {
+            _currentSong.value?.let { put("track", BeamConnect.nowTrackJson(it)) }
+            put("playing", player.isPlaying)
+            put("positionMs", player.currentPosition)
+            put("queue", org.json.JSONArray(queue))
+            put("index", player.currentMediaItemIndex)
+        }
+    }
+
+    /**
+     * Suona sul telefono una coda del PC: la copia locale quando il telefono
+     * ha il brano, altrimenti in streaming dal PC.
+     */
+    private fun playPcQueue(ids: List<Long>, index: Int, positionMs: Long) {
+        val byId = _songs.value.associateBy { it.id }
+        val remoteById = Beam.songs.value.associateBy { it.id }
+        val localByKey by lazy { _songs.value.filterNot { it.isRemote }.groupBy { sameSongKey(it) } }
+        val songs = ids.map { pcId ->
+            byId[-pcId] ?: remoteById[-pcId]?.let { remote ->
+                localByKey[sameSongKey(remote)]
+                    ?.firstOrNull { kotlin.math.abs(it.durationMs - remote.durationMs) <= SAME_SONG_TOLERANCE_MS }
+                    ?: remote
+            }
+        }
+        val known = songs.withIndex().filter { it.value != null }
+        if (known.isEmpty()) return
+        val start = known.indexOfFirst { it.index == index }.coerceAtLeast(0)
+        playHere(known.map { it.value!! }, start, positionMs)
+    }
+
+    /** "Ascolta qui": quello che suona il PC continua sul telefono, il PC si ferma. */
+    fun takeFromPc() {
+        val pc = BeamConnect.pc.value ?: return
+        if (!pc.hasTrack || pc.queue.isEmpty()) return
+        playPcQueue(pc.queue, pc.index, pc.positionNow())
+        BeamConnect.control("pause")
+    }
+
+    /** "Manda al PC": la coda del telefono continua sul PC, il telefono si ferma. */
+    fun sendToPc() {
+        val player = controller ?: return
+        val byId = HashMap<Long, Song>().apply {
+            Beam.songs.value.forEach { put(it.id, it) }
+            _songs.value.forEach { put(it.id, it) }
+        }
+        val queue = (0 until player.mediaItemCount).map { i ->
+            player.getMediaItemAt(i).mediaId.toLongOrNull()?.let(byId::get)?.let(BeamConnect::pcIdOf)
+        }
+        val known = queue.withIndex().filter { it.value != null }
+        if (known.isEmpty()) return
+        val start = known.indexOfFirst { it.index == player.currentMediaItemIndex }.coerceAtLeast(0)
+        BeamConnect.control("queue", ms = player.currentPosition, ids = known.map { it.value!! }, index = start)
+        player.pause()
+    }
+
+    /** Un comando per il player del PC, dal foglio dei dispositivi. */
+    fun controlPc(action: String, ms: Long? = null) = BeamConnect.control(action, ms = ms)
 
     fun togglePlayPause() {
         val player = controller ?: return
@@ -893,6 +1141,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
         _positionMs.value = positionMs
+        BeamConnect.phoneChanged()
     }
 
     fun toggleShuffle() {
@@ -1096,6 +1345,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        BeamConnect.commandHandler = null
+        BeamConnect.phoneState = null
         visualizer.stop()
         equalizer.release()
         controller?.release()
@@ -1150,5 +1401,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Quanti artisti e album mostrare fra i risultati di ricerca. */
         const val SEARCH_GROUP_LIMIT = 8
+
+        /** Fra PC e telefono, durate che differiscono di così sono lo stesso brano. */
+        const val SAME_SONG_TOLERANCE_MS = 3_000L
+
+        /** Quante volte rileggere MediaStore aspettando un brano appena scaricato. */
+        const val LOCAL_COPY_ATTEMPTS = 5
+        const val LOCAL_COPY_RETRY_MS = 1_000L
     }
 }

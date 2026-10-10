@@ -264,8 +264,9 @@ compose.desktop {
         nativeDistributions {
             appResourcesRootDir.set(bundledResources)
             // jdk.unsupported serve a JNA (vlcj), java.logging a jaudiotagger,
-            // java.net.http alle ricerche in rete (testi su LRCLIB, aggiornamenti).
-            modules("java.instrument", "jdk.unsupported", "java.logging", "java.net.http")
+            // java.net.http alle ricerche in rete (testi su LRCLIB, aggiornamenti),
+            // jdk.httpserver a Xaos Beam.
+            modules("java.instrument", "jdk.unsupported", "java.logging", "java.net.http", "jdk.httpserver")
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Xaos"
             packageVersion = appVersion

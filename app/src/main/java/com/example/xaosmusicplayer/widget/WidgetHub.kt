@@ -177,12 +177,12 @@ object WidgetHub {
         if (uri == null) return null
         return runCatching {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            com.example.xaosmusicplayer.beam.Beam.openStream(ctx, uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             val longest = max(bounds.outWidth, bounds.outHeight)
             if (longest <= 0) return@runCatching null
             var sample = 1
             while (longest / (sample * 2) >= MAX_SIDE_PX) sample *= 2
-            ctx.contentResolver.openInputStream(uri)?.use {
+            com.example.xaosmusicplayer.beam.Beam.openStream(ctx, uri)?.use {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
             }
         }.getOrNull()

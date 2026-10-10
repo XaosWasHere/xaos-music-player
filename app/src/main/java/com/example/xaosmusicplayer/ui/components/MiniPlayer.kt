@@ -46,6 +46,8 @@ fun MiniPlayer(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Il dispositivo su cui suona, se non è questo telefono (il PC, con Beam). */
+    device: String? = null,
 ) {
     AnimatedVisibility(
         visible = song != null,
@@ -102,6 +104,25 @@ fun MiniPlayer(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            // Come il "In riproduzione su…" di Spotify.
+                            if (device != null) {
+                                androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = XaosIcons.Computer,
+                                        contentDescription = null,
+                                        tint = colors.accentInk,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Box(Modifier.size(5.dp))
+                                    Text(
+                                        text = "SUL PC · ${device.uppercase()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.accentInk,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
 
                         // Il play è il solo elemento pieno della barra: è l'azione

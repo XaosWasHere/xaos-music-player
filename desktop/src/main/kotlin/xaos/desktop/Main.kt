@@ -65,6 +65,11 @@ private fun runApp() = application {
         }
     }
     val dataSync = remember { DataSync(scope, phone, userData, File(Settings.appDir, "sync"), settings) }
+    val beam = remember {
+        xaos.desktop.beam.BeamServer(settings, library, player, scope) { file ->
+            phone.remotePathOf(settings.data.value.roots.map(::File), file)
+        }
+    }
     val prefs by settings.data.collectAsState()
     // La stessa icona dell'app Android: barra del titolo e barra delle applicazioni.
     val appIcon = remember {
@@ -93,6 +98,12 @@ private fun runApp() = application {
         player.applyEqualizer(prefs.equalizer.enabled, prefs.equalizer.preamp, prefs.equalizer.bands)
     }
     LaunchedEffect(prefs.outputDevice) { player.setOutputDevice(prefs.outputDevice) }
+    // Xaos Beam: il server si apre e si chiude con l'interruttore.
+    LaunchedEffect(prefs.beamEnabled) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            if (prefs.beamEnabled) beam.start() else beam.stop()
+        }
+    }
     LaunchedEffect(prefs.phoneFolder) { phone.remoteRoot = prefs.phoneFolder }
     LaunchedEffect(prefs.effectiveImportFolder, prefs.roots) {
         phone.importFolder = prefs.effectiveImportFolder?.let(::File)
@@ -137,6 +148,7 @@ private fun runApp() = application {
     Window(
         onCloseRequest = {
             mediaBridge?.close()
+            beam.stop()
             settings.flush()
             player.release()
             exitApplication()
@@ -164,7 +176,12 @@ private fun runApp() = application {
         val base = androidx.compose.ui.platform.LocalDensity.current
         val scaled = androidx.compose.ui.unit.Density(base.density * prefs.uiScale, base.fontScale)
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaled) {
+        val activePhone by beam.connect.activePhone.collectAsState()
         XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
+          androidx.compose.runtime.CompositionLocalProvider(
+            xaos.desktop.ui.LocalBeam provides beam,
+            xaos.desktop.ui.LocalActivePhone provides activePhone,
+          ) {
             XaosDesktopApp(
                 settings = settings,
                 library = library,
@@ -173,6 +190,7 @@ private fun runApp() = application {
                 ytdlp = ytdlp,
                 userData = userData,
                 dataSync = dataSync,
+                beam = beam,
                 fullscreen = fullscreen,
                 onFullscreenChange = ::setFullscreen,
                 screenBounds = { mainWindow[0]?.graphicsConfiguration?.bounds },
@@ -233,6 +251,7 @@ private fun runApp() = application {
                     }
                 },
             )
+          }
         }
         }
     }

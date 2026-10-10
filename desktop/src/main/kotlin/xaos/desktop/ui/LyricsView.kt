@@ -83,7 +83,11 @@ fun LyricsView(
 ) {
     val colors = Xaos.colors
     val load by rememberLyrics(track)
-    val position by player.positionMs.collectAsState()
+    val shown = rememberShownPlayback(player)
+    // Se suona il telefono, il testo segue lui; un clic su una riga lo fa saltare lì.
+    val onPhone = shown.remote && track != null && track.path == shown.track?.path
+    val pcPosition by player.positionMs.collectAsState()
+    val position = if (onPhone) shown.positionMs else pcPosition
 
     when (val l = load) {
         LyricsLoad.Loading -> Box(modifier, contentAlignment = Alignment.Center) { DotSpinner(size = 20.dp) }
@@ -150,7 +154,7 @@ fun LyricsView(
                             i < current -> LineState.PAST
                             else -> LineState.FUTURE
                         },
-                        onClick = if (lyrics.synced) ({ player.seekToMs(line.timeMs) }) else null,
+                        onClick = if (lyrics.synced) ({ if (onPhone) shown.seekToMs(line.timeMs) else player.seekToMs(line.timeMs) }) else null,
                     )
                 }
             }
@@ -199,7 +203,8 @@ private fun LyricRow(text: String, style: TextStyle, state: LineState, onClick: 
 @Composable
 fun LyricsSidePanel(player: Player, width: Dp, onClose: () -> Unit, onEdit: (Track) -> Unit) {
     val colors = Xaos.colors
-    val track by player.current.collectAsState()
+    // Il brano in riproduzione, anche quando a suonare è il telefono.
+    val track = rememberShownPlayback(player).track
     Row(Modifier.width(width).fillMaxHeight()) {
         Box(Modifier.width(1.dp).fillMaxHeight().background(colors.line))
         Column(Modifier.fillMaxSize().background(colors.sidebar).padding(start = 20.dp, end = 16.dp, top = 18.dp)) {
@@ -236,7 +241,10 @@ private const val FOLLOW_PAUSE_MS = 4_000L
 fun MiniLyrics(player: Player, track: Track?, modifier: Modifier = Modifier) {
     val colors = Xaos.colors
     val load by rememberLyrics(track)
-    val position by player.positionMs.collectAsState()
+    val shown = rememberShownPlayback(player)
+    val onPhone = shown.remote && track != null && track.path == shown.track?.path
+    val pcPosition by player.positionMs.collectAsState()
+    val position = if (onPhone) shown.positionMs else pcPosition
     when (val l = load) {
         LyricsLoad.Loading -> Box(modifier, contentAlignment = Alignment.Center) { DotSpinner(size = 16.dp) }
         LyricsLoad.Missing -> Box(modifier, contentAlignment = Alignment.Center) {

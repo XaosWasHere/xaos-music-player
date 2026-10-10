@@ -136,6 +136,7 @@ private sealed interface Destination {
     data object Equalizer : Destination
     data object Theme : Destination
     data object Settings : Destination
+    data object Beam : Destination
     data object Queue : Destination
     data class EditSong(val songId: Long) : Destination
     data class EditAlbum(val albumId: Long, val title: String) : Destination
@@ -203,6 +204,12 @@ private fun XaosApp(
     var albumMenuTarget by remember { mutableStateOf<Album?>(null) }
     var addToPlaylistTarget by remember { mutableStateOf<Song?>(null) }
     var sleepSheetOpen by remember { mutableStateOf(false) }
+    var devicesOpen by remember { mutableStateOf(false) }
+    val pcNow by viewModel.pcNow.collectAsStateWithLifecycle()
+    val beamPairing by com.example.xaosmusicplayer.beam.Beam.pairing.collectAsStateWithLifecycle()
+    val remoteActive by viewModel.remoteActive.collectAsStateWithLifecycle()
+    val pcSong by viewModel.pcSong.collectAsStateWithLifecycle()
+    val pcLyrics by viewModel.pcLyrics.collectAsStateWithLifecycle()
     // L'ingranaggio di ogni sezione: le impostazioni una volta sola in cima alla pila.
     val openSettings = { if (backStack.lastOrNull() != Destination.Settings) backStack += Destination.Settings }
 
@@ -224,6 +231,13 @@ private fun XaosApp(
     }
 
     fun deleteSong(song: Song) {
+        // I brani del PC non sono file del telefono: da qui non si cancellano.
+        if (song.isRemote) {
+            android.widget.Toast
+                .makeText(context, "È un brano del PC: si elimina da Xaos sul PC", android.widget.Toast.LENGTH_SHORT)
+                .show()
+            return
+        }
         when (val outcome = MediaDeleter(context).delete(song)) {
             is DeleteOutcome.NeedsConsent -> {
                 pendingDeletion = song
@@ -448,51 +462,87 @@ private fun XaosApp(
                 }
             }
 
-            MiniPlayer(
-                song = currentSong,
-                isPlaying = isPlaying,
-                progress = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f,
-                onClick = { nowPlayingOpen = true },
-                onPlayPause = viewModel::togglePlayPause,
-                onNext = viewModel::next,
-                onPrevious = viewModel::previous,
-            )
+            // Come su Spotify: se il dispositivo attivo è il PC, il mini player
+            // mostra il suo brano e i comandi vanno a lui.
+            val pc = pcNow
+            val showPc = pc != null && pc.hasTrack && pcSong != null && (remoteActive || currentSong == null)
+            val tick by androidx.compose.runtime.produceState(System.currentTimeMillis(), showPc) {
+                while (showPc) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(500) }
+            }
+            if (showPc && pc != null) {
+                MiniPlayer(
+                    song = pcSong,
+                    isPlaying = pc.playing,
+                    progress = if (pc.durationMs > 0) pc.positionNow(tick).toFloat() / pc.durationMs else 0f,
+                    onClick = { nowPlayingOpen = true },
+                    onPlayPause = { viewModel.controlPc("toggle") },
+                    onNext = { viewModel.controlPc("next") },
+                    onPrevious = { viewModel.controlPc("previous") },
+                    device = beamPairing?.name ?: "PC",
+                )
+            } else {
+                MiniPlayer(
+                    song = currentSong,
+                    isPlaying = isPlaying,
+                    progress = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f,
+                    onClick = { nowPlayingOpen = true },
+                    onPlayPause = viewModel::togglePlayPause,
+                    onNext = viewModel::next,
+                    onPrevious = viewModel::previous,
+                )
+            }
 
             BottomBar(selected = section, onSelect = ::selectSection)
         }
 
+        // Il player a schermo intero mostra chi suona: il telefono, o il PC
+        // quando è lui il dispositivo attivo (testo compreso, comandi al PC).
+        val pcShown = pcNow?.takeIf { it.hasTrack && pcSong != null && (remoteActive || currentSong == null) }
+        val pcTick by androidx.compose.runtime.produceState(System.currentTimeMillis(), pcShown != null && nowPlayingOpen) {
+            while (pcShown != null && nowPlayingOpen) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(250) }
+        }
+        val shownSong = if (pcShown != null) pcSong else currentSong
         AnimatedVisibility(
-            visible = nowPlayingOpen && currentSong != null,
+            visible = nowPlayingOpen && shownSong != null,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
         ) {
-            currentSong?.let { song ->
+            shownSong?.let { song ->
+                val onPc = pcShown != null
                 NowPlayingScreen(
                     song = song,
-                    isPlaying = isPlaying,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
+                    isPlaying = pcShown?.playing ?: isPlaying,
+                    positionMs = pcShown?.positionNow(pcTick) ?: positionMs,
+                    durationMs = pcShown?.durationMs ?: durationMs,
                     levels = levels,
                     glowMode = glowMode,
                     isFavorite = song.id in favorites,
-                    shuffleEnabled = shuffle,
-                    repeatMode = repeatMode,
+                    shuffleEnabled = pcShown?.shuffle ?: shuffle,
+                    repeatMode = pcShown?.let {
+                        when (it.repeat) {
+                            "ALL" -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                            "ONE" -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                            else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+                        }
+                    } ?: repeatMode,
                     sleepTimerRemainingMs = sleepRemaining,
-                    lyricsState = lyrics,
+                    lyricsState = if (onPc) pcLyrics else lyrics,
+                    device = if (onPc) beamPairing?.name ?: "PC" else null,
                     onCollapse = { nowPlayingOpen = false },
-                    onPlayPause = viewModel::togglePlayPause,
-                    onNext = viewModel::next,
-                    onPrevious = viewModel::previous,
-                    onSeek = viewModel::seekTo,
+                    onPlayPause = { if (onPc) viewModel.controlPc("toggle") else viewModel.togglePlayPause() },
+                    onNext = { if (onPc) viewModel.controlPc("next") else viewModel.next() },
+                    onPrevious = { if (onPc) viewModel.controlPc("previous") else viewModel.previous() },
+                    onSeek = { ms -> if (onPc) viewModel.controlPc("seek", ms) else viewModel.seekTo(ms) },
                     onToggleFavorite = { viewModel.toggleFavorite(song.id) },
-                    onToggleShuffle = viewModel::toggleShuffle,
-                    onCycleRepeat = viewModel::cycleRepeatMode,
+                    onToggleShuffle = { if (onPc) viewModel.controlPc("shuffle") else viewModel.toggleShuffle() },
+                    onCycleRepeat = { if (onPc) viewModel.controlPc("repeat") else viewModel.cycleRepeatMode() },
                     onSetGlowMode = viewModel::setGlowMode,
                     onOpenEqualizer = {
                         nowPlayingOpen = false
                         backStack += Destination.Equalizer
                     },
                     onOpenSleepTimer = { sleepSheetOpen = true },
+                    onOpenDevices = { devicesOpen = true },
                     onOpenQueue = {
                         nowPlayingOpen = false
                         backStack += Destination.Queue
@@ -550,6 +600,23 @@ private fun XaosApp(
         )
     }
 
+    if (devicesOpen) {
+        com.example.xaosmusicplayer.ui.screens.DevicesSheet(
+            phoneSong = currentSong,
+            phonePlaying = isPlaying,
+            pcName = beamPairing?.name,
+            pc = pcNow,
+            onDismiss = { devicesOpen = false },
+            onTakeFromPc = viewModel::takeFromPc,
+            onSendToPc = viewModel::sendToPc,
+            onOpenBeam = {
+                devicesOpen = false
+                nowPlayingOpen = false
+                backStack += Destination.Beam
+            },
+        )
+    }
+
     if (sleepSheetOpen) {
         SleepTimerSheet(
             remainingMs = sleepRemaining,
@@ -587,6 +654,10 @@ private fun DestinationContent(
     onOpenSettings: () -> Unit,
 ) {
     val pop = { backStack.removeLastOrNull(); Unit }
+    // Album, artisti e playlist si ricalcolano quando la libreria cambia
+    // mentre sono aperti: un brano del PC appena scaricato, il PC che si
+    // collega o sparisce.
+    val library by viewModel.songs.collectAsStateWithLifecycle()
 
     /** Tutte le liste di brani si comportano allo stesso modo. */
     @Composable
@@ -611,7 +682,7 @@ private fun DestinationContent(
 
     when (destination) {
         is Destination.Album -> {
-            val songs = viewModel.songsOfAlbum(destination.albumId)
+            val songs = remember(library, destination.albumId) { viewModel.songsOfAlbum(destination.albumId) }
             val artist = songs.map { it.albumArtist }.distinct().singleOrNull() ?: "Artisti vari"
             val year = songs.maxOfOrNull { it.year }?.takeIf { it > 0 }
             songList(
@@ -622,6 +693,15 @@ private fun DestinationContent(
                     kind = listOfNotNull("ALBUM", year?.toString()).joinToString(" · "),
                     subtitle = artist,
                     actions = {
+                        // I brani che stanno solo sul PC si scaricano tutti insieme.
+                        val pcOnly = songs.filter { it.isRemote }
+                        if (pcOnly.isNotEmpty()) {
+                            CircleIconButton(
+                                icon = XaosIcons.Download,
+                                contentDescription = "Scarica sul telefono i ${pcOnly.size} brani del PC",
+                                onClick = { com.example.xaosmusicplayer.beam.Beam.download(pcOnly) },
+                            )
+                        }
                         CircleIconButton(
                             icon = XaosIcons.Edit,
                             contentDescription = "Modifica album",
@@ -633,11 +713,11 @@ private fun DestinationContent(
         }
 
         is Destination.Artist ->
-            songList(destination.name, viewModel.songsOfArtist(destination.name))
+            songList(destination.name, remember(library, destination.name) { viewModel.songsOfArtist(destination.name) })
 
         is Destination.PlaylistDetail -> {
             val playlist = playlists.firstOrNull { it.id == destination.id }
-            val songs = viewModel.songsOfPlaylist(destination.id)
+            val songs = remember(library, playlists, destination.id) { viewModel.songsOfPlaylist(destination.id) }
             var editing by remember { mutableStateOf(false) }
             var deleting by remember { mutableStateOf(false) }
             // La copertina si sceglie dal selettore di foto di sistema.
@@ -793,6 +873,8 @@ private fun DestinationContent(
             onOpenSleepTimer = onOpenSleepTimer,
             onRescan = viewModel::refresh,
             onUpdateEngine = viewModel::updateEngine,
+            onOpenBeam = { backStack += Destination.Beam },
         )
+        Destination.Beam -> com.example.xaosmusicplayer.ui.screens.BeamScreen(onBack = pop)
     }
 }

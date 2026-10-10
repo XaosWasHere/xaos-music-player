@@ -92,6 +92,7 @@ fun XaosDesktopApp(
     ytdlp: YtDlp,
     userData: UserData,
     dataSync: DataSync,
+    beam: xaos.desktop.beam.BeamServer,
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
     /** Lo schermo su cui sta la finestra principale: il player a tutto schermo si apre lì. */
@@ -320,6 +321,7 @@ fun XaosDesktopApp(
                                 player = player,
                                 phone = phone,
                                 ytdlp = ytdlp,
+                                beam = beam,
                                 onAddFolder = onAddFolder,
                                 onRescan = onRescan,
                                 onPickDownloadFolder = onPickDownloadFolder,
@@ -394,6 +396,7 @@ fun XaosDesktopApp(
                 lyricsOpen = lyricsOpen,
                 onToggleLyrics = { lyricsOpen = !lyricsOpen },
                 onOpenMini = onOpenMini,
+                beam = beam,
             )
         }
     }

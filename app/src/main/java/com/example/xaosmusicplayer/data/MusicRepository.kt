@@ -123,6 +123,7 @@ class MusicRepository(private val context: Context) {
                     // Dalla prima traccia, non dall'id: così una copertina
                     // scelta a mano vale anche per l'album.
                     artworkUri = first.artworkUri,
+                    pcOnlyCount = tracks.count { it.isRemote },
                 )
             }
             .sortedBy { it.title.lowercase() }
@@ -187,6 +188,24 @@ class MusicRepository(private val context: Context) {
         fun primaryArtistOf(credit: String): String =
             credit.split(FEATURE_MARKERS).firstOrNull()?.trim()
                 ?.takeIf { it.isNotEmpty() } ?: credit
+
+        /**
+         * Un id d'album che non viene da MediaStore: dal titolo e dal
+         * proprietario, così lo stesso disco ha sempre lo stesso id. È
+         * negativo, per non scontrarsi mai con quelli di MediaStore.
+         *
+         * Serve agli album nati da una correzione (un brano spostato in un
+         * album che il telefono non ha) e a quelli dei brani del PC: un album
+         * rinominato a mano e lo stesso album del PC finiscono così insieme.
+         */
+        fun syntheticAlbumId(album: String, owner: String): Long {
+            var h = -0x340d631b7bdddcdbL // FNV-1a a 64 bit
+            for (c in album.trim().lowercase() + '\u0000' + owner.trim().lowercase()) {
+                h = h xor c.code.toLong()
+                h *= 0x100000001b3L
+            }
+            return -(h and Long.MAX_VALUE).coerceAtLeast(1)
+        }
 
         /**
          * Soglia sotto cui un file non viene considerato musica.

@@ -20,6 +20,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -139,6 +141,8 @@ fun SongRow(
             )
         }
 
+        if (song.isRemote) PcDownloadButton(song)
+
         Text(
             text = formatDuration(song.durationMs),
             style = MaterialTheme.typography.labelMedium,
@@ -156,6 +160,37 @@ fun SongRow(
     }
 }
 
+/**
+ * Il segno dei brani che stanno solo sul PC (Xaos Beam): la freccia di
+ * download, da toccare per tenerli anche sul telefono. Mentre scarica mostra
+ * la percentuale; se il download non riesce la freccia si accende, e toccarla
+ * riprova.
+ */
+@Composable
+fun PcDownloadButton(song: Song, modifier: Modifier = Modifier) {
+    val colors = Xaos.colors
+    val downloads by com.example.xaosmusicplayer.beam.Beam.downloads.collectAsState()
+    Box(modifier = modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        when (val state = downloads[song.id]) {
+            is com.example.xaosmusicplayer.beam.Beam.Download.Running -> Text(
+                text = if (state.progress < 0f) "…" else "${(state.progress * 100).toInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.accentInk,
+                maxLines = 1,
+            )
+            com.example.xaosmusicplayer.beam.Beam.Download.Queued -> AccentDot(size = 7.dp, color = colors.inkTertiary)
+            else -> IconButton(onClick = { com.example.xaosmusicplayer.beam.Beam.download(listOf(song)) }) {
+                Icon(
+                    imageVector = XaosIcons.Download,
+                    contentDescription = "Solo sul PC: scarica sul telefono",
+                    tint = if (state is com.example.xaosmusicplayer.beam.Beam.Download.Failed) colors.accentInk else colors.inkTertiary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
 /** Cella della griglia album: copertina quadrata e footer con titolo. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -166,6 +201,8 @@ fun AlbumCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    /** Quanti brani dell'album stanno solo sul PC: se ce ne sono, un segno sulla copertina. */
+    onPcOnly: Int = 0,
 ) {
     val colors = Xaos.colors
     Column(
@@ -174,11 +211,30 @@ fun AlbumCell(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(6.dp),
     ) {
-        Artwork(
-            uri = artworkUri,
-            cornerRadius = 14,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-        )
+        Box {
+            Artwork(
+                uri = artworkUri,
+                cornerRadius = 14,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            )
+            if (onPcOnly > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(28.dp)
+                        .background(colors.background.copy(alpha = 0.75f), androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = XaosIcons.Download,
+                        contentDescription = "Brani solo sul PC",
+                        tint = colors.ink,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
         Column(modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 10.dp, bottom = 6.dp)) {
             Text(
                 text = title.uppercase(),

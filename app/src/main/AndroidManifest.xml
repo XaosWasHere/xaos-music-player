@@ -5,6 +5,9 @@
     <!-- Scarico dalla rete con yt-dlp, integrato nell'app -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Xaos Beam: la libreria del PC si ascolta in streaming sulla rete di
+         casa. Il PC parla HTTP semplice (non ha un certificato: è un indirizzo
+         locale), da cui usesCleartextTraffic più sotto. -->
 
     <!-- Prima di Android 10 il brano scaricato va scritto direttamente nella
          cartella Music pubblica; da Android 10 in poi ci pensa MediaStore. -->
@@ -40,7 +43,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.XaosMusicPlayer">
+        android:theme="@style/Theme.XaosMusicPlayer"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

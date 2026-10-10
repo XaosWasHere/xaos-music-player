@@ -271,7 +271,21 @@ class Player {
     private val _source = MutableStateFlow<PlaySource?>(null)
     val source: StateFlow<PlaySource?> = _source.asStateFlow()
 
+    /**
+     * Xaos Beam Connect: se il dispositivo attivo è un altro (il telefono),
+     * "suona questi brani" va a lui, come su Spotify. Restituisce true se
+     * l'ha preso; altrimenti suona il PC.
+     */
+    @Volatile var redirectPlay: ((List<Track>, Int) -> Boolean)? = null
+
     fun play(tracks: List<Track>, startIndex: Int, source: PlaySource? = null) {
+        if (tracks.isEmpty()) return
+        if (redirectPlay?.invoke(tracks, startIndex.coerceIn(tracks.indices)) == true) return
+        playHere(tracks, startIndex, source)
+    }
+
+    /** Suona sul PC, qualunque sia il dispositivo attivo. */
+    fun playHere(tracks: List<Track>, startIndex: Int, source: PlaySource? = null) {
         if (tracks.isEmpty()) return
         _source.value = source
         _queue.value = tracks
