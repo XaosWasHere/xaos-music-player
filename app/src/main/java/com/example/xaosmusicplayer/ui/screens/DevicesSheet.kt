@@ -80,10 +80,12 @@ fun DevicesSheet(
                     icon = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (pc.hasTrack && pc.queue.isNotEmpty()) {
+                    // "Ascolta qui" non serve se qui sta già suonando qualcosa;
+                    // "Manda al PC" non serve se suona già solo il PC.
+                    if (pc.hasTrack && pc.queue.isNotEmpty() && !phonePlaying) {
                         PillButton("ASCOLTA QUI", onClick = { onTakeFromPc(); onDismiss() }, icon = XaosIcons.Play, filled = true)
                     }
-                    if (phoneSong != null) {
+                    if (phoneSong != null && (phonePlaying || !pc.playing)) {
                         PillButton("MANDA AL PC", onClick = { onSendToPc(); onDismiss() }, icon = XaosIcons.Computer)
                     }
                 }

@@ -65,7 +65,12 @@ object BeamConnect {
         val value: Int? = null,
         val ids: List<Long> = emptyList(),
         val index: Int = 0,
+        /** Il numero d'ordine: il PC lo rimanda finché non diciamo di averlo ricevuto. */
+        val seq: Long = 0,
     )
+
+    /** L'ultimo comando del PC ricevuto ed eseguito: lo si conferma, e non si ripete. */
+    @Volatile private var lastSeq = 0L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var sessionJob: Job? = null
@@ -76,6 +81,18 @@ object BeamConnect {
     private val _pc = MutableStateFlow<PcNow?>(null)
     /** Lo stato del PC; null se il PC non è collegato. */
     val pc: StateFlow<PcNow?> = _pc.asStateFlow()
+
+    /** Se il telefono sta suonando: lo aggiornano il player (dal widget) e l'app. */
+    val localPlaying = MutableStateFlow(false)
+
+    private val _remoteActive = MutableStateFlow(false)
+    /**
+     * Se il dispositivo attivo è il PC, come su Spotify: diventa vero quando il
+     * PC suona e il telefono no, torna falso quando riparte il telefono. Fra
+     * le due cose resta com'era: mettere in pausa il PC non riporta la musica
+     * sul telefono. Lo usano l'app e il widget, così dicono la stessa cosa.
+     */
+    val remoteActive: StateFlow<Boolean> = _remoteActive.asStateFlow()
 
     /** Chi esegue i comandi del PC sul player del telefono (il ViewModel). */
     @Volatile var commandHandler: ((Command) -> Unit)? = null
@@ -93,6 +110,33 @@ object BeamConnect {
                 if (status is Beam.Status.Connected) start() else stop()
             }
         }
+        scope.launch {
+            kotlinx.coroutines.flow.combine(localPlaying, _pc) { local, pc -> local to pc }.collect { (local, pc) ->
+                _remoteActive.value = when {
+                    pc == null || !pc.hasTrack -> false
+                    local -> false
+                    pc.playing -> true
+                    else -> _remoteActive.value
+                }
+            }
+        }
+    }
+
+    /**
+     * L'app è tornata in primo piano: l'attesa sul PC può essere morta mentre
+     * era in background (Android la congela, il Wi-Fi si riconnette), e
+     * accorgersene solo al timeout vorrebbe dire stato vecchio e comandi in
+     * ritardo. Si ricomincia subito, e il PC riceve lo stato del telefono.
+     */
+    fun wake() {
+        if (Beam.status.value !is Beam.Status.Connected) {
+            Beam.refresh()
+            return
+        }
+        sessionJob?.cancel()
+        sessionJob = scope.launch { sessionLoop() }
+        if (reportJob?.isActive != true) reportJob = scope.launch { reportLoop() }
+        phoneChanged()
     }
 
     /** Lo stato del telefono è cambiato: il PC lo sa subito. */
@@ -109,6 +153,7 @@ object BeamConnect {
         index: Int? = null,
     ) {
         val pairing = Beam.pairing.value ?: return
+        expect(action, ms)
         scope.launch {
             runCatching {
                 val body = JSONObject().put("action", action).apply {
@@ -135,6 +180,31 @@ object BeamConnect {
                 } finally {
                     conn.disconnect()
                 }
+            }
+        }
+    }
+
+    /**
+     * Play, pausa e salti si vedono subito, senza aspettare che il PC
+     * risponda: su un Wi-Fi lento la conferma può metterci un secondo, e un
+     * pulsante che non reagisce sembra rotto. Lo stato vero del PC, quando
+     * arriva, prende comunque il posto di questo.
+     */
+    private fun expect(action: String, ms: Long?) {
+        val now = System.currentTimeMillis()
+        _pc.update { current ->
+            current ?: return@update null
+            when (action) {
+                "toggle", "play", "pause" -> {
+                    val playing = when (action) {
+                        "toggle" -> !current.playing
+                        "play" -> true
+                        else -> false
+                    }
+                    current.copy(playing = playing, positionMs = current.positionNow(now), receivedAt = now)
+                }
+                "seek" -> ms?.let { current.copy(positionMs = it, receivedAt = now) } ?: current
+                else -> current
             }
         }
     }
@@ -177,7 +247,7 @@ object BeamConnect {
         while (currentCoroutineContext().isActive) {
             val pairing = Beam.pairing.value ?: return
             val result = runCatching {
-                val conn = Beam.open("${pairing.baseUrl}/session?rev=$rev", pairing.token).apply {
+                val conn = Beam.open("${pairing.baseUrl}/session?rev=$rev&ack=$lastSeq", pairing.token).apply {
                     readTimeout = SESSION_READ_TIMEOUT_MS
                 }
                 try {
@@ -187,6 +257,8 @@ object BeamConnect {
                     conn.disconnect()
                 }
             }
+            // Un'attesa rimpiazzata da wake(): la sua risposta è vecchia.
+            if (!currentCoroutineContext().isActive) return
             val session = result.getOrNull()
             if (session == null) {
                 delay(RETRY_MS)
@@ -201,7 +273,11 @@ object BeamConnect {
             if (tag.isNotEmpty() && tag != Beam.catalogTag) Beam.refresh()
             val commands = session.optJSONArray("commands") ?: JSONArray()
             if (commands.length() > 0) {
+                // Il PC rimanda i comandi finché non li confermiamo: quelli già
+                // eseguiti si saltano (con un PC più vecchio, senza numeri, valgono tutti).
                 val parsed = List(commands.length()) { parseCommand(commands.getJSONObject(it)) }
+                    .filter { it.seq == 0L || it.seq > lastSeq }
+                parsed.maxOfOrNull { it.seq }?.let { if (it > lastSeq) lastSeq = it }
                 withContext(Dispatchers.Main) { parsed.forEach { commandHandler?.invoke(it) } }
                 // Dopo un comando lo stato del telefono è cambiato: il PC lo vede subito.
                 phoneChanged()
@@ -263,6 +339,7 @@ object BeamConnect {
             value = o.takeIf { it.has("value") && !it.isNull("value") }?.getInt("value"),
             ids = List(ids.length()) { ids.getLong(it) },
             index = o.optInt("index", 0),
+            seq = o.optLong("seq", 0),
         )
     }
 
@@ -297,7 +374,8 @@ object BeamConnect {
     private fun keyOf(title: String, artist: String): String =
         title.trim().lowercase() + '\u0000' + MusicRepository.primaryArtistOf(artist).trim().lowercase()
 
-    private const val SESSION_READ_TIMEOUT_MS = 35_000
+    /** Il PC tiene l'attesa al più 12 secondi: oltre i 20 la connessione è morta. */
+    private const val SESSION_READ_TIMEOUT_MS = 20_000
     private const val RETRY_MS = 3_000L
     private const val REPORT_EVERY_MS = 10_000L
     private const val COALESCE_MS = 150L

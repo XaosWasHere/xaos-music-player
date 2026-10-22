@@ -12,7 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import com.example.xaosmusicplayer.audio.CrossfeedProcessor
+import com.example.xaosmusicplayer.audio.SpatializerProcessor
 import com.example.xaosmusicplayer.audio.PreampProcessor
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -42,7 +42,7 @@ class PlaybackService : MediaSessionService() {
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink = DefaultAudioSink.Builder(context)
                 // L'ordine conta: prima il margine, poi la spazializzazione.
-                .setAudioProcessors(arrayOf(PreampProcessor(), CrossfeedProcessor()))
+                .setAudioProcessors(arrayOf(PreampProcessor(), SpatializerProcessor()))
                 // Con l'output in virgola mobile il nostro processore a 16 bit
                 // verrebbe scavalcato.
                 .setEnableFloatOutput(false)
@@ -60,6 +60,16 @@ class PlaybackService : MediaSessionService() {
             // Mette in pausa quando si staccano le cuffie, invece di sparare
             // musica dall'altoparlante.
             .setHandleAudioBecomingNoisy(true)
+            // I brani del PC (Xaos Beam) arrivano in streaming: il Wi-Fi resta
+            // sveglio mentre suonano, anche a schermo spento.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            // Partire dopo un secondo di buffer invece di due e mezzo: sulla rete
+            // di casa basta, e passare dal PC al telefono è più svelto.
+            .setLoadControl(
+                androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15_000, 50_000, 1_000, 2_500)
+                    .build()
+            )
             .build()
 
         // Equalizzatore e Visualizer hanno bisogno di questo id per agganciarsi.

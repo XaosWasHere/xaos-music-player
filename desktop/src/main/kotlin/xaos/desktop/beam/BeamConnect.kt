@@ -63,6 +63,13 @@ data class BeamCommand(
     val value: Int? = null,
     val ids: List<Long>? = null,
     val index: Int? = null,
+    /**
+     * Il numero d'ordine dei comandi per il telefono. Il telefono dice fin dove
+     * li ha ricevuti, e il PC tiene gli altri: se una risposta si perde per
+     * strada (Wi-Fi che si riconnette, app congelata) il comando arriva lo
+     * stesso alla richiesta dopo, invece di sparire.
+     */
+    val seq: Long = 0,
 )
 
 /** La risposta all'attesa del telefono: lo stato del PC e i comandi per lui. */
@@ -98,6 +105,14 @@ class BeamConnect(
     private val lock = Object()
     @Volatile private var rev = 1L
     private val pending = HashMap<String, MutableList<BeamCommand>>()
+    private var nextSeq = 1L
+
+    /**
+     * Gli spostamenti in corso: chi cede la musica si ferma solo quando chi la
+     * prende è partito davvero, così non c'è un buco di silenzio (né due
+     * dispositivi che suonano insieme). Telefono → istante entro cui partire.
+     */
+    private val handingToPhone = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val _phones = MutableStateFlow<Map<String, ConnectedPhone>>(emptyMap())
     /** I telefoni che si sono fatti vivi di recente, con quello che suonano. */
@@ -192,10 +207,12 @@ class BeamConnect(
      * se ci sono comandi per [device], altrimenti appena succede, al più dopo
      * [WAIT_MS].
      */
-    fun await(device: String, knownRev: Long): BeamSession {
+    fun await(device: String, knownRev: Long, ack: Long): BeamSession {
         seen(device)
         val deadline = System.currentTimeMillis() + WAIT_MS
         synchronized(lock) {
+            // I comandi che il telefono ha già ricevuto non servono più.
+            pending[device]?.removeAll { it.seq <= ack }
             while (true) {
                 val commands = pending[device]
                 if (rev != knownRev || !commands.isNullOrEmpty()) break
@@ -203,7 +220,9 @@ class BeamConnect(
                 if (left <= 0) break
                 lock.wait(left)
             }
-            val commands = pending.remove(device).orEmpty()
+            // Restano in coda finché il telefono non conferma di averli
+            // (un'app più vecchia, senza conferme, li riceve una volta sola).
+            val commands = if (ack < 0) pending.remove(device).orEmpty() else pending[device].orEmpty().toList()
             return BeamSession(pcNow(), commands)
         }
     }
@@ -211,6 +230,12 @@ class BeamConnect(
     fun updatePhone(device: String, now: PhoneNow) {
         val at = System.currentTimeMillis()
         _phones.value = _phones.value + (device to ConnectedPhone(device, now, at, at))
+        // Il telefono a cui si passava la musica è partito: ora il PC si ferma.
+        val until = handingToPhone[device]
+        if (until != null && (now.playing || at > until)) {
+            handingToPhone.remove(device)
+            if (now.playing && player.isPlaying.value) player.togglePlayPause()
+        }
     }
 
     private fun seen(device: String) {
@@ -220,9 +245,33 @@ class BeamConnect(
     /** Un comando per il telefono: lo riceve alla sua prossima attesa, cioè subito. */
     fun sendToPhone(device: String, command: BeamCommand) {
         synchronized(lock) {
-            pending.getOrPut(device) { mutableListOf() } += command
+            pending.getOrPut(device) { mutableListOf() } += command.copy(seq = nextSeq++)
             lock.notifyAll()
         }
+        expect(device, command)
+    }
+
+    /**
+     * Play, pausa e salti sul telefono si vedono subito nella barra, senza
+     * aspettare che il telefono risponda: su un Wi-Fi lento ci vuole anche un
+     * secondo. Lo stato vero del telefono, quando arriva, prende il posto di questo.
+     */
+    private fun expect(device: String, command: BeamCommand) {
+        val phone = _phones.value[device] ?: return
+        val now = System.currentTimeMillis()
+        val next = when (command.action) {
+            "toggle", "play", "pause" -> {
+                val playing = when (command.action) {
+                    "toggle" -> !phone.now.playing
+                    "play" -> true
+                    else -> false
+                }
+                phone.now.copy(playing = playing, positionMs = phone.positionNow(now))
+            }
+            "seek" -> command.ms?.let { phone.now.copy(positionMs = it) } ?: return
+            else -> return
+        }
+        _phones.value = _phones.value + (device to phone.copy(now = next, receivedAt = now))
     }
 
     /** Un comando dal telefono per il player del PC. */
@@ -248,26 +297,22 @@ class BeamConnect(
         val tracks = ids.mapNotNull { byId[it] }
         if (tracks.isEmpty()) return
         val start = wanted?.let { w -> tracks.indexOfFirst { BeamServer.idOf(it.path) == w } }?.takeIf { it >= 0 } ?: 0
-        player.playHere(tracks, start, PlaySource(PlaySource.Kind.SONGS, "beam", "DAL TELEFONO"))
-        if (positionMs > SEEK_JUMP_MS) seekWhenReady(positionMs)
+        // Parte già dal punto giusto: niente attimo di inizio brano.
+        player.playHere(tracks, start, PlaySource(PlaySource.Kind.SONGS, "beam", "DAL TELEFONO"), positionMs.coerceAtLeast(0))
     }
 
-    /** VLC accetta il salto solo quando il brano è partito davvero. */
-    private fun seekWhenReady(positionMs: Long) {
-        Thread({
-            val until = System.currentTimeMillis() + 5_000
-            while (!player.isPlaying.value && System.currentTimeMillis() < until) Thread.sleep(50)
-            Thread.sleep(150)
-            player.seekToMs(positionMs)
-        }, "xaos-beam-seek").apply { isDaemon = true }.start()
-    }
-
-    /** Sposta l'ascolto del PC sul telefono: lui riprende da qui, il PC si ferma. */
+    /**
+     * Sposta l'ascolto del PC sul telefono: lui riprende da qui. Il PC si
+     * ferma quando il telefono è partito davvero (se il brano gli arriva in
+     * streaming deve prima riempire un po' di buffer).
+     */
     fun transferToPhone(device: String) {
         val now = pcNow()
         if (now.track == null || now.queue.isEmpty()) return
+        // Il punto in cui il telefono partirà davvero: quello attuale più un
+        // attimo, così nel passaggio non si ripete nulla.
+        handingToPhone[device] = System.currentTimeMillis() + HANDOVER_TIMEOUT_MS
         sendToPhone(device, BeamCommand("queue", ms = player.positionMs.value, ids = now.queue, index = now.index.coerceAtLeast(0)))
-        if (player.isPlaying.value) player.togglePlayPause()
     }
 
     /** Prende sul PC quello che suona il telefono: il telefono si ferma. */
@@ -280,7 +325,12 @@ class BeamConnect(
         val start = known.indexOfFirst { it.index == index }.takeIf { it >= 0 } ?: 0
         if (known.isEmpty()) return
         playQueue(known.map { it.value!! }, start, phone.positionNow())
-        sendToPhone(device, BeamCommand("pause"))
+        // Il telefono si ferma quando qui la musica è partita davvero.
+        Thread({
+            val until = System.currentTimeMillis() + HANDOVER_TIMEOUT_MS
+            while (!player.isPlaying.value && System.currentTimeMillis() < until) Thread.sleep(50)
+            if (player.isPlaying.value) sendToPhone(device, BeamCommand("pause"))
+        }, "xaos-beam-handover").apply { isDaemon = true }.start()
     }
 
     private fun nowTrackOf(track: Track) = NowTrack(
@@ -292,7 +342,14 @@ class BeamConnect(
     )
 
     companion object {
-        const val WAIT_MS = 20_000L
+        /**
+         * Quanto il PC tiene aperta l'attesa del telefono. Corta abbastanza che
+         * una connessione morta (il telefono in background, il Wi-Fi che si
+         * riconnette) si rinnovi presto.
+         */
+        const val WAIT_MS = 12_000L
+        /** Oltre questo tempo uno spostamento non confermato si lascia perdere. */
+        const val HANDOVER_TIMEOUT_MS = 10_000L
         const val SEEK_JUMP_MS = 2_500L
         /** Un telefono che non si fa vivo da tanto è uscito da Xaos o dalla rete. */
         const val PHONE_TIMEOUT_MS = 45_000L

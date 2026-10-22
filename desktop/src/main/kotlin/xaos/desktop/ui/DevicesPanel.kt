@@ -54,6 +54,7 @@ private fun DevicesPanel(beam: BeamServer, player: Player) {
     val colors = Xaos.colors
     val phones by beam.phones.collectAsState()
     val current by player.current.collectAsState()
+    val pcPlaying by player.isPlaying.collectAsState()
     // Solo gli altri dispositivi: cosa suonano e come spostare l'ascolto. I
     // comandi stanno già nella barra del player, che segue chi suona.
     Column(Modifier.width(360.dp).padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -67,13 +68,13 @@ private fun DevicesPanel(beam: BeamServer, player: Player) {
         }
         phones.values.sortedBy { it.name }.forEachIndexed { i, phone ->
             if (i > 0) Hairline()
-            PhoneDevice(phone, beam, hasPcTrack = current != null)
+            PhoneDevice(phone, beam, hasPcTrack = current != null, pcPlaying = pcPlaying)
         }
     }
 }
 
 @Composable
-private fun PhoneDevice(phone: ConnectedPhone, beam: BeamServer, hasPcTrack: Boolean) {
+private fun PhoneDevice(phone: ConnectedPhone, beam: BeamServer, hasPcTrack: Boolean, pcPlaying: Boolean) {
     val track = phone.now.track
     DeviceHeader(
         name = phone.name.uppercase(),
@@ -85,11 +86,13 @@ private fun PhoneDevice(phone: ConnectedPhone, beam: BeamServer, hasPcTrack: Boo
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Quello che suona il telefono continua qui, da dove era arrivato.
-        if (track != null && phone.now.queue.any { it != null }) {
+        // Quello che suona il telefono continua qui, da dove era arrivato; se
+        // qui sta già suonando qualcosa, non serve. "Manda al telefono" non
+        // serve se suona già solo il telefono.
+        if (track != null && phone.now.queue.any { it != null } && !pcPlaying) {
             PillButton("ASCOLTA QUI", onClick = { beam.connect.takeFromPhone(phone.name) }, icon = XaosIcons.Play, filled = true)
         }
-        if (hasPcTrack) {
+        if (hasPcTrack && (pcPlaying || !phone.now.playing)) {
             PillButton("MANDA AL TELEFONO", onClick = { beam.connect.transferToPhone(phone.name) }, icon = XaosIcons.Phone)
         }
     }

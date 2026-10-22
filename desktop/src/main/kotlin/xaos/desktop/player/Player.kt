@@ -284,13 +284,17 @@ class Player {
         playHere(tracks, startIndex, source)
     }
 
-    /** Suona sul PC, qualunque sia il dispositivo attivo. */
-    fun playHere(tracks: List<Track>, startIndex: Int, source: PlaySource? = null) {
+    /**
+     * Suona sul PC, qualunque sia il dispositivo attivo. Con [startMs] il
+     * brano parte già da lì: un salto dopo la partenza farebbe sentire un
+     * attimo di inizio brano (serve quando l'ascolto arriva dal telefono).
+     */
+    fun playHere(tracks: List<Track>, startIndex: Int, source: PlaySource? = null, startMs: Long = 0) {
         if (tracks.isEmpty()) return
         _source.value = source
         _queue.value = tracks
         rebuildOrder(startIndex.coerceIn(tracks.indices))
-        startCurrent()
+        startCurrent(startMs)
     }
 
     fun togglePlayPause() {
@@ -404,17 +408,22 @@ class Player {
         startCurrent()
     }
 
-    private fun startCurrent() {
+    private fun startCurrent(startMs: Long = 0) {
         val player = mp ?: return
         val track = _queue.value.getOrNull(order.getOrNull(cursor) ?: return) ?: return
         _current.value = track
         refreshUpNext()
         listenedMs = 0
-        lastTimeMs = 0
+        // Partendo da metà, il primo tempo di VLC non va contato come ascolto.
+        lastTimeMs = startMs
         listenRecorded = false
-        _positionMs.value = 0
+        _positionMs.value = startMs
         _durationMs.value = track.durationMs
-        player.media().play(mrlOf(track))
+        if (startMs > 0) {
+            player.media().play(mrlOf(track), ":start-time=" + String.format(java.util.Locale.US, "%.3f", startMs / 1000.0))
+        } else {
+            player.media().play(mrlOf(track))
+        }
         player.audio().setVolume(_volume.value)
         // VLC dimentica l'uscita scelta a ogni nuovo media: la si riapplica.
         outputDevice?.let { player.audio().setOutputDevice(null, it) }

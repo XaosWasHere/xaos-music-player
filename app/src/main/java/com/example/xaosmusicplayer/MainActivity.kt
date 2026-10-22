@@ -101,6 +101,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Xaos Beam Connect: rientrando, lo stato del PC si rilegge subito.
+        com.example.xaosmusicplayer.beam.BeamConnect.wake()
+    }
+
     /**
      * Icone di stato scure sul tema chiaro e chiare sullo scuro, e il fondo della
      * finestra dello stesso colore dell'app: è quello che si vede per un istante

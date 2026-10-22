@@ -253,7 +253,9 @@ class BeamServer(
                         path == "catalog" -> sendCatalog(ex)
                         path == "session" -> {
                             val known = query(ex)["rev"]?.toLongOrNull() ?: 0
-                            sendJson(ex, json.encodeToString(connect.await(device.name, known)))
+                            // Senza "ack" è un'app del telefono più vecchia: i comandi le si danno una volta sola.
+                            val ack = query(ex)["ack"]?.toLongOrNull() ?: -1
+                            sendJson(ex, json.encodeToString(connect.await(device.name, known, ack)))
                         }
                         path == "state" && ex.requestMethod == "POST" -> {
                             val now = json.decodeFromString<PhoneNow>(ex.requestBody.readNBytes(256 * 1024).toString(Charsets.UTF_8))

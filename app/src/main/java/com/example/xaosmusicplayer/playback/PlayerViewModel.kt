@@ -15,7 +15,7 @@ import com.example.xaosmusicplayer.beam.BeamConnect
 import com.example.xaosmusicplayer.audio.AudioVisualizer
 import com.example.xaosmusicplayer.audio.AudioSessionHolder
 import com.example.xaosmusicplayer.audio.EqualizerController
-import com.example.xaosmusicplayer.audio.Crossfeed
+import com.example.xaosmusicplayer.audio.Spatializer
 import com.example.xaosmusicplayer.audio.Preamp
 import com.example.xaosmusicplayer.data.Album
 import com.example.xaosmusicplayer.data.Artist
@@ -372,15 +372,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     val queue: StateFlow<List<Song>> = _queue.asStateFlow()
 
-    // Prima del blocco init, che la usa già (observeConnect).
-    private val _remoteActive = MutableStateFlow(false)
-    /**
-     * Se il dispositivo attivo è il PC (Xaos Beam Connect), come su Spotify:
-     * diventa vero quando il PC suona e il telefono no, torna falso quando
-     * riparte il telefono. Fra le due cose resta com'era: mettere in pausa il
-     * PC non riporta la barra sul telefono.
-     */
-    val remoteActive: StateFlow<Boolean> = _remoteActive.asStateFlow()
+    /** Se il dispositivo attivo è il PC (Xaos Beam Connect): vedi [BeamConnect.remoteActive]. */
+    val remoteActive: StateFlow<Boolean> = BeamConnect.remoteActive
 
     // ---------- Effetto grafico ----------
 
@@ -752,7 +745,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             // La spazializzazione è nostra, quindi non dipende più dagli
             // AudioEffect: basta tenere allineata l'intensità.
             combine(_eqEnabled, preferences.virtualizer) { on, v -> on to v }
-                .collect { (on, v) -> Crossfeed.setStrength(if (on) v else 0) }
+                .collect { (on, v) -> Spatializer.setStrength(if (on) v else 0) }
         }
     }
 
@@ -944,7 +937,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun play(songs: List<Song>, startIndex: Int, startPositionMs: Long = 0L) {
         if (songs.isEmpty() || startIndex !in songs.indices) return
-        if (_remoteActive.value && sendQueueToPc(songs, startIndex, startPositionMs)) return
+        if (remoteActive.value && sendQueueToPc(songs, startIndex, startPositionMs)) return
         playHere(songs, startIndex, startPositionMs)
     }
 
@@ -1025,16 +1018,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             combine(_currentSong, _isPlaying) { song, playing -> song?.id to playing }
                 .collect { BeamConnect.phoneChanged() }
         }
+        viewModelScope.launch { _isPlaying.collect { BeamConnect.localPlaying.value = it } }
+        // Il PC diventa il dispositivo attivo: la notifica "in riproduzione sul PC".
         viewModelScope.launch {
-            combine(_isPlaying, BeamConnect.pc) { local, pc -> local to pc }.collect { (local, pc) ->
-                _remoteActive.value = when {
-                    pc == null || !pc.hasTrack -> false
-                    local -> false
-                    pc.playing -> true
-                    else -> _remoteActive.value
-                }
-            }
+            BeamConnect.remoteActive.collect { active -> if (active) RemotePlaybackService.start(getApplication()) }
         }
+        // Il widget segue il PC anche quando il telefono non ha mai suonato.
+        com.example.xaosmusicplayer.widget.WidgetHub.watchRemote(getApplication())
     }
 
     /** Un comando arrivato dal PC per questo telefono. */
@@ -1098,8 +1088,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val pc = BeamConnect.pc.value ?: return
         if (!pc.hasTrack || pc.queue.isEmpty()) return
         playPcQueue(pc.queue, pc.index, pc.positionNow())
-        BeamConnect.control("pause")
+        // Il PC si ferma quando qui la musica è partita davvero: se il brano
+        // arriva in streaming ci vuole un attimo, e nel frattempo continua lui.
+        handover?.cancel()
+        handover = viewModelScope.launch {
+            if (kotlinx.coroutines.withTimeoutOrNull(HANDOVER_TIMEOUT_MS) { _isPlaying.first { it } } != null) {
+                BeamConnect.control("pause")
+            }
+        }
     }
+
+    /** Lo spostamento in corso fra telefono e PC, finché l'altro non è partito. */
+    private var handover: kotlinx.coroutines.Job? = null
 
     /** "Manda al PC": la coda del telefono continua sul PC, il telefono si ferma. */
     fun sendToPc() {
@@ -1114,8 +1114,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val known = queue.withIndex().filter { it.value != null }
         if (known.isEmpty()) return
         val start = known.indexOfFirst { it.index == player.currentMediaItemIndex }.coerceAtLeast(0)
+        val target = known[start].value
         BeamConnect.control("queue", ms = player.currentPosition, ids = known.map { it.value!! }, index = start)
-        player.pause()
+        // Il telefono si ferma quando il PC suona davvero quel brano.
+        handover?.cancel()
+        handover = viewModelScope.launch {
+            val started = kotlinx.coroutines.withTimeoutOrNull(HANDOVER_TIMEOUT_MS) {
+                BeamConnect.pc.first { it != null && it.playing && it.pcId == target }
+            }
+            if (started != null) controller?.pause()
+        }
     }
 
     /** Un comando per il player del PC, dal foglio dei dispositivi. */
@@ -1401,6 +1409,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Quanti artisti e album mostrare fra i risultati di ricerca. */
         const val SEARCH_GROUP_LIMIT = 8
+
+        /** Oltre questo tempo uno spostamento non confermato si lascia perdere. */
+        const val HANDOVER_TIMEOUT_MS = 10_000L
 
         /** Fra PC e telefono, durate che differiscono di così sono lo stesso brano. */
         const val SAME_SONG_TOLERANCE_MS = 3_000L

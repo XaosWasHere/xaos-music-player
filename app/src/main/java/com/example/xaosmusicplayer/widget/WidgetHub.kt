@@ -18,6 +18,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.example.xaosmusicplayer.MainActivity
 import com.example.xaosmusicplayer.R
+import com.example.xaosmusicplayer.beam.BeamConnect
 import com.example.xaosmusicplayer.data.Lyrics
 import com.example.xaosmusicplayer.data.LyricsReader
 import com.example.xaosmusicplayer.ui.theme.DarkPalette
@@ -74,25 +75,42 @@ object WidgetHub {
     private var playing = false
     private var stacked = false
 
+    /**
+     * Xaos Beam Connect: quando il dispositivo attivo è il PC, il widget mostra
+     * il brano del PC (copertina e testo), e il tocco mette in pausa il PC.
+     */
+    @Volatile private var remote: BeamConnect.PcNow? = null
+    private var remoteKey: Long? = null
+    private var remoteScope: CoroutineScope? = null
+
     private val listener = object : Player.Listener {
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = loadTrack(mediaItem)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (remote == null) loadTrack(mediaItem)
+        }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            BeamConnect.localPlaying.value = isPlaying
+            if (remote != null) return
             playing = isPlaying
             render(pushLayout = false)
             scheduleTick()
         }
     }
 
+    /** La posizione di chi suona: il player del telefono, o il PC. */
+    private fun positionNow(): Long? = remote?.positionNow() ?: player?.currentPosition
+
+    private fun isPlayingNow(): Boolean = remote?.playing ?: (player?.isPlaying == true)
+
     private val tick = object : Runnable {
         override fun run() {
-            val p = player ?: return
+            val position = positionNow() ?: return
             val l = lyrics ?: return
-            val index = l.indexAt(p.currentPosition)
+            val index = l.indexAt(position)
             if (index != lineIndex) {
                 lineIndex = index
                 render(pushLayout = false)
             }
-            if (p.isPlaying) main.postDelayed(this, TICK_MS)
+            if (isPlayingNow()) main.postDelayed(this, TICK_MS)
         }
     }
 
@@ -107,8 +125,72 @@ object WidgetHub {
             s.launch { combine(store.isDark, store.custom) { _, _ -> }.collect { render(pushLayout = true) } }
         }
         player.addListener(listener)
+        watchRemote(context)
+        if (remote != null) return
         playing = player.isPlaying
         loadTrack(player.currentMediaItem)
+    }
+
+    /**
+     * Segue il PC: quando è lui il dispositivo attivo (o il telefono non ha
+     * niente da suonare) il widget mostra il suo brano. Si chiama più volte
+     * senza danni.
+     */
+    @Synchronized
+    fun watchRemote(context: Context) {
+        if (this.context == null) this.context = context.applicationContext
+        if (remoteScope != null) return
+        remoteScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { s ->
+            s.launch {
+                combine(BeamConnect.pc, BeamConnect.remoteActive) { pc, active -> pc to active }.collect { (pc, active) ->
+                    val show = pc?.takeIf { it.hasTrack && (active || player?.currentMediaItem == null) }
+                    showRemote(show)
+                }
+            }
+        }
+    }
+
+    private fun showRemote(pc: BeamConnect.PcNow?) {
+        val ctx = context ?: return
+        if (pc == null) {
+            if (remote == null) return
+            // Si torna al telefono: il suo brano, com'è adesso.
+            remote = null
+            remoteKey = null
+            playing = player?.isPlaying == true
+            loadTrack(player?.currentMediaItem)
+            return
+        }
+        val key = pc.pcId ?: Long.MIN_VALUE
+        val sameTrack = remote != null && remoteKey == key && title == pc.title
+        remote = pc
+        playing = pc.playing
+        if (sameTrack) {
+            // Stesso brano: cambia solo play/pausa o la posizione.
+            lineIndex = lyrics?.indexAt(pc.positionNow()) ?: lineIndex
+            render(pushLayout = false)
+            scheduleTick()
+            return
+        }
+        remoteKey = key
+        trackJob?.cancel()
+        songId = pc.pcId?.let { -it } ?: Long.MIN_VALUE
+        title = pc.title
+        artwork = null
+        lyrics = null
+        lineIndex = Int.MIN_VALUE
+        trackJob = remoteScope?.launch {
+            if (!hasWidgets(ctx)) return@launch
+            val art = pc.pcId?.let(BeamConnect::artworkUrl)?.let(Uri::parse)
+            artwork = withContext(Dispatchers.IO) { decodeArtwork(ctx, art) }
+            render(pushLayout = true)
+            val loaded = pc.pcId?.let { id -> runCatching { LyricsReader(ctx).load(-id) }.getOrNull() }
+            if (remoteKey != key) return@launch
+            lyrics = loaded?.takeIf { it.synced && !it.isEmpty }
+            lineIndex = lyrics?.indexAt(remote?.positionNow() ?: 0L) ?: Int.MIN_VALUE
+            render(pushLayout = true)
+            scheduleTick()
+        }
     }
 
     /** Da chiamare quando il servizio si ferma: il widget torna a "apri Xaos". */
@@ -123,6 +205,13 @@ object WidgetHub {
         artwork = null
         lyrics = null
         playing = false
+        // Il telefono ha smesso, ma se suona il PC il widget resta su di lui.
+        val r = remote
+        if (r != null) {
+            remoteKey = null
+            showRemote(r)
+            return
+        }
         context?.let { refresh(it) }
     }
 
@@ -132,7 +221,12 @@ object WidgetHub {
         // Un widget appena aggiunto: copertina e testo del brano vanno letti ora,
         // perché senza widget non li si prepara.
         val p = player
-        if (p != null && songId != null && artwork == null && trackJob?.isActive != true) {
+        val r = remote
+        if (r != null && artwork == null && trackJob?.isActive != true) {
+            // Un widget appena aggiunto mentre suona il PC.
+            remoteKey = null
+            showRemote(r)
+        } else if (r == null && p != null && songId != null && artwork == null && trackJob?.isActive != true) {
             loadTrack(p.currentMediaItem)
         } else {
             render(pushLayout = true)
@@ -160,7 +254,7 @@ object WidgetHub {
             artwork = withContext(Dispatchers.IO) { decodeArtwork(ctx, item.mediaMetadata.artworkUri) }
             render(pushLayout = true)
             val loaded = runCatching { LyricsReader(ctx).load(id) }.getOrNull()
-            if (songId != id) return@launch
+            if (songId != id || remote != null) return@launch
             lyrics = loaded?.takeIf { it.synced && !it.isEmpty }
             lineIndex = lyrics?.indexAt(player?.currentPosition ?: 0L) ?: Int.MIN_VALUE
             render(pushLayout = true)
@@ -170,7 +264,7 @@ object WidgetHub {
 
     private fun scheduleTick() {
         main.removeCallbacks(tick)
-        if (lyrics != null && player?.isPlaying == true) main.post(tick)
+        if (lyrics != null && isPlayingNow()) main.post(tick)
     }
 
     private fun decodeArtwork(ctx: Context, uri: Uri?): Bitmap? {
@@ -268,7 +362,7 @@ object WidgetHub {
             pages.firstOrNull()?.let { setImageViewBitmap(R.id.widget_image, it) }
             setOnClickPendingIntent(
                 R.id.widget_image,
-                if (player != null && songId != null) tapIntent(ctx, Intent().putExtra(XaosWidget.EXTRA_PAGE, 0)) else openApp(ctx),
+                if ((player != null || remote != null) && songId != null) tapIntent(ctx, Intent().putExtra(XaosWidget.EXTRA_PAGE, 0)) else openApp(ctx),
             )
         }
 
@@ -288,8 +382,12 @@ object WidgetHub {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** Mette in pausa o riprende, sul thread del player. */
+    /** Mette in pausa o riprende, sul thread del player (o sul PC, se suona lui). */
     fun togglePlayback(): Boolean {
+        if (remote != null) {
+            BeamConnect.control("toggle")
+            return true
+        }
         val p = player ?: return false
         Handler(p.applicationLooper).post {
             if (p.isPlaying) {

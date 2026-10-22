@@ -85,6 +85,17 @@
                 android:resource="@xml/xaos_widget_info" />
         </receiver>
 
+        <!-- Xaos Beam Connect: la notifica "in riproduzione sul PC", con i
+             comandi del PC, quando il dispositivo attivo è il PC. -->
+        <service
+            android:name=".playback.RemotePlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"

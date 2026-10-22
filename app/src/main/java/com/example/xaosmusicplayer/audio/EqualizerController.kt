@@ -8,7 +8,7 @@ import android.util.Log
  * Equalizzatore e bass boost agganciati alla sessione audio del player.
  *
  * La spazializzazione non passa più di qui: il Virtualizer di Android usa il
- * DSP del produttore, che su questo chipset gracchia. Ora è [CrossfeedProcessor],
+ * DSP del produttore, che su questo chipset gracchia. Ora è [SpatializerProcessor],
  * dentro la pipeline del player.
  *
  * Gli AudioEffect sono una delle parti più fragili di Android: su alcuni device

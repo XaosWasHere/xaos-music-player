@@ -89,7 +89,18 @@ Name: "{autoprograms}\Xaos"; Filename: "{app}\Xaos.exe"
 Name: "{autodesktop}\Xaos"; Filename: "{app}\Xaos.exe"; Tasks: desktopicon
 
 [Run]
+; Xaos Beam: il telefono raggiunge il PC su due porte (47810 TCP per la
+; libreria e i comandi, 47811 UDP per farsi trovare). Senza queste regole
+; Windows chiede il permesso al primo avvio di Beam, e se la risposta va
+; persa il telefono non vede il PC. Valgono solo per Xaos.exe e solo per
+; quelle porte; si rifanno a ogni aggiornamento e spariscono disinstallando.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Xaos Beam"""; Flags: runhidden waituntilterminated
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Xaos Beam"" dir=in action=allow program=""{app}\Xaos.exe"" protocol=TCP localport=47810 profile=private,public"; Flags: runhidden waituntilterminated
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Xaos Beam"" dir=in action=allow program=""{app}\Xaos.exe"" protocol=UDP localport=47811 profile=private,public"; Flags: runhidden waituntilterminated
 Filename: "{app}\Xaos.exe"; Description: "Avvia Xaos"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Xaos Beam"""; Flags: runhidden waituntilterminated; RunOnceId: "XaosBeamFirewall"
 
 [Code]
 { Le versioni fino alla 1.3.1 si installavano con un pacchetto MSI (jpackage).
