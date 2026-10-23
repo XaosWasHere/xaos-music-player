@@ -48,6 +48,8 @@ object BeamConnect {
         val shuffle: Boolean = false,
         /** OFF, ALL o ONE. */
         val repeat: String = "OFF",
+        /** La versione della coda: il PC la rimanda solo quando cambia. */
+        val queueRev: Long = 0,
     ) {
         val hasTrack: Boolean get() = title != null
 
@@ -71,6 +73,9 @@ object BeamConnect {
 
     /** L'ultimo comando del PC ricevuto ed eseguito: lo si conferma, e non si ripete. */
     @Volatile private var lastSeq = 0L
+
+    /** La coda mandata al PC l'ultima volta: se non cambia, non la si rimanda. */
+    @Volatile private var lastSentQueue: String? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var sessionJob: Job? = null
@@ -162,7 +167,7 @@ object BeamConnect {
                     ids?.let { put("ids", JSONArray(it)) }
                     index?.let { put("index", it) }
                 }
-                val conn = Beam.open("${pairing.baseUrl}/control", pairing.token).apply {
+                val conn = Beam.open("${pairing.baseUrl}/control?q=${_pc.value?.queueRev ?: 0}", pairing.token).apply {
                     requestMethod = "POST"
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -170,11 +175,11 @@ object BeamConnect {
                 try {
                     conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                     if (conn.responseCode == 200) {
-                        val reply = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                        val reply = Beam.readBody(conn)
                         // La risposta arriva insieme agli aggiornamenti dell'attesa, e
                         // può essere più vecchia di loro (un "queue" risponde prima del
                         // salto al punto giusto): vale solo se è più recente.
-                        val fresh = parsePc(JSONObject(reply))
+                        val fresh = parsePc(JSONObject(reply), _pc.value)
                         _pc.update { current -> if (current == null || fresh.rev > current.rev) fresh else current }
                     }
                 } finally {
@@ -247,12 +252,13 @@ object BeamConnect {
         while (currentCoroutineContext().isActive) {
             val pairing = Beam.pairing.value ?: return
             val result = runCatching {
-                val conn = Beam.open("${pairing.baseUrl}/session?rev=$rev&ack=$lastSeq", pairing.token).apply {
+                val queueRev = _pc.value?.queueRev ?: 0
+                val conn = Beam.open("${pairing.baseUrl}/session?rev=$rev&ack=$lastSeq&q=$queueRev", pairing.token).apply {
                     readTimeout = SESSION_READ_TIMEOUT_MS
                 }
                 try {
                     if (conn.responseCode != 200) error("il PC ha risposto ${conn.responseCode}")
-                    JSONObject(conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) })
+                    JSONObject(Beam.readBody(conn))
                 } finally {
                     conn.disconnect()
                 }
@@ -265,7 +271,7 @@ object BeamConnect {
                 continue
             }
             val pcJson = session.getJSONObject("pc")
-            val pc = parsePc(pcJson)
+            val pc = parsePc(pcJson, _pc.value)
             _pc.value = pc
             rev = pc.rev
             // La libreria del PC è cambiata: il catalogo si riscarica subito.
@@ -293,6 +299,13 @@ object BeamConnect {
             delay(COALESCE_MS)
             val pairing = Beam.pairing.value ?: return
             val body = withContext(Dispatchers.Main) { phoneState?.invoke() } ?: continue
+            // La coda (anche migliaia di brani) solo quando è cambiata: il PC tiene quella di prima.
+            val queue = body.optJSONArray("queue")?.toString()
+            val sameQueue = queue != null && queue == lastSentQueue
+            if (sameQueue) {
+                body.remove("queue")
+                body.put("queueUnchanged", true)
+            }
             runCatching {
                 val conn = Beam.open("${pairing.baseUrl}/state", pairing.token).apply {
                     requestMethod = "POST"
@@ -301,7 +314,14 @@ object BeamConnect {
                 }
                 try {
                     conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-                    conn.responseCode
+                    if (conn.responseCode == 200) {
+                        lastSentQueue = queue
+                        // Il PC si è riavviato e non ha la nostra coda: la si rimanda subito.
+                        if (runCatching { JSONObject(Beam.readBody(conn)).optBoolean("needQueue") }.getOrDefault(false)) {
+                            lastSentQueue = null
+                            changes.trySend(Unit)
+                        }
+                    }
                 } finally {
                     conn.disconnect()
                 }
@@ -311,9 +331,11 @@ object BeamConnect {
 
     // ---------------------------------------------------------------- formato
 
-    private fun parsePc(o: JSONObject): PcNow {
+    /** Senza la coda (non è cambiata) si tiene quella di [previous]. */
+    private fun parsePc(o: JSONObject, previous: PcNow?): PcNow {
         val track = o.optJSONObject("track")
         val queue = o.optJSONArray("queue") ?: JSONArray()
+        val keepQueue = !o.optBoolean("queueIncluded", true) && previous != null
         return PcNow(
             rev = o.optLong("rev"),
             title = track?.optString("title"),
@@ -323,11 +345,12 @@ object BeamConnect {
             pcId = track?.takeIf { it.has("pcId") && !it.isNull("pcId") }?.getLong("pcId"),
             playing = o.optBoolean("playing"),
             positionMs = o.optLong("positionMs"),
-            queue = List(queue.length()) { queue.getLong(it) },
+            queue = if (keepQueue) previous!!.queue else List(queue.length()) { queue.getLong(it) },
             index = o.optInt("index", -1),
             receivedAt = System.currentTimeMillis(),
             shuffle = o.optBoolean("shuffle"),
             repeat = o.optString("repeat", "OFF"),
+            queueRev = if (keepQueue || o.optBoolean("queueIncluded", true)) o.optLong("queueRev") else 0,
         )
     }
 

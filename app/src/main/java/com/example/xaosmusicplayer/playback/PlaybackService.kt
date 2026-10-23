@@ -76,6 +76,19 @@ class PlaybackService : MediaSessionService() {
         }
 
         val player = ExoPlayer.Builder(this, renderersFactory)
+            // Xaos Beam: la prima volta il PC può convertire il brano prima di
+            // mandarlo (qualità Alta o Leggera), e questo richiede qualche
+            // secondo in più dell'attesa normale.
+            .setMediaSourceFactory(
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this).setDataSourceFactory(
+                    androidx.media3.datasource.DefaultDataSource.Factory(
+                        this,
+                        androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                            .setConnectTimeoutMs(10_000)
+                            .setReadTimeoutMs(45_000),
+                    )
+                )
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)

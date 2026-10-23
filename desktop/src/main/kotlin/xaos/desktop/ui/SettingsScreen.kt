@@ -693,6 +693,21 @@ private fun BeamCard(prefs: SettingsData, settings: Settings, beam: xaos.desktop
             }
             XaosSwitch(prefs.beamEnabled, onChange = { on -> settings.update { it.copy(beamEnabled = on) } })
         }
+        Text(t("QUALITÀ DELLO STREAMING"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            xaos.desktop.BeamQuality.entries.forEach { q ->
+                PillButton(q.label, onClick = { settings.update { it.copy(beamQuality = q) } }, filled = prefs.beamQuality == q)
+            }
+        }
+        Text(
+            when (prefs.beamQuality) {
+                xaos.desktop.BeamQuality.ORIGINAL -> t("I file così come sono: un FLAC hi-res arriva a 3–5 Mbit/s e può riempire la rete.")
+                xaos.desktop.BeamQuality.HIGH -> t("La copia MP3 se c'è, altrimenti AAC a 256 kbit/s: a orecchio quasi uguale, fino a 20 volte più leggero. MP3 e AAC restano come sono.")
+                xaos.desktop.BeamQuality.LIGHT -> t("AAC a 128 kbit/s per tutto ciò che pesa di più: per le reti deboli.")
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkTertiary,
+        )
         val running = state as? xaos.desktop.beam.BeamState.Running
         if (running != null) {
             Hairline()

@@ -40,6 +40,13 @@ data class PcNow(
     val volume: Int = 0,
     /** L'impronta del catalogo: quando cambia, il telefono lo riscarica. */
     val catalog: String = "",
+    /**
+     * La versione della coda. La coda (anche migliaia di brani) viaggia solo
+     * quando il telefono ne ha una versione diversa; altrimenti [queue] è
+     * vuota e [queueIncluded] è false: il telefono tiene quella che ha.
+     */
+    val queueRev: Long = 0,
+    val queueIncluded: Boolean = true,
 )
 
 /** Cosa sta facendo il telefono: lo manda lui, quando cambia e ogni tanto. */
@@ -51,6 +58,8 @@ data class PhoneNow(
     /** La coda, come id del catalogo del PC (null per i brani che il PC non ha). */
     val queue: List<Long?> = emptyList(),
     val index: Int = -1,
+    /** La coda è quella dell'invio prima: non la si rimanda. */
+    val queueUnchanged: Boolean = false,
 )
 
 /**
@@ -105,6 +114,8 @@ class BeamConnect(
 ) {
     private val lock = Object()
     @Volatile private var rev = 1L
+    /** Cambia solo con la coda: il resto dello stato è piccolo, la coda può non esserlo. */
+    @Volatile private var queueRev = 1L
     private val pending = HashMap<String, MutableList<BeamCommand>>()
     private var nextSeq = 1L
 
@@ -135,6 +146,9 @@ class BeamConnect(
                 .collect { bump() }
         }
         scope.launch { player.volume.collect { bump() } }
+        scope.launch {
+            combine(player.queue, player.shuffle) { _, _ -> Unit }.collect { queueRev++ }
+        }
         // Un brano scelto sul PC mentre suona il telefono va al telefono.
         player.redirectPlay = { tracks, index ->
             val phone = _activePhone.value
@@ -185,16 +199,22 @@ class BeamConnect(
         }
     }
 
-    /** Lo stato del PC adesso. */
-    fun pcNow(): PcNow {
+    /**
+     * Lo stato del PC adesso. Con [knownQueueRev] uguale alla versione della
+     * coda, la coda non si manda: il telefono ce l'ha già.
+     */
+    fun pcNow(knownQueueRev: Long? = null): PcNow {
         val current = player.current.value
         val queue = player.queue.value
+        val includeQueue = knownQueueRev != queueRev
         return PcNow(
             rev = rev,
             track = current?.let { nowTrackOf(it) },
             playing = player.isPlaying.value,
             positionMs = player.positionMs.value,
-            queue = queue.map { BeamServer.idOf(it.path) },
+            queue = if (includeQueue) queue.map { BeamServer.idOf(it.path) } else emptyList(),
+            queueRev = queueRev,
+            queueIncluded = includeQueue,
             index = current?.let { c -> queue.indexOfFirst { it.path == c.path } } ?: -1,
             shuffle = player.shuffle.value,
             repeat = player.repeat.value.name,
@@ -208,7 +228,7 @@ class BeamConnect(
      * se ci sono comandi per [device], altrimenti appena succede, al più dopo
      * [WAIT_MS].
      */
-    fun await(device: String, knownRev: Long, ack: Long): BeamSession {
+    fun await(device: String, knownRev: Long, ack: Long, knownQueueRev: Long? = null): BeamSession {
         seen(device)
         val deadline = System.currentTimeMillis() + WAIT_MS
         synchronized(lock) {
@@ -221,15 +241,25 @@ class BeamConnect(
                 if (left <= 0) break
                 lock.wait(left)
             }
+            // Un attimo per raccogliere i cambi che arrivano in fila (il volume
+            // trascinato, un brano nuovo e poi play): una risposta sola.
+            if (rev != knownRev) lock.wait(COALESCE_MS)
             // Restano in coda finché il telefono non conferma di averli
             // (un'app più vecchia, senza conferme, li riceve una volta sola).
             val commands = if (ack < 0) pending.remove(device).orEmpty() else pending[device].orEmpty().toList()
-            return BeamSession(pcNow(), commands)
+            return BeamSession(pcNow(knownQueueRev), commands)
         }
     }
 
-    fun updatePhone(device: String, now: PhoneNow) {
+    /**
+     * Lo stato mandato dal telefono. Se dice che la coda non è cambiata si
+     * tiene quella di prima; true se non ne abbiamo una e va rimandata.
+     */
+    fun updatePhone(device: String, sent: PhoneNow): Boolean {
         val at = System.currentTimeMillis()
+        val previous = _phones.value[device]
+        val needQueue = sent.queueUnchanged && previous == null
+        val now = if (sent.queueUnchanged) sent.copy(queue = previous?.now?.queue ?: emptyList(), queueUnchanged = false) else sent
         _phones.value = _phones.value + (device to ConnectedPhone(device, now, at, at))
         // Il telefono a cui si passava la musica è partito: ora il PC si ferma.
         val until = handingToPhone[device]
@@ -237,6 +267,7 @@ class BeamConnect(
             handingToPhone.remove(device)
             if (now.playing && player.isPlaying.value) player.togglePlayPause()
         }
+        return needQueue
     }
 
     private fun seen(device: String) {
@@ -349,6 +380,8 @@ class BeamConnect(
          * riconnette) si rinnovi presto.
          */
         const val WAIT_MS = 12_000L
+        /** Quanto si aspetta per raccogliere in una risposta i cambi che arrivano in fila. */
+        const val COALESCE_MS = 80L
         /** Oltre questo tempo uno spostamento non confermato si lascia perdere. */
         const val HANDOVER_TIMEOUT_MS = 10_000L
         const val SEEK_JUMP_MS = 2_500L

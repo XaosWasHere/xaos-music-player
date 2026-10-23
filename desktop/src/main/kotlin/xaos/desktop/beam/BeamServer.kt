@@ -69,6 +69,14 @@ data class BeamTrack(
 @Serializable
 data class BeamCatalog(val server: String, val name: String, val tracks: List<BeamTrack>)
 
+/**
+ * Le differenze dal catalogo [base] che il telefono ha già: i brani nuovi o
+ * cambiati e gli id di quelli tolti. Una modifica sul PC arriva al telefono
+ * in qualche centinaio di byte invece che con tutto il catalogo.
+ */
+@Serializable
+data class BeamCatalogDelta(val delta: Boolean = true, val base: String, val changed: List<BeamTrack>, val removed: List<Long>)
+
 @Serializable
 data class BeamInfo(
     val app: String = "xaos-beam",
@@ -106,7 +114,10 @@ class BeamServer(
     scope: kotlinx.coroutines.CoroutineScope,
     /** Dove la sincronizzazione via cavo metterebbe un file sul telefono. */
     private val phonePathOf: (File) -> String? = { null },
+    /** ffmpeg, per convertire i brani pesanti alla qualità scelta per lo streaming. */
+    ffmpeg: () -> File? = { null },
 ) {
+    private val transcoder = BeamTranscoder(ffmpeg, File(xaos.desktop.Settings.appDir, "beam-cache"))
 
     /** Connect: cosa suona l'altro dispositivo, comandarlo, spostare l'ascolto. */
     val connect = BeamConnect(player, scope, { catalogFor(library.snapshot.value).byId }, { catalogTag() })
@@ -136,8 +147,19 @@ class BeamServer(
     @Volatile private var wrongPins = 0
 
     /** Il catalogo pronto da spedire, rifatto solo quando la libreria cambia. */
-    private class CatalogCache(val snapshot: LibrarySnapshot, val gzip: ByteArray, val etag: String, val byId: Map<Long, Track>)
+    private class CatalogCache(
+        val snapshot: LibrarySnapshot,
+        val gzip: ByteArray,
+        val etag: String,
+        val byId: Map<Long, Track>,
+        val entries: Map<Long, BeamTrack>,
+    )
     @Volatile private var catalog: CatalogCache? = null
+
+    /** Gli ultimi cataloghi mandati (impronta → brani): da questi si calcolano le differenze. */
+    private val catalogHistory = object : LinkedHashMap<String, Map<Long, BeamTrack>>(16, 0.75f, false) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<Long, BeamTrack>>?) = size > CATALOG_HISTORY
+    }
 
     /** Copertine già ridotte: scorrendo la libreria si chiedono di continuo. */
     private val artCache = object : LinkedHashMap<String, ByteArray>(256, 0.75f, true) {
@@ -256,19 +278,23 @@ class BeamServer(
                             val known = query(ex)["rev"]?.toLongOrNull() ?: 0
                             // Senza "ack" è un'app del telefono più vecchia: i comandi le si danno una volta sola.
                             val ack = query(ex)["ack"]?.toLongOrNull() ?: -1
-                            sendJson(ex, json.encodeToString(connect.await(device.name, known, ack)))
+                            // La versione della coda che il telefono ha già (senza: la vuole sempre).
+                            val queue = query(ex)["q"]?.toLongOrNull()
+                            sendJson(ex, json.encodeToString(connect.await(device.name, known, ack, queue)))
                         }
                         path == "state" && ex.requestMethod == "POST" -> {
                             val now = json.decodeFromString<PhoneNow>(ex.requestBody.readNBytes(256 * 1024).toString(Charsets.UTF_8))
-                            connect.updatePhone(device.name, now)
-                            sendJson(ex, "{}")
+                            val needQueue = connect.updatePhone(device.name, now)
+                            // Il PC non ha la coda del telefono (si è riavviato): la rimandi.
+                            sendJson(ex, if (needQueue) """{"needQueue":true}""" else "{}")
+                            prefetchFor(device.name)
                         }
                         path == "control" && ex.requestMethod == "POST" -> {
                             val command = json.decodeFromString<BeamCommand>(ex.requestBody.readNBytes(256 * 1024).toString(Charsets.UTF_8))
                             connect.execute(command)
-                            sendJson(ex, json.encodeToString(connect.pcNow()))
+                            sendJson(ex, json.encodeToString(connect.pcNow(query(ex)["q"]?.toLongOrNull())))
                         }
-                        parts.size == 2 && parts[0] == "track" -> withTrack(ex, parts[1]) { sendAudio(ex, it) }
+                        parts.size == 2 && parts[0] == "track" -> withTrack(ex, parts[1]) { sendAudio(ex, it, device.name) }
                         parts.size == 2 && parts[0] == "art" -> withTrack(ex, parts[1]) { sendArt(ex, it) }
                         parts.size == 2 && parts[0] == "lyrics" -> withTrack(ex, parts[1]) { sendLyrics(ex, it) }
                         else -> send(ex, 404, "non trovato")
@@ -328,11 +354,24 @@ class BeamServer(
             ex.sendResponseHeaders(304, -1)
             return
         }
+        // Il telefono dice quale catalogo ha: se lo ricordiamo, bastano le differenze.
+        val base = query(ex)["since"]?.let { since -> synchronized(catalogHistory) { catalogHistory[since] } }
+        val body = if (base != null) {
+            val changed = cache.entries.values.filter { base[it.id] != it }
+            val removed = base.keys.filter { it !in cache.entries }
+            val delta = BeamCatalogDelta(base = query(ex)["since"]!!, changed = changed, removed = removed)
+            gzip(json.encodeToString(delta).toByteArray(Charsets.UTF_8))
+        } else {
+            cache.gzip
+        }
         ex.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
         ex.responseHeaders.add("Content-Encoding", "gzip")
-        ex.sendResponseHeaders(200, cache.gzip.size.toLong())
-        ex.responseBody.use { it.write(cache.gzip) }
+        ex.sendResponseHeaders(200, body.size.toLong())
+        ex.responseBody.use { it.write(body) }
     }
+
+    private fun gzip(bytes: ByteArray): ByteArray =
+        ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
 
     private fun libraryReady(): Boolean {
         val snapshot = library.snapshot.value
@@ -370,8 +409,9 @@ class BeamServer(
         }
         val bytes = json.encodeToString(BeamCatalog(serverId, serverName, tracks)).toByteArray(Charsets.UTF_8)
         val etag = "\"" + sha1(bytes).take(16) + "\""
-        val gzip = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
-        return CatalogCache(snapshot, gzip, etag, byId).also { catalog = it }
+        val entries = tracks.associateBy { it.id }
+        synchronized(catalogHistory) { catalogHistory[etag] = entries }
+        return CatalogCache(snapshot, gzip(bytes), etag, byId, entries).also { catalog = it }
     }
 
     private inline fun withTrack(ex: HttpExchange, rawId: String, block: (Track) -> Unit) {
@@ -384,11 +424,13 @@ class BeamServer(
      * Il file del brano, a pezzi se il player li chiede: spostarsi a metà di
      * un FLAC vuol dire chiedere i byte da lì in poi, non riscaricare tutto.
      */
-    private fun sendAudio(ex: HttpExchange, track: Track) {
+    private fun sendAudio(ex: HttpExchange, track: Track, device: String) {
         // Per tenerlo sul telefono (?copy=1) vale la stessa scelta della
         // sincronizzazione via cavo: l'MP3 quando c'è, se così è impostato.
+        // Per ascoltarlo in streaming, la qualità scelta per Beam.
         val copy = query(ex)["copy"] == "1"
-        val file = if (copy) copyFileFor(track) else fileFor(track)
+        val file = if (copy) copyFileFor(track) else transcoder.streamFile(track, fileFor(track), settings.data.value.beamQuality)
+        if (!copy) prefetchFor(device)
         if (copy) {
             phonePathOf(file)?.let { ex.responseHeaders.add(PHONE_PATH_HEADER, java.net.URLEncoder.encode(it, Charsets.UTF_8)) }
             ex.responseHeaders.add(FILE_NAME_HEADER, java.net.URLEncoder.encode(file.name, Charsets.UTF_8))
@@ -440,6 +482,17 @@ class BeamServer(
         }
     }
 
+    /** I due brani dopo quello che il telefono sta suonando, preparati alla qualità di Beam. */
+    private fun prefetchFor(device: String) {
+        val quality = settings.data.value.beamQuality
+        if (quality == xaos.desktop.BeamQuality.ORIGINAL || !libraryReady()) return
+        val phone = connect.phones.value[device]?.now ?: return
+        val byId = catalogFor(library.snapshot.value).byId
+        val next = phone.queue.drop(phone.index.coerceAtLeast(0) + 1).filterNotNull().take(PREFETCH)
+            .mapNotNull { byId[it] }.map { it to fileFor(it) }
+        if (next.isNotEmpty()) transcoder.prefetch(next, quality)
+    }
+
     /** La copertina ridotta al lato chiesto: in un elenco basta piccola. */
     private fun sendArt(ex: HttpExchange, track: Track) {
         val side = (query(ex)["s"]?.toIntOrNull() ?: 512).coerceIn(64, 1024)
@@ -462,8 +515,13 @@ class BeamServer(
     }
 
     private fun sendJson(ex: HttpExchange, body: String) {
-        val bytes = body.toByteArray(Charsets.UTF_8)
+        var bytes = body.toByteArray(Charsets.UTF_8)
         ex.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+        // Le risposte grandi (una coda lunga) viaggiano compresse, se il telefono le accetta.
+        if (bytes.size > GZIP_OVER && ex.requestHeaders.getFirst("Accept-Encoding")?.contains("gzip") == true) {
+            bytes = gzip(bytes)
+            ex.responseHeaders.add("Content-Encoding", "gzip")
+        }
         ex.sendResponseHeaders(200, bytes.size.toLong())
         ex.responseBody.use { it.write(bytes) }
     }
@@ -543,6 +601,13 @@ class BeamServer(
         private const val ART_CACHE_ENTRIES = 400
 
         /** I formati che il player di Android suona da solo. */
+        /** Quanti cataloghi passati si ricordano per mandare solo le differenze. */
+        private const val CATALOG_HISTORY = 8
+        /** Quanti brani dopo quello in ascolto si preparano in anticipo. */
+        private const val PREFETCH = 2
+        /** Sopra questa misura le risposte JSON si comprimono. */
+        private const val GZIP_OVER = 1_500
+
         private val PHONE_FORMATS = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav")
 
         private val MIME = mapOf(

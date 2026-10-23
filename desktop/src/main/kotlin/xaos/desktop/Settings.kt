@@ -19,6 +19,23 @@ enum class FullscreenBackground(private val labelIt: String) {
     val label: String get() = t(labelIt)
 }
 
+/**
+ * Come arrivano al telefono i brani in streaming con Xaos Beam. "Alta" e
+ * "Leggera" convertono i file pesanti (FLAC, WAV) in AAC: a orecchio quasi
+ * uguali, e da dieci a venti volte più leggeri sulla rete.
+ */
+@Serializable
+enum class BeamQuality(private val labelIt: String, val kbps: Int) {
+    /** Il file così com'è. */
+    ORIGINAL("ORIGINALE", 0),
+    /** La copia MP3 se c'è, altrimenti AAC a 256 kbit/s; MP3 e AAC restano come sono. */
+    HIGH("ALTA", 256),
+    /** AAC a 128 kbit/s per tutto ciò che pesa di più. */
+    LIGHT("LEGGERA", 128);
+
+    val label: String get() = t(labelIt)
+}
+
 /** L'equalizzatore di VLC: dieci bande e un preamplificatore, in dB (±20). */
 @Serializable
 data class EqualizerSettings(
@@ -128,6 +145,8 @@ data class SettingsData(
     val beamDevices: List<BeamDevice> = emptyList(),
     /** L'identità di questo PC per Beam: il telefono lo ritrova anche se cambia indirizzo. */
     val beamServerId: String? = null,
+    /** La qualità dello streaming di Beam: più bassa, meno rete. */
+    val beamQuality: BeamQuality = BeamQuality.HIGH,
 ) {
     /** Le cartelle da scansionare, compresa quella del vecchio formato. */
     val roots: List<String> get() = libraryRoots.ifEmpty { listOfNotNull(libraryRoot) }

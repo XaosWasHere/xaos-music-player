@@ -29,4 +29,22 @@ internal val COMMON_STRINGS: Map<String, Tr> = mapOf(
     "IERI" to Tr("YESTERDAY", "昨日"),
     "%d GIORNI FA" to Tr("%d DAYS AGO", "%d日前"),
     "dd/MM" to Tr("MM/dd", "M/d"),
+
+    // La qualità dello streaming di Xaos Beam.
+    "QUALITÀ DELLO STREAMING" to Tr("STREAMING QUALITY", "ストリーミング音質"),
+    "ORIGINALE" to Tr("ORIGINAL", "オリジナル"),
+    "ALTA" to Tr("HIGH", "高音質"),
+    "LEGGERA" to Tr("LIGHT", "軽量"),
+    "I file così come sono: un FLAC hi-res arriva a 3–5 Mbit/s e può riempire la rete." to Tr(
+        "Files as they are: a hi-res FLAC needs 3–5 Mbit/s and can fill up the network.",
+        "ファイルをそのまま送ります。ハイレゾFLACは3〜5 Mbpsになり、ネットワークを圧迫することがあります。",
+    ),
+    "La copia MP3 se c'è, altrimenti AAC a 256 kbit/s: a orecchio quasi uguale, fino a 20 volte più leggero. MP3 e AAC restano come sono." to Tr(
+        "The MP3 copy if there is one, otherwise AAC at 256 kbit/s: nearly identical to the ear, up to 20 times lighter. MP3 and AAC stay as they are.",
+        "MP3のコピーがあればそれを、なければ256 kbpsのAACで送ります。聴感上ほぼ同じで、最大20分の1の軽さです。MP3とAACはそのまま送ります。",
+    ),
+    "AAC a 128 kbit/s per tutto ciò che pesa di più: per le reti deboli." to Tr(
+        "AAC at 128 kbit/s for anything heavier: for weak networks.",
+        "それより重いものはすべて128 kbpsのAACで送ります。電波の弱いネットワーク向けです。",
+    ),
 )

@@ -72,9 +72,12 @@ private fun runApp() = application {
     }
     val dataSync = remember { DataSync(scope, phone, userData, File(Settings.appDir, "sync"), settings) }
     val beam = remember {
-        xaos.desktop.beam.BeamServer(settings, library, player, scope) { file ->
-            phone.remotePathOf(settings.data.value.roots.map(::File), file)
-        }
+        xaos.desktop.beam.BeamServer(
+            settings, library, player, scope,
+            phonePathOf = { file -> phone.remotePathOf(settings.data.value.roots.map(::File), file) },
+            // Lo stesso ffmpeg dei download converte i brani pesanti per lo streaming.
+            ffmpeg = { ytdlp.tools.value.second },
+        )
     }
     val prefs by settings.data.collectAsState()
     // La stessa icona dell'app Android: barra del titolo e barra delle applicazioni.

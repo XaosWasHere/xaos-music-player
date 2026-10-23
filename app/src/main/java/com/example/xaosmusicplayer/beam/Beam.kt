@@ -470,7 +470,9 @@ object Beam {
     @Volatile private var lastFetch = Fetch.OK
 
     private fun fetchCatalog(pairing: Pairing): Fetch {
-        val conn = runCatching { open("${pairing.baseUrl}/catalog", pairing.token) }.getOrElse { return Fetch.UNREACHABLE }
+        // Con un catalogo in mano bastano le differenze: il PC manda solo i brani cambiati.
+        val since = etag?.takeIf { catalog != null }?.let { "?since=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+        val conn = runCatching { open("${pairing.baseUrl}/catalog$since", pairing.token) }.getOrElse { return Fetch.UNREACHABLE }
         try {
             // Senza un catalogo in mano non ha senso chiedere "se è cambiato".
             if (catalog != null) etag?.let { conn.setRequestProperty("If-None-Match", it) }
@@ -491,7 +493,10 @@ object Beam {
                 val stream = if (conn.contentEncoding.equals("gzip", ignoreCase = true)) GZIPInputStream(conn.inputStream) else conn.inputStream
                 stream.use { it.readBytes().toString(Charsets.UTF_8) }
             }.getOrElse { return Fetch.UNREACHABLE }
-            val tracks = runCatching { JSONObject(raw).getJSONArray("tracks") }.getOrElse { return Fetch.UNREACHABLE }
+            val tracks = runCatching {
+                val body = JSONObject(raw)
+                if (body.optBoolean("delta")) applyDelta(catalog ?: error("nessun catalogo"), body) else body.getJSONArray("tracks")
+            }.getOrElse { return Fetch.UNREACHABLE }
             catalog = tracks
             etag = conn.getHeaderField("ETag")
             prefs.edit().putString(KEY_ETAG, etag).apply()
@@ -502,6 +507,29 @@ object Beam {
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** Il catalogo che si ha, con i brani cambiati al posto dei vecchi e senza quelli tolti. */
+    private fun applyDelta(current: JSONArray, delta: JSONObject): JSONArray {
+        val removed = delta.optJSONArray("removed")?.let { r -> (0 until r.length()).map { r.getLong(it) }.toHashSet() } ?: emptySet()
+        val changed = delta.optJSONArray("changed") ?: JSONArray()
+        val byId = LinkedHashMap<Long, JSONObject>()
+        for (i in 0 until current.length()) {
+            val t = current.getJSONObject(i)
+            val id = t.getLong("id")
+            if (id !in removed) byId[id] = t
+        }
+        for (i in 0 until changed.length()) {
+            val t = changed.getJSONObject(i)
+            byId[t.getLong("id")] = t
+        }
+        return JSONArray(byId.values)
+    }
+
+    /** Il corpo di una risposta, anche se arriva compresso. */
+    internal fun readBody(conn: HttpURLConnection): String {
+        val stream = if (conn.contentEncoding.equals("gzip", ignoreCase = true)) GZIPInputStream(conn.inputStream) else conn.inputStream
+        return stream.use { it.readBytes().toString(Charsets.UTF_8) }
     }
 
     /** I brani del catalogo, con gli indirizzi del PC com'è adesso. */
