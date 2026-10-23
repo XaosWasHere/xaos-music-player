@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import com.example.xaosmusicplayer.data.MusicRepository
 import com.example.xaosmusicplayer.data.Song
+import com.example.xaosmusicplayer.i18n.t
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -166,8 +167,8 @@ object Beam {
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                 when (conn.responseCode) {
                     200 -> Unit
-                    403 -> error("PIN sbagliato")
-                    else -> error("il PC ha risposto ${conn.responseCode}")
+                    403 -> error(t("PIN sbagliato"))
+                    else -> error(t("il PC ha risposto %d", conn.responseCode))
                 }
                 val reply = JSONObject(conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) })
                 val pairing = Pairing(
@@ -199,12 +200,12 @@ object Beam {
             val trimmed = address.trim().removePrefix("http://").trimEnd('/')
             val host = trimmed.substringBefore(':')
             val port = trimmed.substringAfter(':', "").toIntOrNull() ?: DEFAULT_PORT
-            require(host.isNotBlank()) { "indirizzo vuoto" }
+            require(host.isNotBlank()) { t("indirizzo vuoto") }
             val conn = open("http://$host:$port/beam/info", token = null)
             try {
-                if (conn.responseCode != 200) error("il PC ha risposto ${conn.responseCode}")
+                if (conn.responseCode != 200) error(t("il PC ha risposto %d", conn.responseCode))
                 val info = JSONObject(conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) })
-                if (info.optString("app") != APP_TAG) error("lì non c'è Xaos")
+                if (info.optString("app") != APP_TAG) error(t("lì non c'è Xaos"))
                 Server(info.getString("id"), info.optString("name", host), host, port)
             } finally {
                 conn.disconnect()
@@ -307,7 +308,7 @@ object Beam {
                         _downloads.value = _downloads.value - song.id
                         _downloaded.tryEmit(song)
                     }.onFailure {
-                        _downloads.value = _downloads.value + (song.id to Download.Failed(it.message ?: "download non riuscito"))
+                        _downloads.value = _downloads.value + (song.id to Download.Failed(it.message ?: t("download non riuscito")))
                     }
                 }
             }
@@ -321,13 +322,13 @@ object Beam {
     }
 
     private fun saveToPhone(song: Song) {
-        val url = (song.remoteUrl ?: error("non è un brano del PC")) + "&copy=1"
+        val url = (song.remoteUrl ?: error(t("non è un brano del PC"))) + "&copy=1"
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
         }
         try {
-            if (conn.responseCode != 200) error("il PC ha risposto ${conn.responseCode}")
+            if (conn.responseCode != 200) error(t("il PC ha risposto %d", conn.responseCode))
             val fileName = conn.getHeaderField(FILE_NAME_HEADER)?.let { URLDecoder.decode(it, "UTF-8") }
                 ?: "${song.artist} - ${song.title}.flac".replace(Regex("""[\\/:*?"<>|]"""), "_")
             // Il percorso della sincronizzazione via cavo, "/sdcard/Music/Xaos/…";
@@ -384,9 +385,9 @@ object Beam {
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
             val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
-                ?: error("impossibile creare il file")
+                ?: error(t("impossibile creare il file"))
             try {
-                resolver.openOutputStream(uri)?.use(::copy) ?: error("impossibile scrivere il file")
+                resolver.openOutputStream(uri)?.use(::copy) ?: error(t("impossibile scrivere il file"))
                 resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
             } catch (e: Exception) {
                 resolver.delete(uri, null, null)

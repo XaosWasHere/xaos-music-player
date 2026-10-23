@@ -51,7 +51,11 @@ import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.I18n
+import com.example.xaosmusicplayer.i18n.Language
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tDot
 
 /**
  * Schermata iniziale: da dove riprendere, com'è andato il mese, e due playlist
@@ -77,6 +81,8 @@ fun HomeScreen(
     onExportRecap: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Gli ultimi brani ascoltati, dal più recente (al massimo dieci). */
+    recentlyPlayed: List<com.example.xaosmusicplayer.data.RecentPlay> = emptyList(),
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().statusBarsPadding(),
@@ -84,12 +90,12 @@ fun HomeScreen(
     ) {
         item {
             ScreenTitle(
-                title = "HOME",
+                title = tDot("HOME"),
                 caption = rememberTodayCaption(),
                 trailing = {
                     CircleIconButton(
                         icon = XaosIcons.Settings,
-                        contentDescription = "Impostazioni",
+                        contentDescription = t("Impostazioni"),
                         onClick = onOpenSettings,
                     )
                 },
@@ -97,7 +103,7 @@ fun HomeScreen(
         }
 
         if (recentAlbums.isNotEmpty()) {
-            item { HomeSection("RIPRENDI DA QUI", recentAlbums.size) }
+            item { HomeSection(t("RIPRENDI DA QUI"), recentAlbums.size) }
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
@@ -112,7 +118,7 @@ fun HomeScreen(
         }
 
         if (!recap.isEmpty) {
-            item { HomeSection("QUESTO MESE") }
+            item { HomeSection(t("QUESTO MESE")) }
             item { RecapCard(recap) }
             item { Spacer(Modifier.height(28.dp)) }
         }
@@ -120,11 +126,11 @@ fun HomeScreen(
         if (!yearRecap.isEmpty) {
             item {
                 HomeSection(
-                    text = "IL TUO ${yearRecap.year}",
+                    text = t("IL TUO %d", yearRecap.year),
                     trailing = {
                         CircleIconButton(
                             icon = XaosIcons.Download,
-                            contentDescription = "Salva l'immagine del riepilogo",
+                            contentDescription = t("Salva l'immagine del riepilogo"),
                             onClick = onExportRecap,
                             size = 34.dp,
                         )
@@ -137,9 +143,9 @@ fun HomeScreen(
             yearRecap.topSong?.let { top ->
                 item {
                     HighlightCard(
-                        label = "BRANO DELL'ANNO",
-                        title = top.song.title,
-                        subtitle = top.song.artist,
+                        label = t("BRANO DELL'ANNO"),
+                        title = MusicRepository.displayName(top.song.title),
+                        subtitle = MusicRepository.displayName(top.song.artist),
                         artworkUri = top.song.artworkUri,
                         plays = top.plays,
                         onClick = { onPlaySong(top.song) },
@@ -151,9 +157,9 @@ fun HomeScreen(
             yearRecap.topAlbum?.let { top ->
                 item {
                     HighlightCard(
-                        label = "ALBUM DELL'ANNO",
-                        title = top.album.title,
-                        subtitle = top.album.artist,
+                        label = t("ALBUM DELL'ANNO"),
+                        title = MusicRepository.displayName(top.album.title),
+                        subtitle = MusicRepository.displayName(top.album.artist),
                         artworkUri = top.album.artworkUri,
                         plays = top.plays,
                         onClick = { onOpenAlbum(top.album.id, top.album.title) },
@@ -163,14 +169,14 @@ fun HomeScreen(
             }
 
             if (yearRecap.topSongs.size > 1) {
-                item { SubTitle("TOP BRANI", yearRecap.topSongs.size) }
+                item { SubTitle(t("TOP BRANI"), yearRecap.topSongs.size) }
                 item {
                     RankedList {
                         yearRecap.topSongs.forEachIndexed { index, ranked ->
                             RankedRow(
                                 position = index + 1,
-                                title = ranked.song.title,
-                                subtitle = ranked.song.artist,
+                                title = MusicRepository.displayName(ranked.song.title),
+                                subtitle = MusicRepository.displayName(ranked.song.artist),
                                 plays = ranked.plays,
                                 onClick = { onPlaySong(ranked.song) },
                             )
@@ -181,13 +187,13 @@ fun HomeScreen(
             }
 
             if (yearRecap.topArtists.size > 1) {
-                item { SubTitle("TOP ARTISTI", yearRecap.topArtists.size) }
+                item { SubTitle(t("TOP ARTISTI"), yearRecap.topArtists.size) }
                 item {
                     RankedList {
                         yearRecap.topArtists.forEachIndexed { index, ranked ->
                             RankedRow(
                                 position = index + 1,
-                                title = ranked.name,
+                                title = MusicRepository.displayName(ranked.name),
                                 subtitle = null,
                                 plays = ranked.plays,
                                 onClick = { onOpenArtist(ranked.name) },
@@ -201,7 +207,7 @@ fun HomeScreen(
             // I generi arrivano dai tag dei file: su molte librerie mancano del
             // tutto, quindi la sezione compare solo se c'è qualcosa da dire.
             if (yearRecap.topGenres.isNotEmpty()) {
-                item { SubTitle("GENERI", yearRecap.topGenres.size) }
+                item { SubTitle(t("GENERI"), yearRecap.topGenres.size) }
                 item { GenreChips(yearRecap.topGenres) }
                 item { Spacer(Modifier.height(20.dp)) }
             }
@@ -209,12 +215,32 @@ fun HomeScreen(
             item { Spacer(Modifier.height(8.dp)) }
         }
 
+        // La cronologia: per ricordarsi cosa si è ascoltato.
+        if (recentlyPlayed.isNotEmpty()) {
+            item { HomeSection(t("ASCOLTATI DI RECENTE"), recentlyPlayed.size) }
+            item {
+                val now = remember(recentlyPlayed) { System.currentTimeMillis() }
+                RankedList {
+                    recentlyPlayed.forEachIndexed { index, play ->
+                        HistoryRow(
+                            first = index == 0,
+                            title = MusicRepository.displayName(play.song.title),
+                            subtitle = MusicRepository.displayName(play.song.artist),
+                            ago = timeAgo(play.timestampMs, now),
+                            onClick = { onPlaySong(play.song) },
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+
         if (mostPlayed.isNotEmpty()) {
-            item { HomeSection("I PIÙ ASCOLTATI", mostPlayed.size) }
+            item { HomeSection(t("I PIÙ ASCOLTATI"), mostPlayed.size) }
             item {
                 AutoPlaylistCard(
                     songs = mostPlayed,
-                    caption = "I brani su cui torni sempre",
+                    caption = t("I brani su cui torni sempre"),
                     onPlay = onPlayMostPlayed,
                     onOpen = onOpenMostPlayed,
                 )
@@ -223,11 +249,11 @@ fun HomeScreen(
         }
 
         if (leastPlayed.isNotEmpty()) {
-            item { HomeSection("DA RISCOPRIRE", leastPlayed.size) }
+            item { HomeSection(t("DA RISCOPRIRE"), leastPlayed.size) }
             item {
                 AutoPlaylistCard(
                     songs = leastPlayed,
-                    caption = "Quello che ascolti di meno",
+                    caption = t("Quello che ascolti di meno"),
                     onPlay = onPlayLeastPlayed,
                     onOpen = onOpenLeastPlayed,
                 )
@@ -235,7 +261,7 @@ fun HomeScreen(
         }
 
         val nothingToShow = recentAlbums.isEmpty() && recap.isEmpty &&
-            mostPlayed.isEmpty() && leastPlayed.isEmpty()
+            mostPlayed.isEmpty() && leastPlayed.isEmpty() && recentlyPlayed.isEmpty()
         if (nothingToShow) {
             item { EmptyHome() }
         }
@@ -282,8 +308,16 @@ fun ScreenTitle(
 
 /** "LUNEDÌ 28.09": il timbro della schermata, come la data su un display di servizio. */
 @Composable
-private fun rememberTodayCaption(): String = remember {
-    SimpleDateFormat("EEEE dd.MM", Locale.ITALIAN).format(Date()).uppercase(Locale.ITALIAN)
+private fun rememberTodayCaption(): String {
+    val language = I18n.language
+    return remember(language) {
+        val pattern = when (language) {
+            Language.IT -> "EEEE dd.MM"
+            Language.EN -> "EEEE, MMM d"
+            Language.JA -> "M月d日 EEEE"
+        }
+        SimpleDateFormat(pattern, language.locale).format(Date()).uppercase(language.locale)
+    }
 }
 
 @Composable
@@ -323,9 +357,9 @@ private fun YearStatsCard(recap: YearlyRecap) {
             .nothingCard()
             .padding(18.dp),
     ) {
-        Stat(value = recap.minutesListened.toString(), label = "MINUTI")
-        Stat(value = recap.playCount.toString(), label = "ASCOLTI")
-        Stat(value = recap.distinctSongs.toString(), label = "BRANI")
+        Stat(value = recap.minutesListened.toString(), label = t("MINUTI"))
+        Stat(value = recap.playCount.toString(), label = t("ASCOLTI"))
+        Stat(value = recap.distinctSongs.toString(), label = t("BRANI"))
     }
 }
 
@@ -380,7 +414,7 @@ private fun HighlightCard(
                 color = colors.ink,
             )
             Text(
-                text = if (plays == 1) "ASCOLTO" else "ASCOLTI",
+                text = if (plays == 1) t("ASCOLTO") else t("ASCOLTI"),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
             )
@@ -398,6 +432,42 @@ private fun RankedList(content: @Composable () -> Unit) {
             .nothingCard(),
     ) {
         content()
+    }
+}
+
+/** Riga della cronologia: titolo e artista, a destra quanto tempo fa. */
+@Composable
+private fun HistoryRow(first: Boolean, title: String, subtitle: String, ago: String, onClick: () -> Unit) {
+    val colors = Xaos.colors
+    if (!first) Hairline(Modifier.padding(horizontal = 14.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(ago, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+    }
+}
+
+/** "ORA", "5 MIN FA", "3 H FA", "IERI", "4 GIORNI FA", poi la data. */
+private fun timeAgo(at: Long, now: Long): String {
+    val minutes = (now - at) / 60_000
+    val hours = minutes / 60
+    val days = (java.time.LocalDate.now().toEpochDay() -
+        java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay())
+    return when {
+        minutes < 1 -> t("ORA")
+        minutes < 60 -> t("%d MIN FA", minutes)
+        days == 0L -> t("%d H FA", hours)
+        days == 1L -> t("IERI")
+        days < 7 -> t("%d GIORNI FA", days)
+        else -> java.text.SimpleDateFormat(t("dd/MM"), com.example.xaosmusicplayer.i18n.I18n.language.locale).format(java.util.Date(at))
     }
 }
 
@@ -513,7 +583,7 @@ private fun RecentCard(entry: RecentEntry, onClick: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = entry.album.title.uppercase(),
+            text = MusicRepository.displayName(entry.album.title).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = colors.ink,
             maxLines = 1,
@@ -521,7 +591,7 @@ private fun RecentCard(entry: RecentEntry, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Text(
-            text = entry.album.artist,
+            text = MusicRepository.displayName(entry.album.artist),
             style = MaterialTheme.typography.labelMedium,
             color = colors.inkSecondary,
             maxLines = 1,
@@ -543,9 +613,9 @@ private fun RecapCard(recap: MonthlyRecap) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            Stat(value = recap.minutesListened.toString(), label = "MINUTI")
-            Stat(value = recap.playCount.toString(), label = "ASCOLTI")
-            Stat(value = recap.distinctSongs.toString(), label = "BRANI")
+            Stat(value = recap.minutesListened.toString(), label = t("MINUTI"))
+            Stat(value = recap.playCount.toString(), label = t("ASCOLTI"))
+            Stat(value = recap.distinctSongs.toString(), label = t("BRANI"))
         }
 
         if (recap.topArtist != null) {
@@ -556,12 +626,12 @@ private fun RecapCard(recap: MonthlyRecap) {
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Text(
-                        text = "ARTISTA DEL MESE",
+                        text = t("ARTISTA DEL MESE"),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                     )
                     Text(
-                        text = recap.topArtist.uppercase(),
+                        text = MusicRepository.displayName(recap.topArtist).uppercase(),
                         style = MaterialTheme.typography.titleLarge,
                         color = colors.accentInk,
                         maxLines = 1,
@@ -569,8 +639,8 @@ private fun RecapCard(recap: MonthlyRecap) {
                     )
                 }
                 Text(
-                    text = if (recap.topArtistPlays == 1) "[1 ASCOLTO]"
-                    else "[${recap.topArtistPlays} ASCOLTI]",
+                    text = if (recap.topArtistPlays == 1) t("[1 ASCOLTO]")
+                    else t("[%d ASCOLTI]", recap.topArtistPlays),
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.inkTertiary,
                 )
@@ -630,7 +700,7 @@ private fun AutoPlaylistCard(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
-                text = if (songs.size == 1) "1 BRANO" else "${songs.size} BRANI",
+                text = if (songs.size == 1) t("1 BRANO") else t("%d BRANI", songs.size),
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.ink,
             )
@@ -653,7 +723,7 @@ private fun AutoPlaylistCard(
         ) {
             Icon(
                 imageVector = XaosIcons.Play,
-                contentDescription = "Riproduci",
+                contentDescription = t("Riproduci"),
                 tint = colors.onAccent,
                 modifier = Modifier.size(22.dp),
             )
@@ -670,13 +740,15 @@ private fun EmptyHome() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "ANCORA NIENTE QUI",
+            text = t("ANCORA NIENTE QUI"),
             style = MaterialTheme.typography.labelLarge,
             color = colors.inkSecondary,
         )
         Text(
-            text = "Ascolta qualcosa dalla libreria: questa schermata si popola " +
-                "da sola con quello che riproduci.",
+            text = t(
+                "Ascolta qualcosa dalla libreria: questa schermata si popola " +
+                    "da sola con quello che riproduci."
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkTertiary,
         )

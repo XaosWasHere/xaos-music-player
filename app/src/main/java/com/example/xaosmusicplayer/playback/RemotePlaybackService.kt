@@ -8,6 +8,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.xaosmusicplayer.MainActivity
 import com.example.xaosmusicplayer.beam.BeamConnect
+import com.example.xaosmusicplayer.i18n.I18n
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,8 @@ class RemotePlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        I18n.init(this)
+        ensurePlaybackChannel(this)
         val player = RemotePcPlayer(Looper.getMainLooper())
         session = MediaSession.Builder(this, player)
             .setId(SESSION_ID)

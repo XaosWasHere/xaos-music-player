@@ -6,6 +6,7 @@ import android.content.IntentSender
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import com.example.xaosmusicplayer.i18n.t
 
 /** Esito del tentativo di eliminare un brano dalla memoria del dispositivo. */
 sealed interface DeleteOutcome {
@@ -44,14 +45,14 @@ class MediaDeleter(private val context: Context) {
         return try {
             val removed = resolver.delete(song.uri, null, null)
             if (removed > 0) DeleteOutcome.Deleted
-            else DeleteOutcome.Failed("Il brano non è stato trovato")
+            else DeleteOutcome.Failed(t("Il brano non è stato trovato"))
         } catch (security: SecurityException) {
             val recoverable = security as? RecoverableSecurityException
-                ?: return DeleteOutcome.Failed("Permesso negato")
+                ?: return DeleteOutcome.Failed(t("Permesso negato"))
             DeleteOutcome.NeedsConsent(recoverable.userAction.actionIntent.intentSender)
         } catch (error: Exception) {
             Log.e(TAG, "Eliminazione fallita", error)
-            DeleteOutcome.Failed(error.message ?: "Eliminazione fallita")
+            DeleteOutcome.Failed(error.message ?: t("Eliminazione fallita"))
         }
     }
 

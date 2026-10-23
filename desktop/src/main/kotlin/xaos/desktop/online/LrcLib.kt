@@ -43,9 +43,9 @@ object LrcLib {
      * con il testo sincronizzato vengono prima, e fra questi quelli con la
      * durata più vicina al brano.
      */
-    suspend fun search(title: String, artist: String, durationMs: Long): List<LrcResult> = withContext(Dispatchers.IO) {
-        val first = query(mapOf("track_name" to title, "artist_name" to artist))
-        val results = first.ifEmpty { query(mapOf("q" to "$title $artist")) }.ifEmpty { query(mapOf("q" to title)) }
+    suspend fun search(title: String, artist: String, durationMs: Long, strict: Boolean = false): List<LrcResult> = withContext(Dispatchers.IO) {
+        val first = query(mapOf("track_name" to title, "artist_name" to artist), strict)
+        val results = first.ifEmpty { query(mapOf("q" to "$title $artist"), strict) }.ifEmpty { query(mapOf("q" to title), strict) }
         val seconds = durationMs / 1000.0
         results
             .filter { !it.plainLyrics.isNullOrBlank() || !it.syncedLyrics.isNullOrBlank() }
@@ -55,7 +55,12 @@ object LrcLib {
             .take(12)
     }
 
-    private fun query(params: Map<String, String>): List<LrcResult> = runCatching {
+    /**
+     * Con [strict] un errore di rete o una risposta strana non valgono come
+     * "nessun testo": si lancia [Unavailable], così chi cerca per tutta la
+     * libreria non segna come cercati i brani mentre la rete manca.
+     */
+    private fun query(params: Map<String, String>, strict: Boolean): List<LrcResult> = runCatching {
         val qs = params.entries.joinToString("&") { (k, v) -> "$k=" + URLEncoder.encode(v, Charsets.UTF_8) }
         val request = HttpRequest.newBuilder(URI("https://lrclib.net/api/search?$qs"))
             // LRCLIB chiede di identificare il client.
@@ -64,7 +69,10 @@ object LrcLib {
             .GET()
             .build()
         val response = client.send(request, HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
-        if (response.statusCode() != 200) return emptyList()
+        if (response.statusCode() != 200) throw Unavailable("HTTP ${response.statusCode()}")
         json.decodeFromString<List<LrcResult>>(response.body())
-    }.getOrDefault(emptyList())
+    }.getOrElse { e -> if (strict) throw (e as? Unavailable ?: Unavailable(e.message ?: e.toString())) else emptyList() }
+
+    /** LRCLIB non ha risposto (rete assente, server giù, limite di richieste). */
+    class Unavailable(message: String) : Exception(message)
 }

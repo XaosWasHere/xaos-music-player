@@ -37,6 +37,10 @@ import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.Track
 import xaos.desktop.library.UserData
 import xaos.desktop.library.UserDataState
+import xaos.desktop.library.displayName
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tDotIn
+import xaos.desktop.i18n.tDot
 import xaos.desktop.player.Player
 import xaos.desktop.player.PlaySource
 import xaos.desktop.theme.DotText
@@ -57,20 +61,20 @@ fun FavoritesScreen(snapshot: LibrarySnapshot, data: UserDataState, player: Play
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
-                "PREFERITI",
-                caption = "[${tracks.size}] BRANI · ${formatDuration(tracks.sumOf { it.durationMs })} · SI SINCRONIZZANO COL TELEFONO",
+                tDot("PREFERITI"),
+                caption = t("[%d] BRANI · %s · SI SINCRONIZZANO COL TELEFONO", tracks.size, formatDuration(tracks.sumOf { it.durationMs })),
                 trailing = if (tracks.isNotEmpty()) {
                     {
                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            PillButton("RIPRODUCI", onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) }, icon = XaosIcons.Play, filled = true)
-                            PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) }, icon = XaosIcons.Shuffle)
+                            PillButton(t("RIPRODUCI"), onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.FAVORITES, "", t("Preferiti"))) }, icon = XaosIcons.Play, filled = true)
+                            PillButton(t("CASUALE"), onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.FAVORITES, "", t("Preferiti"))) }, icon = XaosIcons.Shuffle)
                         }
                     }
                 } else null,
             )
         }
         if (tracks.isEmpty()) {
-            item { EmptyHint("NESSUN PREFERITO", "Tocca il cuore accanto a un brano: lo ritrovi qui, e sul telefono.") }
+            item { EmptyHint(t("NESSUN PREFERITO"), t("Tocca il cuore accanto a un brano: lo ritrovi qui, e sul telefono.")) }
         }
         if (tracks.isNotEmpty()) item { TrackHeader(showAlbum = true) }
         itemsIndexed(tracks, key = { _, t -> t.path }) { index, track ->
@@ -80,7 +84,7 @@ fun FavoritesScreen(snapshot: LibrarySnapshot, data: UserDataState, player: Play
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.FAVORITES, "", "Preferiti")) },
+                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.FAVORITES, "", t("Preferiti"))) },
             )
         }
     }
@@ -94,9 +98,9 @@ fun PlaylistsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: Us
     var creating by remember { mutableStateOf(false) }
     if (creating) {
         NameDialog(
-            title = "Nuova playlist",
+            title = t("Nuova playlist"),
             initial = "",
-            confirm = "CREA",
+            confirm = t("CREA"),
             onConfirm = { name -> creating = false; onOpen(userData.createPlaylist(name)) },
             onDismiss = { creating = false },
         )
@@ -104,13 +108,13 @@ fun PlaylistsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: Us
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
-                "PLAYLIST",
-                caption = "[${data.playlists.size}] PLAYLIST · SI SINCRONIZZANO COL TELEFONO",
-                trailing = { PillButton("NUOVA PLAYLIST", onClick = { creating = true }, icon = XaosIcons.Add, filled = true) },
+                tDotIn("PLAYLIST", "sezione"),
+                caption = t("[%d] PLAYLIST · SI SINCRONIZZANO COL TELEFONO", data.playlists.size),
+                trailing = { PillButton(t("NUOVA PLAYLIST"), onClick = { creating = true }, icon = XaosIcons.Add, filled = true) },
             )
         }
         if (data.playlists.isEmpty()) {
-            item { EmptyHint("NESSUNA PLAYLIST", "Creane una da qui, o dal menu di un brano: \"Aggiungi a playlist\".") }
+            item { EmptyHint(t("NESSUNA PLAYLIST"), t("Creane una da qui, o dal menu di un brano: \"Aggiungi a playlist\".")) }
         }
         itemsIndexed(data.playlists, key = { _, p -> p.id }) { _, pl ->
             val tracks = pl.paths.mapNotNull { snapshot.byPath[it] }
@@ -127,7 +131,7 @@ fun PlaylistsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: Us
                 Column(Modifier.weight(1f)) {
                     Text(pl.name, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        "[${tracks.size}] BRANI · ${formatDuration(tracks.sumOf { it.durationMs })}",
+                        t("[%d] BRANI · %s", tracks.size, formatDuration(tracks.sumOf { it.durationMs })),
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.inkTertiary,
                     )
@@ -150,7 +154,7 @@ fun PlaylistDetailScreen(
     val colors = Xaos.colors
     val pl = data.playlists.firstOrNull { it.id == id }
     if (pl == null) {
-        EmptyMessage("PLAYLIST NON TROVATA")
+        EmptyMessage(t("PLAYLIST NON TROVATA"))
         return
     }
     val current by player.current.collectAsState()
@@ -173,16 +177,16 @@ fun PlaylistDetailScreen(
         AlertDialog(
             onDismissRequest = { deleting = false },
             containerColor = colors.surface,
-            title = { Text("Eliminare \"${pl.name}\"?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+            title = { Text(t("Eliminare \"%s\"?", pl.name), style = MaterialTheme.typography.titleLarge, color = colors.ink) },
             text = {
                 Text(
-                    "La playlist sparisce anche dal telefono alla prossima sincronizzazione. I brani restano dove sono.",
+                    t("La playlist sparisce anche dal telefono alla prossima sincronizzazione. I brani restano dove sono."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
             },
-            confirmButton = { PillButton("ELIMINA", onClick = { deleting = false; userData.deletePlaylist(id); onDeleted() }, filled = true) },
-            dismissButton = { PillButton("ANNULLA", onClick = { deleting = false }) },
+            confirmButton = { PillButton(t("ELIMINA"), onClick = { deleting = false; userData.deletePlaylist(id); onDeleted() }, filled = true) },
+            dismissButton = { PillButton(t("ANNULLA"), onClick = { deleting = false }) },
         )
     }
 
@@ -200,28 +204,28 @@ fun PlaylistDetailScreen(
                 }
                 Spacer(Modifier.width(28.dp))
                 Column(Modifier.padding(top = 60.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Tag("PLAYLIST")
+                    Tag(t("PLAYLIST"))
                     Text(pl.name, style = MaterialTheme.typography.headlineMedium, color = colors.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
-                        "[${tracks.size}] BRANI · ${formatDuration(tracks.sumOf { it.durationMs })}" +
-                            if (pl.paths.size > tracks.size) " · [${pl.paths.size - tracks.size}] NON SU QUESTO PC" else "",
+                        if (pl.paths.size > tracks.size) t("[%d] BRANI · %s · [%d] NON SU QUESTO PC", tracks.size, formatDuration(tracks.sumOf { it.durationMs }), pl.paths.size - tracks.size)
+                        else t("[%d] BRANI · %s", tracks.size, formatDuration(tracks.sumOf { it.durationMs })),
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.inkTertiary,
                     )
                     Spacer(Modifier.height(6.dp))
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillButton("RIPRODUCI", onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Play, filled = true, enabled = tracks.isNotEmpty())
-                        PillButton("CASUALE", onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Shuffle, enabled = tracks.isNotEmpty())
-                        PillButton("MODIFICA", onClick = { renaming = true }, icon = XaosIcons.Edit)
-                        PillButton("COPERTINA", onClick = { pickImage()?.let { userData.setPlaylistCover(id, it) } }, icon = XaosIcons.Album)
-                        if (pl.cover != null) PillButton("TOGLI COPERTINA", onClick = { userData.setPlaylistCover(id, null) })
-                        PillButton("ELIMINA", onClick = { deleting = true }, icon = XaosIcons.Delete)
+                        PillButton(t("RIPRODUCI"), onClick = { player.play(tracks, 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Play, filled = true, enabled = tracks.isNotEmpty())
+                        PillButton(t("CASUALE"), onClick = { player.play(tracks.shuffled(), 0, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) }, icon = XaosIcons.Shuffle, enabled = tracks.isNotEmpty())
+                        PillButton(t("MODIFICA"), onClick = { renaming = true }, icon = XaosIcons.Edit)
+                        PillButton(t("COPERTINA"), onClick = { pickImage()?.let { userData.setPlaylistCover(id, it) } }, icon = XaosIcons.Album)
+                        if (pl.cover != null) PillButton(t("TOGLI COPERTINA"), onClick = { userData.setPlaylistCover(id, null) })
+                        PillButton(t("ELIMINA"), onClick = { deleting = true }, icon = XaosIcons.Delete)
                     }
                 }
             }
         }
         if (tracks.isEmpty()) {
-            item { EmptyHint("PLAYLIST VUOTA", "Aggiungi brani dal loro menu: \"Aggiungi a playlist\".") }
+            item { EmptyHint(t("PLAYLIST VUOTA"), t("Aggiungi brani dal loro menu: \"Aggiungi a playlist\".")) }
         } else {
             item { TrackHeader(showAlbum = true) }
         }
@@ -234,12 +238,12 @@ fun PlaylistDetailScreen(
                 showArtwork = true,
                 onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.PLAYLIST, pl.id, pl.name)) },
                 extraMenu = listOfNotNull(
-                    Triple(XaosIcons.Close, "TOGLI DALLA PLAYLIST") { userData.removeFromPlaylist(id, position) },
+                    Triple(XaosIcons.Close, t("TOGLI DALLA PLAYLIST")) { userData.removeFromPlaylist(id, position) },
                     entries.getOrNull(index - 1)?.let { (above, _) ->
-                        Triple(XaosIcons.ArrowUp, "SPOSTA SU") { userData.movePlaylistItem(id, position, above) }
+                        Triple(XaosIcons.ArrowUp, t("SPOSTA SU")) { userData.movePlaylistItem(id, position, above) }
                     },
                     entries.getOrNull(index + 1)?.let { (below, _) ->
-                        Triple(XaosIcons.ArrowDown, "SPOSTA GIÙ") { userData.movePlaylistItem(id, position, below) }
+                        Triple(XaosIcons.ArrowDown, t("SPOSTA GIÙ")) { userData.movePlaylistItem(id, position, below) }
                     },
                 ),
             )
@@ -257,7 +261,7 @@ fun AddToPlaylistDialog(tracks: List<Track>, data: UserDataState, userData: User
         containerColor = colors.surface,
         title = {
             Text(
-                if (tracks.size == 1) "Aggiungi \"${tracks.first().title}\"" else "Aggiungi ${tracks.size} brani",
+                if (tracks.size == 1) t("Aggiungi \"%s\"", tracks.first().title) else t("Aggiungi %d brani", tracks.size),
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.ink,
                 maxLines = 2,
@@ -281,24 +285,24 @@ fun AddToPlaylistDialog(tracks: List<Track>, data: UserDataState, userData: User
                                 Icon(XaosIcons.PlaylistMusic, null, tint = colors.inkSecondary, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Text(pl.name, style = MaterialTheme.typography.bodyMedium, color = colors.ink, modifier = Modifier.weight(1f))
-                                if (has) Text("GIÀ PRESENTE", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                                if (has) Text(t("GIÀ PRESENTE"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                             }
                         }
                     }
                     Hairline()
                 }
-                XaosTextField("NUOVA PLAYLIST", name, { name = it }, placeholder = "Nome della playlist")
+                XaosTextField(t("NUOVA PLAYLIST"), name, { name = it }, placeholder = t("Nome della playlist"))
             }
         },
         confirmButton = {
             PillButton(
-                "CREA E AGGIUNGI",
+                t("CREA E AGGIUNGI"),
                 onClick = { userData.createPlaylist(name, tracks); onDone(name.trim()) },
                 filled = true,
                 enabled = name.isNotBlank(),
             )
         },
-        dismissButton = { PillButton("ANNULLA", onClick = { onDone(null) }) },
+        dismissButton = { PillButton(t("ANNULLA"), onClick = { onDone(null) }) },
     )
 }
 
@@ -338,16 +342,16 @@ private fun PlaylistInfoDialog(name: String, description: String, onConfirm: (St
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
-        title = { Text("Modifica playlist", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+        title = { Text(t("Modifica playlist"), style = MaterialTheme.typography.titleLarge, color = colors.ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                XaosTextField("NOME", n, { n = it }, placeholder = "Nome della playlist")
-                XaosTextField("DESCRIZIONE", d, { d = it.take(160) }, placeholder = "Due righe, sotto la copertina")
+                XaosTextField(t("NOME"), n, { n = it }, placeholder = t("Nome della playlist"))
+                XaosTextField(t("DESCRIZIONE"), d, { d = it.take(160) }, placeholder = t("Due righe, sotto la copertina"))
                 Text("${d.length}/160", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
             }
         },
-        confirmButton = { PillButton("SALVA", onClick = { onConfirm(n, d) }, filled = true, enabled = n.isNotBlank()) },
-        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+        confirmButton = { PillButton(t("SALVA"), onClick = { onConfirm(n, d) }, filled = true, enabled = n.isNotBlank()) },
+        dismissButton = { PillButton(t("ANNULLA"), onClick = onDismiss) },
     )
 }
 
@@ -359,9 +363,9 @@ private fun NameDialog(title: String, initial: String, confirm: String, onConfir
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
         title = { Text(title, style = MaterialTheme.typography.titleLarge, color = colors.ink) },
-        text = { XaosTextField("NOME", name, { name = it }, placeholder = "Nome della playlist") },
+        text = { XaosTextField(t("NOME"), name, { name = it }, placeholder = t("Nome della playlist")) },
         confirmButton = { PillButton(confirm, onClick = { onConfirm(name) }, filled = true, enabled = name.isNotBlank()) },
-        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+        dismissButton = { PillButton(t("ANNULLA"), onClick = onDismiss) },
     )
 }
 
@@ -376,7 +380,11 @@ private fun EmptyHint(title: String, body: String) {
 
 // ------------------------------------------------------------------ Statistiche
 
-enum class StatsPeriod(val label: String) { MONTH("QUESTO MESE"), YEAR("QUEST'ANNO"), ALL("SEMPRE") }
+enum class StatsPeriod(private val italian: String) {
+    MONTH("QUESTO MESE"), YEAR("QUEST'ANNO"), ALL("SEMPRE");
+
+    val label: String get() = t(italian)
+}
 
 private data class Ranked<T>(val item: T, val plays: Int)
 
@@ -390,29 +398,30 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
     var period by remember { mutableStateOf(StatsPeriod.YEAR) }
     var confirmClear by remember { mutableStateOf(false) }
     val stats = remember(snapshot, data.plays, period) { computeStats(snapshot, data, period) }
+    val recent = remember(snapshot, data.plays) { recentPlays(snapshot, data) }
 
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
             containerColor = colors.surface,
-            title = { Text("Cancellare la cronologia?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+            title = { Text(t("Cancellare la cronologia?"), style = MaterialTheme.typography.titleLarge, color = colors.ink) },
             text = {
                 Text(
-                    "Tutti gli ascolti registrati spariscono, qui e — alla prossima sincronizzazione — anche sul telefono.",
+                    t("Tutti gli ascolti registrati spariscono, qui e — alla prossima sincronizzazione — anche sul telefono."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
             },
-            confirmButton = { PillButton("CANCELLA", onClick = { confirmClear = false; userData.clearHistory() }, filled = true) },
-            dismissButton = { PillButton("ANNULLA", onClick = { confirmClear = false }) },
+            confirmButton = { PillButton(t("CANCELLA"), onClick = { confirmClear = false; userData.clearHistory() }, filled = true) },
+            dismissButton = { PillButton(t("ANNULLA"), onClick = { confirmClear = false }) },
         )
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
-                "ASCOLTI",
-                caption = "PC E TELEFONO INSIEME · CONTA UN ASCOLTO DOPO 30 SECONDI",
+                tDotIn("ASCOLTI", "sezione"),
+                caption = t("PC E TELEFONO INSIEME · CONTA UN ASCOLTO DOPO 30 SECONDI"),
                 trailing = {
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatsPeriod.entries.forEach { p ->
@@ -424,15 +433,29 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
         }
         item {
             androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().nothingCard().padding(22.dp), horizontalArrangement = Arrangement.spacedBy(48.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Stat(stats.plays.toString(), "ASCOLTI")
-                Stat(stats.minutes.toString(), "MINUTI")
-                Stat(stats.distinctSongs.toString(), "BRANI DIVERSI")
-                Stat(stats.distinctArtists.toString(), "ARTISTI")
+                Stat(stats.plays.toString(), t("ASCOLTI"))
+                Stat(stats.minutes.toString(), t("MINUTI"))
+                Stat(stats.distinctSongs.toString(), t("BRANI DIVERSI"))
+                Stat(stats.distinctArtists.toString(), t("ARTISTI"))
             }
             Spacer(Modifier.height(20.dp))
         }
+        // La cronologia: gli ultimi brani ascoltati, qualunque sia il periodo scelto.
+        if (recent.isNotEmpty()) {
+            item {
+                val now = remember(recent) { System.currentTimeMillis() }
+                RankCard(t("ASCOLTATI DI RECENTE"), Modifier.fillMaxWidth()) {
+                    recent.forEach { (track, at) ->
+                        HistoryRow(track, timeAgo(at, now)) {
+                            player.play(listOf(track), 0, PlaySource(PlaySource.Kind.STATS, "", t("Ascoltati di recente")))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
         if (stats.plays == 0) {
-            item { EmptyHint("NESSUN ASCOLTO IN QUESTO PERIODO", "Gli ascolti si registrano da soli, qui e sul telefono.") }
+            item { EmptyHint(t("NESSUN ASCOLTO IN QUESTO PERIODO"), t("Gli ascolti si registrano da soli, qui e sul telefono.")) }
         } else {
             item {
                 androidx.compose.foundation.layout.BoxWithConstraints {
@@ -444,23 +467,23 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
                     } else Column(verticalArrangement = Arrangement.spacedBy(20.dp)) { a(); b() }
                 }
                 arrange({
-                    RankCard("BRANI PIÙ ASCOLTATI", Modifier.fillMaxWidth()) {
+                    RankCard(t("BRANI PIÙ ASCOLTATI"), Modifier.fillMaxWidth()) {
                         stats.topSongs.forEachIndexed { i, r ->
-                            RankRow(i, r.item.title, r.item.artist, r.plays, track = r.item) {
-                                player.play(stats.topSongs.map { it.item }, i, PlaySource(PlaySource.Kind.STATS, "", "Più ascoltati"))
+                            RankRow(i, r.item.title, displayName(r.item.artist), r.plays, track = r.item) {
+                                player.play(stats.topSongs.map { it.item }, i, PlaySource(PlaySource.Kind.STATS, "", t("Più ascoltati")))
                             }
                         }
                     }
                 }, {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        RankCard("ARTISTI", Modifier.fillMaxWidth()) {
-                            stats.topArtists.forEachIndexed { i, r -> RankRow(i, r.item, null, r.plays) }
+                        RankCard(t("ARTISTI"), Modifier.fillMaxWidth()) {
+                            stats.topArtists.forEachIndexed { i, r -> RankRow(i, displayName(r.item), null, r.plays) }
                         }
-                        RankCard("ALBUM", Modifier.fillMaxWidth()) {
-                            stats.topAlbums.forEachIndexed { i, r -> RankRow(i, r.item.first, r.item.second, r.plays, track = r.item.third) }
+                        RankCard(t("ALBUM"), Modifier.fillMaxWidth()) {
+                            stats.topAlbums.forEachIndexed { i, r -> RankRow(i, displayName(r.item.first), displayName(r.item.second), r.plays, track = r.item.third) }
                         }
                         if (stats.topGenres.isNotEmpty()) {
-                            RankCard("GENERI", Modifier.fillMaxWidth()) {
+                            RankCard(t("GENERI"), Modifier.fillMaxWidth()) {
                                 stats.topGenres.forEachIndexed { i, r -> RankRow(i, r.item.uppercase(), null, r.plays) }
                             }
                         }
@@ -472,12 +495,12 @@ fun StatsScreen(snapshot: LibrarySnapshot, data: UserDataState, userData: UserDa
                 Spacer(Modifier.height(24.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "[${data.plays.size}] ASCOLTI REGISTRATI IN TUTTO",
+                        t("[%d] ASCOLTI REGISTRATI IN TUTTO", data.plays.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                         modifier = Modifier.weight(1f),
                     )
-                    PillButton("CANCELLA CRONOLOGIA", onClick = { confirmClear = true }, icon = XaosIcons.Delete)
+                    PillButton(t("CANCELLA CRONOLOGIA"), onClick = { confirmClear = true }, icon = XaosIcons.Delete)
                 }
             }
         }
@@ -523,6 +546,60 @@ private fun RankRow(index: Int, title: String, subtitle: String?, plays: Int, tr
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text("[$plays]", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+    }
+}
+
+/** Riga della cronologia: copertina, titolo e artista, a destra quanto tempo fa. */
+@Composable
+private fun HistoryRow(track: Track, ago: String, onClick: () -> Unit) {
+    val colors = Xaos.colors
+    Row(
+        Modifier.fillMaxWidth().hoverRow().pressable(onClick).padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtworkImage(track, size = 34.dp, corner = 6.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayName(track.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(ago, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+    }
+}
+
+/**
+ * Gli ultimi dieci brani ascoltati, dal più recente. Lo stesso brano
+ * ascoltato più volte di fila conta una volta sola.
+ */
+private fun recentPlays(snapshot: LibrarySnapshot, data: UserDataState): List<Pair<Track, Long>> {
+    val out = ArrayList<Pair<Track, Long>>(HISTORY_SIZE)
+    var previous: String? = null
+    for (play in data.plays.asReversed()) {
+        val track = snapshot.byPath[play.path] ?: continue
+        if (track.path == previous) continue
+        previous = track.path
+        out += track to play.at
+        if (out.size == HISTORY_SIZE) break
+    }
+    return out
+}
+
+private const val HISTORY_SIZE = 10
+
+/** "ORA", "5 MIN FA", "3 H FA", "IERI", "4 GIORNI FA", poi la data. */
+private fun timeAgo(at: Long, now: Long): String {
+    val minutes = (now - at) / 60_000
+    val zone = ZoneId.systemDefault()
+    val days = LocalDate.now(zone).toEpochDay() - Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay()
+    return when {
+        minutes < 1 -> t("ORA")
+        minutes < 60 -> t("%d MIN FA", minutes)
+        days == 0L -> t("%d H FA", minutes / 60)
+        days == 1L -> t("IERI")
+        days < 7 -> t("%d GIORNI FA", days)
+        else -> java.time.format.DateTimeFormatter.ofPattern(t("dd/MM"), xaos.desktop.i18n.I18n.language.locale)
+            .format(Instant.ofEpochMilli(at).atZone(zone))
     }
 }
 

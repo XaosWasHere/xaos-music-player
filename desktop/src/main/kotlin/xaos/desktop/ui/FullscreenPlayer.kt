@@ -57,6 +57,7 @@ import xaos.desktop.library.ArtColorExtractor
 import xaos.desktop.library.ArtColors
 import xaos.desktop.library.Track
 import xaos.desktop.library.rememberArtwork
+import xaos.desktop.i18n.t
 import xaos.desktop.player.Player
 import xaos.desktop.player.RepeatMode
 import xaos.desktop.theme.Xaos
@@ -101,6 +102,9 @@ fun FullscreenPlayer(
     val source by player.source.collectAsState()
 
     val track = current
+    // L'artista porta all'artista, come "Vai all'artista" dal menu del brano.
+    val actions = LocalTrackActions.current
+    val goToArtist: (() -> Unit)? = if (track != null && actions != null) ({ actions.onGoToArtist(track) }) else null
 
     BoxWithConstraints(Modifier.fillMaxSize().appBackground()) {
         val wideScreen = maxWidth > 1250.dp
@@ -114,7 +118,7 @@ fun FullscreenPlayer(
         Column(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 32.dp)) {
             // ---- testata
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CircleIconButton(XaosIcons.ChevronDown, "Chiudi (Esc)", onClose, size = 44.dp)
+                CircleIconButton(XaosIcons.ChevronDown, t("Chiudi (Esc)"), onClose, size = 44.dp)
                 // Un clic porta dove la coda è partita: l'album, la playlist, i preferiti.
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Column(
@@ -124,9 +128,9 @@ fun FullscreenPlayer(
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                    Text("IN RIPRODUZIONE DA", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                    Text(t("IN RIPRODUZIONE DA"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                     Text(
-                        (shown.phone?.let { "SUL TELEFONO · ${it.name}" } ?: source?.label ?: track?.album)?.uppercase() ?: "—",
+                        (shown.phone?.let { t("SUL TELEFONO · %s", it.name) } ?: source?.displayLabel ?: track?.album?.let { xaos.desktop.library.displayName(it) })?.uppercase() ?: "—",
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.ink,
                         maxLines = 1,
@@ -139,7 +143,7 @@ fun FullscreenPlayer(
                     FullscreenBackground.entries.forEach { mode ->
                         CircleIconButton(
                             icon = mode.icon,
-                            contentDescription = "Sfondo: ${mode.label.lowercase()}",
+                            contentDescription = t("Sfondo: %s", t(mode.label).lowercase()),
                             onClick = { onBackgroundChange(mode) },
                             size = 36.dp,
                             filled = mode == background,
@@ -178,18 +182,17 @@ fun FullscreenPlayer(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        track?.title ?: "Niente in riproduzione",
+                                        track?.title ?: t("Niente in riproduzione"),
                                         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp),
                                         color = colors.ink,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    Text(
-                                        track?.artist ?: "",
+                                    ArtistLink(
+                                        track?.artist?.let { xaos.desktop.library.displayName(it) } ?: "",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = if (colors.isDark) colors.accentInk else colors.inkSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                        onClick = goToArtist,
                                     )
                                 }
                                 if (track != null) FavoriteButton(track, size = 44.dp)
@@ -202,14 +205,14 @@ fun FullscreenPlayer(
                             AccentDot(size = 7.dp, color = if (isPlaying) colors.accent else colors.inkTertiary)
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                if (isPlaying) "IN RIPRODUZIONE" else "IN PAUSA",
+                                if (isPlaying) t("IN RIPRODUZIONE") else t("IN PAUSA"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = colors.inkSecondary,
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                track?.title ?: "Niente in riproduzione",
+                                track?.title ?: t("Niente in riproduzione"),
                                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = 44.sp, lineHeight = 52.sp),
                                 color = colors.ink,
                                 maxLines = 3,
@@ -221,16 +224,15 @@ fun FullscreenPlayer(
                                 FavoriteButton(track, size = 48.dp)
                             }
                         }
-                        Text(
-                            track?.artist ?: "",
+                        ArtistLink(
+                            track?.artist?.let { xaos.desktop.library.displayName(it) } ?: "",
                             style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
                             color = if (colors.isDark) colors.accentInk else colors.inkSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            onClick = goToArtist,
                         )
                         if (track != null) {
                             Text(
-                                listOfNotNull(track.album, track.year.takeIf { it > 0 }?.toString())
+                                listOfNotNull(xaos.desktop.library.displayName(track.album), track.year.takeIf { it > 0 }?.toString())
                                     .joinToString(" · ").uppercase(),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = colors.inkTertiary,
@@ -283,25 +285,25 @@ fun FullscreenPlayer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
-                    BigModeButton(XaosIcons.Shuffle, "Casuale", shuffle && !shown.remote) { shown.toggleShuffle() }
-                    CircleIconButton(XaosIcons.Previous, "Precedente", { shown.previous() }, size = 56.dp, outlined = false)
+                    BigModeButton(XaosIcons.Shuffle, t("Casuale"), shuffle && !shown.remote) { shown.toggleShuffle() }
+                    CircleIconButton(XaosIcons.Previous, t("Precedente"), { shown.previous() }, size = 56.dp, outlined = false)
                     Box(
                         Modifier.size(76.dp).clip(CircleShape).background(colors.accent, CircleShape).pressable { shown.togglePlayPause() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa (spazio)" else "Riproduci (spazio)", colors.onAccent, glyphSize = 36.dp)
+                        PlayPauseGlyph(isPlaying, if (isPlaying) t("Pausa (spazio)") else t("Riproduci (spazio)"), colors.onAccent, glyphSize = 36.dp)
                     }
-                    CircleIconButton(XaosIcons.Next, "Successivo", { shown.next() }, size = 56.dp, outlined = false)
+                    CircleIconButton(XaosIcons.Next, t("Successivo"), { shown.next() }, size = 56.dp, outlined = false)
                     BigModeButton(
                         if (repeat == RepeatMode.ONE) XaosIcons.RepeatOne else XaosIcons.Repeat,
-                        "Ripeti",
+                        t("Ripeti"),
                         repeat != RepeatMode.OFF && !shown.remote,
                     ) { shown.cycleRepeat() }
                 }
                 Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-                    BigModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onToggleLyrics)
+                    BigModeButton(XaosIcons.Mic, if (lyricsOpen) t("Chiudi il testo") else t("Testo"), lyricsOpen, onToggleLyrics)
                     Spacer(Modifier.width(18.dp))
-                    Icon(if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume, "Volume", tint = colors.inkSecondary, modifier = Modifier.size(20.dp))
+                    Icon(if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume, t("Volume"), tint = colors.inkSecondary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     DotSlider(
                         value = volume / 100f,
@@ -314,7 +316,7 @@ fun FullscreenPlayer(
                 // Su uno schermo stretto i suggerimenti finirebbero sotto i comandi.
                 if (wideScreen) {
                     Text(
-                        "ESC O F11 CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI",
+                        t("ESC O F11 CHIUDE · SPAZIO PLAY/PAUSA · ← → 10 SECONDI"),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                         modifier = Modifier.align(Alignment.CenterStart),
@@ -339,14 +341,14 @@ private val FullscreenBackground.icon: ImageVector
 private fun UpNext(tracks: List<Track>) {
     val colors = Xaos.colors
     Column(Modifier.widthIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("A SEGUIRE", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+        Text(t("A SEGUIRE"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
         tracks.forEach { t ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ArtworkImage(t, size = 36.dp, corner = 6.dp)
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(t.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(t.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(xaos.desktop.library.displayName(t.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

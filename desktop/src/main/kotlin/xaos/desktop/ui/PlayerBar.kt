@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import xaos.desktop.i18n.t
 import xaos.desktop.player.Player
 import xaos.desktop.player.RepeatMode
 import xaos.desktop.theme.Xaos
@@ -114,9 +115,15 @@ fun PlayerBar(
                     // Copertina e titolo aprono lo schermo intero, come su Spotify.
                     ArtworkImage(track, size = 58.dp, corner = 10.dp, modifier = Modifier.pressable(onOpenFullscreen))
                     Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f, fill = false).pressable(onOpenFullscreen)) {
-                        Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.weight(1f, fill = false)) {
+                        Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.pressable(onOpenFullscreen))
+                        // L'artista porta all'artista, come "Vai all'artista" dal menu.
+                        ArtistLink(
+                            xaos.desktop.library.displayName(track.artist),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.inkSecondary,
+                            onClick = actions?.let { a -> { a.onGoToArtist(track) } },
+                        )
                     }
                     Spacer(Modifier.width(8.dp))
                     FavoriteButton(track, size = 34.dp)
@@ -127,25 +134,25 @@ fun PlayerBar(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DotSpinner(size = 16.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("AVVIO DEL MOTORE AUDIO…", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                        Text(t("AVVIO DEL MOTORE AUDIO…"), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
                     }
                 } else if (engine == Player.Engine.Missing) {
                     Column {
-                        Text("MOTORE AUDIO NON TROVATO", style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
-                        Text("Reinstalla Xaos, oppure installa VLC 3", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                        Text(t("MOTORE AUDIO NON TROVATO"), style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
+                        Text(t("Reinstalla Xaos, oppure installa VLC 3"), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
                     }
                 } else {
-                    Text("NIENTE IN RIPRODUZIONE", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                    Text(t("NIENTE IN RIPRODUZIONE"), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
                 }
             }
 
             // Comandi e avanzamento
             Column(Modifier.width(if (narrow) 380.dp else 520.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    ModeButton(XaosIcons.Shuffle, "Casuale", shuffle && remote == null) {
+                    ModeButton(XaosIcons.Shuffle, t("Casuale"), shuffle && remote == null) {
                         if (remote != null) onPhone("shuffle") else player.toggleShuffle()
                     }
-                    CircleIconButton(XaosIcons.Previous, "Precedente", { if (remote != null) onPhone("previous") else player.previous() }, outlined = false)
+                    CircleIconButton(XaosIcons.Previous, t("Precedente"), { if (remote != null) onPhone("previous") else player.previous() }, outlined = false)
                     Box(
                         Modifier
                             .size(46.dp)
@@ -154,12 +161,12 @@ fun PlayerBar(
                             .pressable { if (remote != null) onPhone("toggle") else player.togglePlayPause() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        PlayPauseGlyph(shownPlaying, if (shownPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 24.dp)
+                        PlayPauseGlyph(shownPlaying, if (shownPlaying) t("Pausa") else t("Riproduci"), colors.onAccent, glyphSize = 24.dp)
                     }
-                    CircleIconButton(XaosIcons.Next, "Successivo", { if (remote != null) onPhone("next") else player.next() }, outlined = false)
+                    CircleIconButton(XaosIcons.Next, t("Successivo"), { if (remote != null) onPhone("next") else player.next() }, outlined = false)
                     ModeButton(
                         if (repeat == RepeatMode.ONE) XaosIcons.RepeatOne else XaosIcons.Repeat,
-                        "Ripeti",
+                        t("Ripeti"),
                         repeat != RepeatMode.OFF && remote == null,
                     ) { if (remote != null) onPhone("repeat") else player.cycleRepeat() }
                 }
@@ -187,7 +194,7 @@ fun PlayerBar(
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume,
-                    "Volume",
+                    t("Volume"),
                     tint = colors.inkSecondary,
                     modifier = Modifier.size(18.dp),
                 )
@@ -215,11 +222,11 @@ fun PlayerBar(
                         Spacer(Modifier.width(6.dp))
                     }
                 }
-                ModeButton(XaosIcons.Mic, if (lyricsOpen) "Chiudi il testo" else "Testo", lyricsOpen, onClick = onToggleLyrics)
+                ModeButton(XaosIcons.Mic, if (lyricsOpen) t("Chiudi il testo") else t("Testo"), lyricsOpen, onClick = onToggleLyrics)
                 Spacer(Modifier.width(6.dp))
-                CircleIconButton(XaosIcons.MiniPlayer, "Miniplayer", onOpenMini, size = 34.dp, outlined = false)
+                CircleIconButton(XaosIcons.MiniPlayer, t("Miniplayer"), onOpenMini, size = 34.dp, outlined = false)
                 Spacer(Modifier.width(6.dp))
-                CircleIconButton(XaosIcons.Fullscreen, "Schermo intero", onOpenFullscreen, size = 34.dp)
+                CircleIconButton(XaosIcons.Fullscreen, t("Schermo intero"), onOpenFullscreen, size = 34.dp)
             }
         }
     }
@@ -266,12 +273,12 @@ private fun androidx.compose.foundation.layout.RowScope.RemoteNowPlaying(phone: 
     Spacer(Modifier.width(14.dp))
     Column(Modifier.weight(1f, fill = false)) {
         Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(xaos.desktop.library.displayName(track.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(XaosIcons.Phone, null, tint = colors.accentInk, modifier = Modifier.size(12.dp))
             Spacer(Modifier.width(5.dp))
             Text(
-                "SUL TELEFONO · ${phone.name.uppercase()}",
+                t("SUL TELEFONO · %s", phone.name.uppercase()),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.accentInk,
                 maxLines = 1,

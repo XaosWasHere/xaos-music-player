@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import xaos.desktop.library.Library
 import xaos.desktop.library.ScanState
@@ -32,6 +33,9 @@ import xaos.desktop.player.Player
 import xaos.desktop.sync.PhoneSync
 import xaos.desktop.theme.XaosTheme
 import xaos.desktop.ui.XaosDesktopApp
+import xaos.desktop.i18n.I18n
+import xaos.desktop.i18n.Language
+import xaos.desktop.i18n.t
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.UIManager
@@ -48,6 +52,8 @@ fun main() {
 private fun runApp() = application {
     remember { StartupLog.mark("main") }
     val settings = remember { Settings(File(Settings.appDir, "settings.json")) }
+    // La lingua va scelta prima di comporre qualunque cosa.
+    remember { I18n.language = Language.of(settings.data.value.language) ?: Language.system() }
     // v2: l'indice registra anche quali brani hanno un testo. Cambiando nome si
     // rilegge tutto una volta sola; il vecchio file non serve più.
     val library = remember {
@@ -98,6 +104,7 @@ private fun runApp() = application {
         player.applyEqualizer(prefs.equalizer.enabled, prefs.equalizer.preamp, prefs.equalizer.bands)
     }
     LaunchedEffect(prefs.outputDevice) { player.setOutputDevice(prefs.outputDevice) }
+    LaunchedEffect(prefs.language) { I18n.language = Language.of(prefs.language) ?: Language.system() }
     // Xaos Beam: il server si apre e si chiude con l'interruttore.
     LaunchedEffect(prefs.beamEnabled) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -110,6 +117,22 @@ private fun runApp() = application {
         phone.libraryRoots = prefs.roots.map(::File)
     }
     DataEffects(settings, library, phone, userData, dataSync)
+
+    // I testi per tutta la libreria, da LRCLIB, quando la libreria è letta.
+    val libraryLyrics = remember {
+        xaos.desktop.online.LibraryLyrics(scope) {
+            scope.launch { library.load(settings.data.value.roots.map(::File).filter { it.isDirectory }) }
+        }
+    }
+    val lyricsSnapshot by library.snapshot.collectAsState()
+    val lyricsScan by library.scan.collectAsState()
+    LaunchedEffect(lyricsSnapshot, lyricsScan, prefs.autoLyrics) {
+        when {
+            Settings.isTestInstance -> Unit
+            !prefs.autoLyrics -> libraryLyrics.stop()
+            lyricsScan == ScanState.Idle && lyricsSnapshot.tracks.isNotEmpty() -> libraryLyrics.request(lyricsSnapshot.tracks)
+        }
+    }
 
     val windowState = rememberWindowState(size = DpSize(1320.dp, 860.dp))
     var fullscreen by remember { mutableStateOf(System.getenv("XAOS_START") == "FULLSCREEN") }
@@ -180,6 +203,7 @@ private fun runApp() = application {
         XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
           androidx.compose.runtime.CompositionLocalProvider(
             xaos.desktop.ui.LocalBeam provides beam,
+            xaos.desktop.online.LocalLibraryLyrics provides libraryLyrics,
             xaos.desktop.ui.LocalActivePhone provides activePhone,
           ) {
             XaosDesktopApp(
@@ -292,13 +316,29 @@ private fun MiniPlayerWindow(
     val state = rememberWindowState(
         size = DpSize(width, height),
         position = run {
-            val area = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
-            androidx.compose.ui.window.WindowPosition(
-                (area.x + area.width).dp - width - 20.dp,
-                (area.y + area.height).dp - height - 20.dp,
-            )
+            // Dove era stato lasciato, se è ancora su uno schermo (un monitor
+            // staccato non deve farlo sparire); altrimenti in basso a destra.
+            val saved = savedMiniPosition(prefs.miniX, prefs.miniY, width, height)
+            saved ?: run {
+                val area = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+                androidx.compose.ui.window.WindowPosition(
+                    (area.x + area.width).dp - width - 20.dp,
+                    (area.y + area.height).dp - height - 20.dp,
+                )
+            }
         },
     )
+    // Spostandolo, la posizione si ricorda per la prossima volta.
+    LaunchedEffect(state) {
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        androidx.compose.runtime.snapshotFlow { state.position }
+            .debounce(400)
+            .collect { pos ->
+                if (pos is androidx.compose.ui.window.WindowPosition.Absolute) {
+                    settings.update { it.copy(miniX = pos.x.value, miniY = pos.y.value) }
+                }
+            }
+    }
     // Chiuderlo (anche con Alt+F4) riporta a Xaos: nascosta la finestra
     // principale, chiudere questo lascerebbe l'app aperta ma invisibile.
     Window(
@@ -335,6 +375,17 @@ private fun MiniPlayerWindow(
     }
 }
 
+/** La posizione salvata del miniplayer, se almeno metà della finestra cade su uno schermo collegato. */
+private fun savedMiniPosition(x: Float?, y: Float?, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp): androidx.compose.ui.window.WindowPosition? {
+    if (x == null || y == null) return null
+    val window = java.awt.Rectangle(x.toInt(), y.toInt(), width.value.toInt(), height.value.toInt())
+    val visible = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.any { screen ->
+        val overlap = screen.defaultConfiguration.bounds.intersection(window)
+        !overlap.isEmpty && overlap.width * overlap.height * 2 >= window.width * window.height
+    }
+    return if (visible) androidx.compose.ui.window.WindowPosition(x.dp, y.dp) else null
+}
+
 /**
  * Gli effetti che seguono libreria e telefono. Stanno in una funzione a parte
  * perché cambiano spesso: così a ricomporsi è solo questa, non tutta l'app.
@@ -364,7 +415,7 @@ private fun pickFolder(start: String?): File? {
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
     val chooser = JFileChooser(start).apply {
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        dialogTitle = "Aggiungi una cartella di musica"
+        dialogTitle = t("Aggiungi una cartella di musica")
         isAcceptAllFileFilterUsed = false
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null

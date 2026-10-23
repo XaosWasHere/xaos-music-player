@@ -16,6 +16,7 @@ import xaos.desktop.library.Library
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.TagEditor
 import xaos.desktop.library.Track
+import xaos.desktop.i18n.t
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -161,7 +162,7 @@ class BeamServer(
             // telefono la scopre dalla risposta al broadcast.
             .recoverCatching { HttpServer.create(InetSocketAddress(0), 0) }
             .getOrElse {
-                _state.value = BeamState.Failed(it.message ?: "impossibile aprire la porta")
+                _state.value = BeamState.Failed(it.message ?: t("impossibile aprire la porta"))
                 return
             }
         val pool = Executors.newFixedThreadPool(THREADS) { r -> Thread(r, "xaos-beam").apply { isDaemon = true } }

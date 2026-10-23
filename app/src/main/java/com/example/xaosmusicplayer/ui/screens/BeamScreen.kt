@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.beam.Beam
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.components.AccentDot
 import com.example.xaosmusicplayer.ui.components.Hairline
 import com.example.xaosmusicplayer.ui.components.PillButton
@@ -85,9 +86,9 @@ fun BeamScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (enabled) "ACCESO" else "SPENTO", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                    Text(if (enabled) t("ACCESO") else t("SPENTO"), style = MaterialTheme.typography.labelLarge, color = colors.ink)
                     Text(
-                        "Ascolta la libreria del PC in streaming, sulla rete di casa, senza copiarla sul telefono.",
+                        t("Ascolta la libreria del PC in streaming, sulla rete di casa, senza copiarla sul telefono."),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.inkTertiary,
                     )
@@ -99,7 +100,7 @@ fun BeamScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             if (enabled) {
                 pairing?.let { p ->
                     Spacer(Modifier.height(8.dp))
-                    SectionHeader("PC ABBINATO")
+                    SectionHeader(t("PC ABBINATO"))
                     Hairline()
                     DeviceLine(
                         name = p.name,
@@ -107,12 +108,12 @@ fun BeamScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         live = status is Beam.Status.Connected,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillButton("AGGIORNA", onClick = Beam::refresh, icon = XaosIcons.Sync)
-                        PillButton("DIMENTICA", onClick = Beam::forget)
+                        PillButton(t("AGGIORNA"), onClick = Beam::refresh, icon = XaosIcons.Sync)
+                        PillButton(t("DIMENTICA"), onClick = Beam::forget)
                     }
                     if (status == Beam.Status.Revoked) {
                         Text(
-                            "Il PC ha tolto questo telefono dall'elenco: toccalo qui sotto e scrivi il PIN per abbinarlo di nuovo.",
+                            t("Il PC ha tolto questo telefono dall'elenco: toccalo qui sotto e scrivi il PIN per abbinarlo di nuovo."),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.inkSecondary,
                         )
@@ -121,14 +122,14 @@ fun BeamScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
                 val others = found.filter { it.id != pairing?.id || status == Beam.Status.Revoked }
                 Spacer(Modifier.height(8.dp))
-                SectionHeader("PC IN RETE", count = others.size) {
-                    if (scanning) Text("RICERCA…", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                SectionHeader(t("PC IN RETE"), count = others.size) {
+                    if (scanning) Text(t("RICERCA…"), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
                 }
                 Hairline()
                 if (others.isEmpty()) {
                     Text(
-                        if (pairing == null) "Nessun PC trovato. Su Xaos per PC: Impostazioni → Xaos Beam, accendilo. PC e telefono devono stare sulla stessa rete Wi-Fi."
-                        else "Nessun altro PC in rete.",
+                        if (pairing == null) t("Nessun PC trovato. Su Xaos per PC: Impostazioni → Xaos Beam, accendilo. PC e telefono devono stare sulla stessa rete Wi-Fi.")
+                        else t("Nessun altro PC in rete."),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.inkTertiary,
                     )
@@ -136,17 +137,17 @@ fun BeamScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 others.forEach { server ->
                     DeviceLine(
                         name = server.name,
-                        detail = "${server.host}:${server.port} · TOCCA PER ABBINARE",
+                        detail = t("%s:%d · TOCCA PER ABBINARE", server.host, server.port),
                         live = false,
                         onClick = { pinFor = server },
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("CERCA", onClick = Beam::scan, icon = XaosIcons.Search)
-                    PillButton("INSERISCI INDIRIZZO", onClick = { askAddress = true })
+                    PillButton(t("CERCA"), onClick = Beam::scan, icon = XaosIcons.Search)
+                    PillButton(t("INSERISCI INDIRIZZO"), onClick = { askAddress = true })
                 }
                 Text(
-                    "I brani del PC compaiono nella libreria insieme a quelli del telefono, con lo stesso aspetto: si cercano, si mettono in coda e nelle playlist. Quelli che il telefono ha già suonano dalla copia locale.",
+                    t("I brani del PC compaiono nella libreria insieme a quelli del telefono, con lo stesso aspetto: si cercano, si mettono in coda e nelle playlist. Quelli che il telefono ha già suonano dalla copia locale."),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.inkTertiary,
                 )
@@ -198,11 +199,11 @@ private fun PinDialog(server: Beam.Server, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         containerColor = Xaos.colors.surface,
         shape = RoundedCornerShape(24.dp),
-        title = { Text("ABBINA ${server.name.uppercase()}", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        title = { Text(t("ABBINA %s", server.name.uppercase()), style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Scrivi il PIN che vedi sul PC, in Impostazioni → Xaos Beam.",
+                    t("Scrivi il PIN che vedi sul PC, in Impostazioni → Xaos Beam."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -227,12 +228,12 @@ private fun PinDialog(server: Beam.Server, onDismiss: () -> Unit) {
                     scope.launch {
                         Beam.pair(server, pin)
                             .onSuccess { onDismiss() }
-                            .onFailure { error = it.message ?: "abbinamento non riuscito"; busy = false }
+                            .onFailure { error = it.message ?: t("abbinamento non riuscito"); busy = false }
                     }
                 },
             ) {
                 Text(
-                    if (busy) "…" else "ABBINA",
+                    if (busy) "…" else t("ABBINA"),
                     style = MaterialTheme.typography.titleMedium,
                     color = if (ready) Xaos.colors.accentInk else Xaos.colors.inkSecondary,
                 )
@@ -240,7 +241,7 @@ private fun PinDialog(server: Beam.Server, onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+                Text(t("ANNULLA"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
             }
         },
     )
@@ -256,11 +257,11 @@ private fun AddressDialog(onDismiss: () -> Unit, onFound: (Beam.Server) -> Unit)
         onDismissRequest = onDismiss,
         containerColor = Xaos.colors.surface,
         shape = RoundedCornerShape(24.dp),
-        title = { Text("INDIRIZZO DEL PC", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        title = { Text(t("INDIRIZZO DEL PC"), style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Se il PC non compare da solo: l'indirizzo è nelle sue impostazioni, sotto Xaos Beam.",
+                    t("Se il PC non compare da solo: l'indirizzo è nelle sue impostazioni, sotto Xaos Beam."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -284,16 +285,16 @@ private fun AddressDialog(onDismiss: () -> Unit, onFound: (Beam.Server) -> Unit)
                     scope.launch {
                         Beam.serverAt(address)
                             .onSuccess(onFound)
-                            .onFailure { error = it.message ?: "PC non raggiungibile"; busy = false }
+                            .onFailure { error = it.message ?: t("PC non raggiungibile"); busy = false }
                     }
                 },
             ) {
-                Text(if (busy) "…" else "AVANTI", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.accentInk)
+                Text(if (busy) "…" else t("AVANTI"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.accentInk)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+                Text(t("ANNULLA"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
             }
         },
     )
@@ -301,12 +302,12 @@ private fun AddressDialog(onDismiss: () -> Unit, onFound: (Beam.Server) -> Unit)
 
 /** Lo stato di Beam in poche parole, per le impostazioni e per questa schermata. */
 fun statusText(status: Beam.Status): String = when (status) {
-    Beam.Status.Off -> "SPENTO"
-    Beam.Status.NotPaired -> "NESSUN PC ABBINATO"
-    Beam.Status.Connecting -> "COLLEGAMENTO…"
-    is Beam.Status.Connected -> "COLLEGATO · ${status.trackCount} BRANI"
-    Beam.Status.Unreachable -> "PC NON RAGGIUNGIBILE"
-    Beam.Status.Revoked -> "DA ABBINARE DI NUOVO"
+    Beam.Status.Off -> t("SPENTO")
+    Beam.Status.NotPaired -> t("NESSUN PC ABBINATO")
+    Beam.Status.Connecting -> t("COLLEGAMENTO…")
+    is Beam.Status.Connected -> t("COLLEGATO · %d BRANI", status.trackCount)
+    Beam.Status.Unreachable -> t("PC NON RAGGIUNGIBILE")
+    Beam.Status.Revoked -> t("DA ABBINARE DI NUOVO")
 }
 
 @Composable

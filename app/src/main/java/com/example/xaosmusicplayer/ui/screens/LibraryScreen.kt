@@ -51,6 +51,10 @@ import com.example.xaosmusicplayer.ui.components.PillButton
 import com.example.xaosmusicplayer.ui.components.SongRow
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tc
+import com.example.xaosmusicplayer.i18n.tDot
 
 /** Voci del menu in alto a destra della libreria. */
 @Composable
@@ -73,12 +77,12 @@ fun LibraryScreen(
 ) {
     Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
         ScreenTitle(
-            title = "LIBRERIA",
-            caption = "${songs.size} BRANI · ${albums.size} ALBUM · ${artists.size} ARTISTI",
+            title = tDot("LIBRERIA"),
+            caption = t("%d BRANI · %d ALBUM · %d ARTISTI", songs.size, albums.size, artists.size),
             trailing = {
                 CircleIconButton(
                     icon = XaosIcons.Settings,
-                    contentDescription = "Impostazioni",
+                    contentDescription = t("Impostazioni"),
                     onClick = onOpenSettings,
                 )
             },
@@ -106,11 +110,14 @@ fun LibraryScreen(
 }
 
 private val LibraryTab.label: String
-    get() = when (this) {
-        LibraryTab.TITLE -> "BRANI"
-        LibraryTab.ARTIST -> "ARTISTI"
-        LibraryTab.ALBUM -> "ALBUM"
-    }
+    get() = tc(
+        when (this) {
+            LibraryTab.TITLE -> "BRANI"
+            LibraryTab.ARTIST -> "ARTISTI"
+            LibraryTab.ALBUM -> "ALBUM"
+        },
+        "sezione",
+    )
 
 /**
  * Selettore a pillola, come i filtri del sito Nothing: una capsula filettata
@@ -184,7 +191,7 @@ private fun SongList(
     onSongMenu: (Song) -> Unit,
 ) {
     if (songs.isEmpty()) {
-        EmptyState("Nessun brano")
+        EmptyState(t("Nessun brano"))
         return
     }
     LazyColumn(
@@ -205,7 +212,7 @@ private fun SongList(
 @Composable
 private fun ArtistList(artists: List<Artist>, onClick: (Artist) -> Unit) {
     if (artists.isEmpty()) {
-        EmptyState("Nessun artista")
+        EmptyState(t("Nessun artista"))
         return
     }
     val colors = Xaos.colors
@@ -219,7 +226,7 @@ private fun ArtistList(artists: List<Artist>, onClick: (Artist) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = artist.name.uppercase(),
+                    text = MusicRepository.displayName(artist.name).uppercase(),
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.ink,
                     maxLines = 1,
@@ -245,7 +252,7 @@ private fun AlbumGrid(
     onLongClick: (Album) -> Unit,
 ) {
     if (albums.isEmpty()) {
-        EmptyState("Nessun album")
+        EmptyState(t("Nessun album"))
         return
     }
     LazyVerticalGrid(
@@ -257,10 +264,10 @@ private fun AlbumGrid(
     ) {
         items(albums, key = { it.id }) { album ->
             AlbumCell(
-                title = album.title,
+                title = MusicRepository.displayName(album.title),
                 // L'artista, non l'etichetta "ALBUM": in una griglia di album
                 // dire che sono album non aggiunge niente.
-                subtitle = album.artist,
+                subtitle = MusicRepository.displayName(album.artist),
                 artworkUri = album.artworkUri,
                 onClick = { onClick(album) },
                 onLongClick = { onLongClick(album) },
@@ -300,17 +307,19 @@ private fun PermissionPrompt(onRequest: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "ACCESSO ALLA MUSICA",
+                text = t("ACCESSO ALLA MUSICA"),
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.ink,
             )
             Text(
-                text = "Xaos ha bisogno del permesso di leggere i file audio " +
-                    "del dispositivo per costruire la tua libreria.",
+                text = t(
+                    "Xaos ha bisogno del permesso di leggere i file audio " +
+                        "del dispositivo per costruire la tua libreria."
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.inkSecondary,
             )
-            PillButton(text = "CONCEDI PERMESSO", onClick = onRequest, filled = true)
+            PillButton(text = t("CONCEDI PERMESSO"), onClick = onRequest, filled = true)
         }
     }
 }

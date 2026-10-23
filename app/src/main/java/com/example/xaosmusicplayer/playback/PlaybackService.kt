@@ -1,6 +1,9 @@
 package com.example.xaosmusicplayer.playback
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -14,11 +17,32 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.example.xaosmusicplayer.audio.SpatializerProcessor
 import com.example.xaosmusicplayer.audio.PreampProcessor
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.xaosmusicplayer.MainActivity
 import com.example.xaosmusicplayer.audio.AudioSessionHolder
+import com.example.xaosmusicplayer.i18n.I18n
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.widget.WidgetHub
+
+/**
+ * Il canale delle notifiche di riproduzione, col nome nella lingua dell'app.
+ * Media3 crea il suo canale solo se manca: creandolo prima con lo stesso id il
+ * nome è il nostro, e ricrearlo ne aggiorna il nome se la lingua è cambiata.
+ */
+@OptIn(UnstableApi::class)
+internal fun ensurePlaybackChannel(context: Context) {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val channel = NotificationChannel(
+        DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID,
+        t("Riproduzione"),
+        NotificationManager.IMPORTANCE_LOW,
+    )
+    if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.O_MR1) channel.setShowBadge(false)
+    runCatching { manager.createNotificationChannel(channel) }
+}
 
 /**
  * Tiene in vita la riproduzione fuori dall'Activity e pubblica la MediaSession
@@ -31,6 +55,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        I18n.init(this)
+        ensurePlaybackChannel(this)
 
         // Il preamp deve stare dentro la pipeline del player, non nel volume
         // di AudioTrack: solo così l'attenuazione precede gli effetti di

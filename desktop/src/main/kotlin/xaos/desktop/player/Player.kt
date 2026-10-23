@@ -7,6 +7,7 @@ import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
+import xaos.desktop.i18n.t
 import xaos.desktop.library.Track
 import java.net.URI
 
@@ -18,6 +19,16 @@ enum class RepeatMode { OFF, ALL, ONE }
  */
 data class PlaySource(val kind: Kind, val id: String, val label: String) {
     enum class Kind { ALBUM, PLAYLIST, FAVORITES, SONGS, ARTIST, SEARCH, STATS }
+
+    /**
+     * L'etichetta nella lingua dell'app: i nomi fissi ("Preferiti", "Brani"…)
+     * si traducono, quelli dell'utente (album, playlist, artista) no.
+     */
+    val displayLabel: String get() = when (kind) {
+        Kind.ALBUM, Kind.PLAYLIST, Kind.ARTIST -> label
+        Kind.SEARCH -> t("Ricerca: %s", id)
+        Kind.FAVORITES, Kind.SONGS, Kind.STATS -> t(label)
+    }
 }
 
 /**

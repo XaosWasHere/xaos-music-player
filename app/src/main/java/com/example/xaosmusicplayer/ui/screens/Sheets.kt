@@ -46,6 +46,8 @@ import com.example.xaosmusicplayer.ui.components.formatDuration
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.components.Hairline
 import com.example.xaosmusicplayer.ui.theme.Xaos
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.t
 
 /** Menu contestuale di un brano. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,14 +71,14 @@ fun SongOptionsSheet(
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
-                    text = song.title.uppercase(),
+                    text = MusicRepository.displayName(song.title).uppercase(),
                     style = MaterialTheme.typography.titleMedium,
                     color = Xaos.colors.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = song.artist,
+                    text = MusicRepository.displayName(song.artist),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.accentInk,
                     maxLines = 1,
@@ -85,28 +87,28 @@ fun SongOptionsSheet(
             }
             Divider()
 
-            SheetAction(XaosIcons.Next, "RIPRODUCI DOPO") {
+            SheetAction(XaosIcons.Next, t("RIPRODUCI DOPO")) {
                 onPlayNext(); onDismiss()
             }
-            SheetAction(XaosIcons.Queue, "AGGIUNGI ALLA CODA") {
+            SheetAction(XaosIcons.Queue, t("AGGIUNGI ALLA CODA")) {
                 onAddToQueue(); onDismiss()
             }
             SheetAction(
                 icon = if (isFavorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-                label = if (isFavorite) "RIMUOVI DAI PREFERITI" else "AGGIUNGI AI PREFERITI",
+                label = if (isFavorite) t("RIMUOVI DAI PREFERITI") else t("AGGIUNGI AI PREFERITI"),
                 tint = if (isFavorite) Xaos.colors.accentInk else Xaos.colors.ink,
             ) {
                 onToggleFavorite(); onDismiss()
             }
-            SheetAction(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") {
+            SheetAction(XaosIcons.PlaylistAdd, t("AGGIUNGI A PLAYLIST")) {
                 onAddToPlaylist(); onDismiss()
             }
-            SheetAction(XaosIcons.Edit, "MODIFICA") {
+            SheetAction(XaosIcons.Edit, t("MODIFICA")) {
                 onEdit(); onDismiss()
             }
             Divider()
             // In rosso perché è l'unica voce che cancella un file dal telefono.
-            SheetAction(XaosIcons.Delete, "ELIMINA", tint = Xaos.colors.accentInk) {
+            SheetAction(XaosIcons.Delete, t("ELIMINA"), tint = Xaos.colors.accentInk) {
                 onDelete(); onDismiss()
             }
             Spacer(Modifier.height(12.dp))
@@ -133,14 +135,14 @@ fun AlbumOptionsSheet(
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
-                    text = album.title.uppercase(),
+                    text = MusicRepository.displayName(album.title).uppercase(),
                     style = MaterialTheme.typography.titleMedium,
                     color = Xaos.colors.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${album.artist} · ${album.songCount} BRANI",
+                    text = t("%s · %d BRANI", MusicRepository.displayName(album.artist), album.songCount),
                     style = MaterialTheme.typography.labelMedium,
                     color = Xaos.colors.accentInk,
                     maxLines = 1,
@@ -149,10 +151,10 @@ fun AlbumOptionsSheet(
             }
             Divider()
 
-            SheetAction(XaosIcons.Play, "RIPRODUCI") { onPlay(); onDismiss() }
-            SheetAction(XaosIcons.Shuffle, "RIPRODUZIONE CASUALE") { onShuffle(); onDismiss() }
-            SheetAction(XaosIcons.Queue, "AGGIUNGI ALLA CODA") { onAddToQueue(); onDismiss() }
-            SheetAction(XaosIcons.Edit, "MODIFICA") { onEdit(); onDismiss() }
+            SheetAction(XaosIcons.Play, t("RIPRODUCI")) { onPlay(); onDismiss() }
+            SheetAction(XaosIcons.Shuffle, t("RIPRODUZIONE CASUALE")) { onShuffle(); onDismiss() }
+            SheetAction(XaosIcons.Queue, t("AGGIUNGI ALLA CODA")) { onAddToQueue(); onDismiss() }
+            SheetAction(XaosIcons.Edit, t("MODIFICA")) { onEdit(); onDismiss() }
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -176,14 +178,14 @@ fun AddToPlaylistSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
             Text(
-                text = "AGGIUNGI A PLAYLIST",
+                text = t("AGGIUNGI A PLAYLIST"),
                 style = MaterialTheme.typography.titleMedium,
                 color = Xaos.colors.ink,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
             Divider()
 
-            SheetAction(XaosIcons.Add, "NUOVA PLAYLIST", tint = Xaos.colors.accentInk) {
+            SheetAction(XaosIcons.Add, t("NUOVA PLAYLIST"), tint = Xaos.colors.accentInk) {
                 showCreate = true
             }
 
@@ -192,7 +194,7 @@ fun AddToPlaylistSheet(
                     SheetAction(
                         icon = XaosIcons.Queue,
                         label = playlist.name.uppercase(),
-                        subtitle = "${playlist.songIds.size} brani",
+                        subtitle = t("%d brani", playlist.songIds.size),
                     ) {
                         onSelect(playlist); onDismiss()
                     }
@@ -204,7 +206,7 @@ fun AddToPlaylistSheet(
 
     if (showCreate) {
         NameDialog(
-            title = "NUOVA PLAYLIST",
+            title = t("NUOVA PLAYLIST"),
             initialValue = "",
             onDismiss = { showCreate = false },
             onConfirm = { name ->
@@ -234,7 +236,7 @@ fun SleepTimerSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
             Text(
-                text = "SLEEP TIMER",
+                text = t("SLEEP TIMER"),
                 style = MaterialTheme.typography.titleMedium,
                 color = Xaos.colors.ink,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -242,7 +244,7 @@ fun SleepTimerSheet(
 
             if (remainingMs != null) {
                 Text(
-                    text = "ATTIVO · ${formatDuration(remainingMs)}",
+                    text = t("ATTIVO · %s", formatDuration(remainingMs)),
                     style = MaterialTheme.typography.labelLarge,
                     color = Xaos.colors.accentInk,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -253,7 +255,7 @@ fun SleepTimerSheet(
             // Interruttore: fermarsi subito allo scadere o lasciar finire il brano.
             SheetAction(
                 icon = if (finishTrack) XaosIcons.Check else XaosIcons.Close,
-                label = "COMPLETA IL BRANO IN CORSO",
+                label = t("COMPLETA IL BRANO IN CORSO"),
                 tint = if (finishTrack) Xaos.colors.accentInk else Xaos.colors.inkTertiary,
             ) {
                 finishTrack = !finishTrack
@@ -261,7 +263,7 @@ fun SleepTimerSheet(
             Divider()
 
             SleepTimer.PRESETS_MINUTES.forEach { minutes ->
-                SheetAction(XaosIcons.Timer, "$minutes MINUTI") {
+                SheetAction(XaosIcons.Timer, t("%d MINUTI", minutes)) {
                     onStart(minutes, finishTrack)
                     onDismiss()
                 }
@@ -269,7 +271,7 @@ fun SleepTimerSheet(
 
             if (remainingMs != null) {
                 Divider()
-                SheetAction(XaosIcons.Close, "ANNULLA TIMER", tint = Xaos.colors.accentInk) {
+                SheetAction(XaosIcons.Close, t("ANNULLA TIMER"), tint = Xaos.colors.accentInk) {
                     onCancel(); onDismiss()
                 }
             }
@@ -313,14 +315,14 @@ fun PlayerOptionsSheet(
                 Spacer(Modifier.size(14.dp))
                 Column {
                     Text(
-                        text = song.title.uppercase(),
+                        text = MusicRepository.displayName(song.title).uppercase(),
                         style = MaterialTheme.typography.titleMedium,
                         color = Xaos.colors.ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = song.artist,
+                        text = MusicRepository.displayName(song.artist),
                         style = MaterialTheme.typography.labelMedium,
                         color = Xaos.colors.inkSecondary,
                         maxLines = 1,
@@ -331,7 +333,7 @@ fun PlayerOptionsSheet(
             Divider()
 
             SectionHeader(
-                text = "SFONDO",
+                text = t("SFONDO"),
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
             )
             GlowModeSelector(
@@ -342,25 +344,25 @@ fun PlayerOptionsSheet(
             Spacer(Modifier.height(14.dp))
             Divider()
 
-            SheetAction(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") {
+            SheetAction(XaosIcons.PlaylistAdd, t("AGGIUNGI A PLAYLIST")) {
                 onDismiss(); onAddToPlaylist()
             }
-            SheetAction(XaosIcons.Library, "VAI ALL'ALBUM", subtitle = song.album) {
+            SheetAction(XaosIcons.Library, t("VAI ALL'ALBUM"), subtitle = MusicRepository.displayName(song.album)) {
                 onDismiss(); onGoToAlbum()
             }
-            SheetAction(XaosIcons.Person, "VAI ALL'ARTISTA", subtitle = song.albumArtist) {
+            SheetAction(XaosIcons.Person, t("VAI ALL'ARTISTA"), subtitle = MusicRepository.displayName(song.albumArtist)) {
                 onDismiss(); onGoToArtist()
             }
             Divider()
             SheetAction(
                 icon = XaosIcons.Timer,
-                label = "SLEEP TIMER",
-                subtitle = sleepTimerRemainingMs?.let { "Attivo · ${formatDuration(it)}" },
+                label = t("SLEEP TIMER"),
+                subtitle = sleepTimerRemainingMs?.let { t("Attivo · %s", formatDuration(it)) },
                 tint = if (sleepTimerRemainingMs != null) Xaos.colors.accentInk else Xaos.colors.ink,
             ) {
                 onDismiss(); onOpenSleepTimer()
             }
-            SheetAction(XaosIcons.Equalizer, "EQUALIZZATORE") {
+            SheetAction(XaosIcons.Equalizer, t("EQUALIZZATORE")) {
                 onDismiss(); onOpenEqualizer()
             }
             Spacer(Modifier.height(12.dp))
@@ -432,12 +434,14 @@ private val GlowMode.icon: ImageVector
 
 /** Il nome breve, per stare in un quarto di larghezza. */
 private val GlowMode.shortLabel: String
-    get() = when (this) {
-        GlowMode.ANIMATED -> "REATTIVA"
-        GlowMode.STATIC -> "FISSA"
-        GlowMode.ARTWORK -> "COPERTINA"
-        GlowMode.OFF -> "SPENTA"
-    }
+    get() = t(
+        when (this) {
+            GlowMode.ANIMATED -> "REATTIVA"
+            GlowMode.STATIC -> "FISSA"
+            GlowMode.ARTWORK -> "COPERTINA"
+            GlowMode.OFF -> "SPENTA"
+        }
+    )
 
 @Composable
 private fun SheetAction(

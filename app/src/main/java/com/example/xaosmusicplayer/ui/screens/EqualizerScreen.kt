@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.audio.EqualizerController
 import com.example.xaosmusicplayer.audio.formatBandFrequency
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.components.CircleIconButton
 import com.example.xaosmusicplayer.ui.components.Hairline
@@ -68,7 +69,7 @@ fun EqualizerScreen(
             .fillMaxSize()
             .statusBarsPadding(),
     ) {
-        ScreenHeader(title = "EQUALIZER", onBack = onBack)
+        ScreenHeader(title = t("EQUALIZER"), onBack = onBack)
 
         if (!controller.isAvailable) {
             UnavailableNotice()
@@ -86,7 +87,7 @@ fun EqualizerScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "ATTIVO",
+                    text = t("ATTIVO"),
                     style = MaterialTheme.typography.titleMedium,
                     color = Xaos.colors.ink,
                     modifier = Modifier.weight(1f),
@@ -130,7 +131,7 @@ fun EqualizerScreen(
 
             if (controller.bassBoostSupported) {
                 EffectSlider(
-                    label = "BASS BOOST",
+                    label = t("BASS BOOST"),
                     value = bassBoost,
                     enabled = enabled,
                     onChange = onBassBoostChange,
@@ -139,7 +140,7 @@ fun EqualizerScreen(
             // Sempre presente: la spazializzazione ora è nostra, quindi non
             // dipende più da cosa supporta il dispositivo.
             EffectSlider(
-                label = "VIRTUALIZER",
+                label = t("VIRTUALIZER"),
                 value = virtualizer,
                 enabled = enabled,
                 onChange = onVirtualizerChange,
@@ -153,10 +154,10 @@ fun EqualizerScreen(
 @Composable
 private fun PresetSelector(presets: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val label = presets.getOrNull(selected)?.uppercase() ?: "PERSONALIZZATO"
+    val label = presets.getOrNull(selected)?.uppercase() ?: t("PERSONALIZZATO")
 
     Box {
-        PillButton(text = "PRESET · $label", onClick = { open = true })
+        PillButton(text = t("PRESET · %s", label), onClick = { open = true })
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -257,7 +258,7 @@ private fun PreampSlider(valueDb: Int, enabled: Boolean, onChange: (Int) -> Unit
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "PREAMP",
+                text = t("PREAMP"),
                 style = MaterialTheme.typography.titleMedium,
                 color = Xaos.colors.ink,
                 modifier = Modifier.weight(1f),
@@ -269,8 +270,7 @@ private fun PreampSlider(valueDb: Int, enabled: Boolean, onChange: (Int) -> Unit
             )
         }
         Text(
-            text = "Dà margine agli effetti. Se il virtualizer gracchia, " +
-                "scendi finché smette.",
+            text = t("Dà margine agli effetti. Se il virtualizer gracchia, scendi finché smette."),
             style = MaterialTheme.typography.labelMedium,
             color = Xaos.colors.inkSecondary,
         )
@@ -308,7 +308,7 @@ private fun EffectSlider(
             Text(
                 // A zero l'effetto non viene proprio inserito: dirlo esplicitamente
                 // evita di far credere che sia attivo ma silenzioso.
-                text = if (value == 0) "OFF" else "${value / 10}%",
+                text = if (value == 0) t("OFF") else "${value / 10}%",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (value == 0) Xaos.colors.inkSecondary else Xaos.colors.accentInk,
             )
@@ -340,8 +340,7 @@ private fun UnavailableNotice() {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "L'equalizzatore non è disponibile su questo dispositivo, " +
-                "oppure un'altra app lo sta usando.",
+            text = t("L'equalizzatore non è disponibile su questo dispositivo, oppure un'altra app lo sta usando."),
             style = MaterialTheme.typography.bodyMedium,
             color = Xaos.colors.inkSecondary,
         )
@@ -363,7 +362,7 @@ fun ScreenHeader(
     ) {
         CircleIconButton(
             icon = XaosIcons.Back,
-            contentDescription = "Indietro",
+            contentDescription = t("Indietro"),
             onClick = onBack,
         )
         Spacer(Modifier.width(14.dp))

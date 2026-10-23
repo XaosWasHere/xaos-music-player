@@ -51,6 +51,9 @@ import xaos.desktop.online.YtDlp
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import xaos.desktop.theme.Xaos
+import xaos.desktop.i18n.Language
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tDot
 import java.io.File
 import java.util.Locale
 
@@ -79,12 +82,12 @@ fun SettingsScreen(
     val lrcCount = remember(snapshot) { snapshot.tracks.count { it.hasLyricsFile() } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 18.dp, bottom = 40.dp)) {
-        item { ScreenTitle("IMPOSTAZIONI", caption = "OGNI MODIFICA VALE SUBITO") }
+        item { ScreenTitle(tDot("IMPOSTAZIONI"), caption = t("OGNI MODIFICA VALE SUBITO")) }
 
         item {
-            SettingsCard("LIBRERIA") {
+            SettingsCard(t("LIBRERIA")) {
                 Text(
-                    "Le cartelle da cui Xaos legge la musica. Le sottocartelle sono comprese.",
+                    t("Le cartelle da cui Xaos legge la musica. Le sottocartelle sono comprese."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -96,9 +99,9 @@ fun SettingsScreen(
                     )
                 }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("AGGIUNGI CARTELLA", onClick = onAddFolder, icon = XaosIcons.Add, filled = true)
+                    PillButton(t("AGGIUNGI CARTELLA"), onClick = onAddFolder, icon = XaosIcons.Add, filled = true)
                     PillButton(
-                        "RISCANSIONA",
+                        t("RISCANSIONA"),
                         onClick = onRescan,
                         icon = XaosIcons.Sync,
                         enabled = scan !is ScanState.Scanning,
@@ -106,9 +109,9 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         when (val s = scan) {
-                            is ScanState.Scanning -> "SCANSIONE ${s.done}/${s.total}"
-                            is ScanState.Failed -> "ERRORE: ${s.message}"
-                            ScanState.Idle -> "[${snapshot.tracks.size}] BRANI · [${snapshot.albums.size}] ALBUM"
+                            is ScanState.Scanning -> t("SCANSIONE %d/%d", s.done, s.total)
+                            is ScanState.Failed -> t("ERRORE: %s", s.message)
+                            ScanState.Idle -> t("[%d] BRANI · [%d] ALBUM", snapshot.tracks.size, snapshot.albums.size)
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = Xaos.colors.inkTertiary,
@@ -118,9 +121,9 @@ fun SettingsScreen(
                     Hairline()
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text("[$lrcCount] TESTI IN FILE .LRC", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
+                            Text(t("[%d] TESTI IN FILE .LRC", lrcCount), style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
                             Text(
-                                "Il telefono legge solo i testi dentro i file: incorporali per vederli anche lì.",
+                                t("Il telefono legge solo i testi dentro i file: incorporali per vederli anche lì."),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Xaos.colors.inkTertiary,
                             )
@@ -130,13 +133,14 @@ fun SettingsScreen(
                             Text(status, style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
                         }
                         PillButton(
-                            "INCORPORA I TESTI",
+                            t("INCORPORA I TESTI"),
                             onClick = {
                                 scope.launch {
                                     val n = xaos.desktop.library.TagEditor.embedSidecarLyrics(snapshot.tracks) { done, total ->
                                         embedding = "$done/$total"
                                     }
-                                    embedding = "[$n] AGGIORNATI"
+                                    // Deve cominciare con "[" in ogni lingua: è il segno che ha finito.
+                                    embedding = t("[%d] AGGIORNATI", n)
                                     onRescan()
                                 }
                             },
@@ -152,10 +156,12 @@ fun SettingsScreen(
             item { DuplicatesCard(snapshot.duplicates, onRescan) }
         }
 
+        item { LyricsCard(prefs, settings) }
+
         item {
-            SettingsCard("DOWNLOAD") {
+            SettingsCard(t("DOWNLOAD")) {
                 Text(
-                    "I brani scaricati dalla ricerca in rete, in MP3 con copertina e metadati.",
+                    t("I brani scaricati dalla ricerca in rete, in MP3 con copertina e metadati."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -163,14 +169,14 @@ fun SettingsScreen(
                     FolderRow(path = folder, canRemove = false, onRemove = {})
                 }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("CAMBIA CARTELLA", onClick = onPickDownloadFolder, icon = XaosIcons.Folder)
+                    PillButton(t("CAMBIA CARTELLA"), onClick = onPickDownloadFolder, icon = XaosIcons.Folder)
                     if (prefs.downloadFolder != null) {
-                        PillButton("PREDEFINITA", onClick = { settings.update { it.copy(downloadFolder = null) } })
+                        PillButton(t("PREDEFINITA"), onClick = { settings.update { it.copy(downloadFolder = null) } })
                     }
                 }
                 val (ytExe, ffExe) = ytdlp.tools.collectAsState().value
-                InfoLine("YT-DLP", ytExe?.path ?: "ricerca in corso…")
-                InfoLine("FFMPEG", ffExe?.path ?: "ricerca in corso…")
+                InfoLine("YT-DLP", ytExe?.path ?: t("ricerca in corso…"))
+                InfoLine("FFMPEG", ffExe?.path ?: t("ricerca in corso…"))
             }
         }
 
@@ -185,9 +191,9 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsCard("SCHERMO INTERO") {
+            SettingsCard(t("SCHERMO INTERO")) {
                 Text(
-                    "Lo sfondo del player a schermo intero. Si cambia anche da lì, con il bottone in alto.",
+                    t("Lo sfondo del player a schermo intero. Si cambia anche da lì, con il bottone in alto."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -208,13 +214,30 @@ fun SettingsScreen(
         item { BeamCard(prefs, settings, beam) }
 
         item {
-            SettingsCard("ASPETTO") {
-                Text("TEMA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+            SettingsCard(t("ASPETTO")) {
+                Text(t("TEMA"), style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("SCURO", onClick = { settings.update { it.copy(dark = true) } }, filled = prefs.dark)
-                    PillButton("CHIARO", onClick = { settings.update { it.copy(dark = false) } }, filled = !prefs.dark)
+                    PillButton(t("SCURO"), onClick = { settings.update { it.copy(dark = true) } }, filled = prefs.dark)
+                    PillButton(t("CHIARO"), onClick = { settings.update { it.copy(dark = false) } }, filled = !prefs.dark)
                 }
-                Text("DIMENSIONE INTERFACCIA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+                // I nomi delle lingue restano sempre nella lingua stessa.
+                Text(t("LINGUA"), style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(t("AUTOMATICA"), onClick = { settings.update { it.copy(language = null) } }, filled = prefs.language == null)
+                    Language.entries.forEach { lang ->
+                        PillButton(
+                            lang.nativeName,
+                            onClick = { settings.update { it.copy(language = lang.code) } },
+                            filled = prefs.language == lang.code,
+                        )
+                    }
+                }
+                Text(
+                    t("La scelta automatica segue la lingua di Windows."),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Xaos.colors.inkTertiary,
+                )
+                Text(t("DIMENSIONE INTERFACCIA"), style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1.0f to "100%", 1.1f to "110%", 1.25f to "125%").forEach { (scale, label) ->
                         PillButton(
@@ -230,15 +253,15 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsCard("FINESTRA") {
-                Text("RIDUCI A ICONA", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
+            SettingsCard(t("FINESTRA")) {
+                Text(t("RIDUCI A ICONA"), style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkSecondary)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("NELLA BARRA DELLE APPLICAZIONI", onClick = { settings.update { it.copy(minimizeToMini = false) } }, filled = !prefs.minimizeToMini)
-                    PillButton("DIVENTA MINIPLAYER", onClick = { settings.update { it.copy(minimizeToMini = true) } }, filled = prefs.minimizeToMini)
+                    PillButton(t("NELLA BARRA DELLE APPLICAZIONI"), onClick = { settings.update { it.copy(minimizeToMini = false) } }, filled = !prefs.minimizeToMini)
+                    PillButton(t("DIVENTA MINIPLAYER"), onClick = { settings.update { it.copy(minimizeToMini = true) } }, filled = prefs.minimizeToMini)
                 }
                 Text(
-                    if (prefs.minimizeToMini) "Riducendo Xaos a icona, la finestra diventa il miniplayer: resta in primo piano con copertina o testo e i comandi. Un doppio clic lo riporta a finestra intera."
-                    else "Riducendo Xaos a icona, finisce nella barra delle applicazioni come ogni programma. Il miniplayer si apre dal suo pulsante nella barra del player.",
+                    if (prefs.minimizeToMini) t("Riducendo Xaos a icona, la finestra diventa il miniplayer: resta in primo piano con copertina o testo e i comandi. Un doppio clic lo riporta a finestra intera.")
+                    else t("Riducendo Xaos a icona, finisce nella barra delle applicazioni come ogni programma. Il miniplayer si apre dal suo pulsante nella barra del player."),
                     style = MaterialTheme.typography.labelSmall,
                     color = Xaos.colors.inkTertiary,
                 )
@@ -246,13 +269,43 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsCard("INFORMAZIONI") {
-                InfoLine("VERSIONE", "Xaos desktop " + (System.getProperty("xaos.version") ?: "in sviluppo"))
-                InfoLine("VLC", player.vlcVersion?.let { v -> "$v — ${player.vlcPath.orEmpty()}" } ?: "non ancora caricato")
-                InfoLine("ADB", phone.adbPath ?: "non trovato — serve per la sincronizzazione")
-                InfoLine("DATI", Settings.appDir.path)
-                InfoLine("PROGETTO", "github.com/XaosWasHere/xaos-music-player")
+            SettingsCard(t("INFORMAZIONI")) {
+                InfoLine(t("VERSIONE"), "Xaos desktop " + (System.getProperty("xaos.version") ?: t("in sviluppo")))
+                InfoLine("VLC", player.vlcVersion?.let { v -> "$v — ${player.vlcPath.orEmpty()}" } ?: t("non ancora caricato"))
+                InfoLine("ADB", phone.adbPath ?: t("non trovato — serve per la sincronizzazione"))
+                InfoLine(t("DATI"), Settings.appDir.path)
+                InfoLine(t("PROGETTO"), "github.com/XaosWasHere/xaos-music-player")
             }
+        }
+    }
+}
+
+/** I testi cercati da soli su LRCLIB per tutta la libreria, all'avvio. */
+@Composable
+private fun LyricsCard(prefs: SettingsData, settings: Settings) {
+    val scanner = xaos.desktop.online.LocalLibraryLyrics.current
+    val progress = scanner?.progress?.collectAsState()?.value
+    SettingsCard(t("TESTI")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                t("All'avvio, i brani senza testo lo cercano su LRCLIB. Si aggiunge al file solo se la durata coincide: è il modo di essere certi che sia la stessa incisione. Se non coincide, non si tocca niente."),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Xaos.colors.inkSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            XaosSwitch(prefs.autoLyrics, onChange = { on -> settings.update { it.copy(autoLyrics = on) } })
+        }
+        if (prefs.autoLyrics && progress != null && progress.total > 0) {
+            Text(
+                when {
+                    progress.offline -> t("LRCLIB NON RISPONDE: SI RIPROVA AL PROSSIMO AVVIO · [%d] AGGIUNTI", progress.added)
+                    progress.running -> t("RICERCA [%d/%d] · [%d] AGGIUNTI", progress.done, progress.total, progress.added)
+                    else -> t("[%d] BRANI CERCATI · [%d] TESTI AGGIUNTI", progress.total, progress.added)
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = Xaos.colors.inkTertiary,
+            )
         }
     }
 }
@@ -278,44 +331,42 @@ private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, on
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirm = false },
             containerColor = colors.surface,
-            title = { Text("Spostare ${files.size} file nel cestino?", style = MaterialTheme.typography.titleLarge, color = colors.ink) },
+            title = { Text(t("Spostare %d file nel cestino?", files.size), style = MaterialTheme.typography.titleLarge, color = colors.ink) },
             text = {
                 Text(
-                    "Sono copie identiche per formato di brani che restano in libreria (${formatBytes(bytes)} in tutto). " +
-                        "Finiscono nel Cestino di Windows, da cui puoi recuperarli. Preferiti e playlist passano da soli alla copia che resta.",
+                    t("Sono copie identiche per formato di brani che restano in libreria (%s in tutto). Finiscono nel Cestino di Windows, da cui puoi recuperarli. Preferiti e playlist passano da soli alla copia che resta.", formatBytes(bytes)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
             },
             confirmButton = {
-                PillButton("SPOSTA NEL CESTINO", filled = true, onClick = {
+                PillButton(t("SPOSTA NEL CESTINO"), filled = true, onClick = {
                     confirm = false
                     val desktop = java.awt.Desktop.getDesktop()
                     val moved = files.count { runCatching { desktop.moveToTrash(it) }.getOrDefault(false) }
-                    result = "[$moved] SPOSTATI NEL CESTINO" + if (moved < files.size) " · [${files.size - moved}] NON RIUSCITI" else ""
+                    result = if (moved < files.size) t("[%d] SPOSTATI NEL CESTINO · [%d] NON RIUSCITI", moved, files.size - moved)
+                    else t("[%d] SPOSTATI NEL CESTINO", moved)
                     onRescan()
                 })
             },
-            dismissButton = { PillButton("ANNULLA", onClick = { confirm = false }) },
+            dismissButton = { PillButton(t("ANNULLA"), onClick = { confirm = false }) },
         )
     }
 
-    SettingsCard("DOPPIONI") {
+    SettingsCard(t("DOPPIONI")) {
         Text(
-            "Lo stesso brano dello stesso album, nello stesso formato, in più file: di solito copie tornate dal telefono. " +
-                "Le versioni in formati diversi (FLAC, MP3, M4A) non sono doppioni e qui non compaiono. " +
-                "In libreria il brano si vede una volta sola; le copie restano sul disco finché non decidi tu.",
+            t("Lo stesso brano dello stesso album, nello stesso formato, in più file: di solito copie tornate dal telefono. Le versioni in formati diversi (FLAC, MP3, M4A) non sono doppioni e qui non compaiono. In libreria il brano si vede una volta sola; le copie restano sul disco finché non decidi tu."),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkSecondary,
         )
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton(if (open) "NASCONDI ELENCO" else "MOSTRA ELENCO", onClick = { open = !open })
+            PillButton(if (open) t("NASCONDI ELENCO") else t("MOSTRA ELENCO"), onClick = { open = !open })
             if (trashSupported && files.isNotEmpty()) {
-                PillButton("SPOSTA LE COPIE NEL CESTINO", onClick = { confirm = true }, icon = XaosIcons.Delete)
+                PillButton(t("SPOSTA LE COPIE NEL CESTINO"), onClick = { confirm = true }, icon = XaosIcons.Delete)
             }
             Spacer(Modifier.width(8.dp))
             Text(
-                result ?: "[${groups.size}] BRANI · [${files.size}] FILE IN PIÙ · ${formatBytes(bytes)}",
+                result ?: t("[%d] BRANI · [%d] FILE IN PIÙ · %s", groups.size, files.size, formatBytes(bytes)),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkTertiary,
             )
@@ -324,9 +375,9 @@ private fun DuplicatesCard(groups: List<xaos.desktop.library.DuplicateGroup>, on
             groups.forEach { g ->
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text("${g.kept.title} · ${g.kept.artist}", style = MaterialTheme.typography.titleSmall, color = colors.ink)
-                    Text("TIENE  " + g.kept.path, style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+                    Text(t("TIENE  %s", g.kept.path), style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
                     g.copies.forEach { c ->
-                        Text("COPIA  " + c.path, style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                        Text(t("COPIA  %s", c.path), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                     }
                 }
             }
@@ -384,7 +435,7 @@ private fun FolderRow(path: String, canRemove: Boolean, onRemove: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(File(path).name.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (exists) path else "$path — NON TROVATA",
+                if (exists) path else t("%s — NON TROVATA", path),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
                 maxLines = 1,
@@ -393,30 +444,30 @@ private fun FolderRow(path: String, canRemove: Boolean, onRemove: () -> Unit) {
         }
         // Almeno una cartella deve restare: senza, la libreria sarebbe vuota
         // e non ci sarebbe da dove ripartire.
-        if (canRemove) CircleIconButton(XaosIcons.Close, "Togli cartella", onRemove, size = 30.dp)
+        if (canRemove) CircleIconButton(XaosIcons.Close, t("Togli cartella"), onRemove, size = 30.dp)
     }
 }
 
 @Composable
 private fun OutputCard(prefs: SettingsData, player: Player, onSelect: (String?) -> Unit) {
     var devices by remember { mutableStateOf(player.outputDevices()) }
-    SettingsCard("USCITA AUDIO") {
+    SettingsCard(t("USCITA AUDIO")) {
         Text(
-            "Dove suona Xaos. \"Predefinita\" segue l'uscita scelta in Windows.",
+            t("Dove suona Xaos. \"Predefinita\" segue l'uscita scelta in Windows."),
             style = MaterialTheme.typography.bodyMedium,
             color = Xaos.colors.inkSecondary,
         )
         // Un elenco, non una fila: i nomi dei dispositivi sono lunghi e in fila
         // uscivano dalla card.
         Column(Modifier.fillMaxWidth()) {
-            DeviceRow("Predefinita di Windows", selected = prefs.outputDevice == null) {
+            DeviceRow(t("Predefinita di Windows"), selected = prefs.outputDevice == null) {
                 onSelect(null); player.setOutputDevice(null)
             }
             devices.forEach { (id, name) ->
                 DeviceRow(name, selected = prefs.outputDevice == id) { onSelect(id); player.setOutputDevice(id) }
             }
         }
-        PillButton("AGGIORNA ELENCO", onClick = { devices = player.outputDevices() }, icon = XaosIcons.Sync)
+        PillButton(t("AGGIORNA ELENCO"), onClick = { devices = player.outputDevices() }, icon = XaosIcons.Sync)
     }
 }
 
@@ -429,10 +480,10 @@ private fun OutputCard(prefs: SettingsData, player: Player, onSelect: (String?) 
 private fun EqualizerCard(eq: EqualizerSettings, player: Player, onChange: (EqualizerSettings) -> Unit) {
     val colors = Xaos.colors
     val frequencies = player.eqBands.ifEmpty { listOf(60f, 170f, 310f, 600f, 1000f, 3000f, 6000f, 12000f, 14000f, 16000f) }
-    SettingsCard("EQUALIZZATORE") {
+    SettingsCard(t("EQUALIZZATORE")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (eq.enabled) "ATTIVO" else "SPENTO",
+                if (eq.enabled) t("ATTIVO") else t("SPENTO"),
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.ink,
                 modifier = Modifier.weight(1f),
@@ -488,7 +539,7 @@ private fun EqualizerCard(eq: EqualizerSettings, player: Player, onChange: (Equa
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("PREAMP", style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.width(90.dp))
+            Text(t("PREAMP"), style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.width(90.dp))
             DotSlider(
                 value = (eq.preamp + 20f) / 40f,
                 modifier = Modifier.weight(1f),
@@ -502,7 +553,7 @@ private fun EqualizerCard(eq: EqualizerSettings, player: Player, onChange: (Equa
                 modifier = Modifier.width(70.dp).padding(start = 12.dp),
             )
             PillButton(
-                "AZZERA",
+                t("AZZERA"),
                 onClick = { onChange(eq.copy(preset = null, preamp = 0f, bands = List(frequencies.size) { 0f })) },
             )
         }
@@ -516,8 +567,8 @@ private fun formatHz(hz: Float): String =
 private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolder: () -> Unit) {
     val colors = Xaos.colors
     var folder by remember(prefs.phoneFolder) { mutableStateOf(prefs.phoneFolder) }
-    SettingsCard("TELEFONO") {
-        Text("CARTELLA DI DESTINAZIONE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+    SettingsCard(t("TELEFONO")) {
+        Text(t("CARTELLA DI DESTINAZIONE"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val shape = RoundedCornerShape(50)
             Box(
@@ -538,24 +589,24 @@ private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolde
                 )
             }
             PillButton(
-                "APPLICA",
+                t("APPLICA"),
                 onClick = { settings.update { it.copy(phoneFolder = folder.trim().trimEnd('/').ifEmpty { SettingsData.DEFAULT_PHONE_FOLDER }) } },
                 filled = folder.trim() != prefs.phoneFolder,
                 enabled = folder.isNotBlank(),
             )
-            PillButton("PREDEFINITA", onClick = {
+            PillButton(t("PREDEFINITA"), onClick = {
                 folder = SettingsData.DEFAULT_PHONE_FOLDER
                 settings.update { it.copy(phoneFolder = SettingsData.DEFAULT_PHONE_FOLDER) }
             })
         }
         Text(
-            "È dove Xaos per Android salva anche i download: così i brani del PC finiscono nella sua libreria.",
+            t("È dove Xaos per Android salva anche i download: così i brani del PC finiscono nella sua libreria."),
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
         )
 
         Spacer(Modifier.height(4.dp))
-        Text("IMPORTATI DAL TELEFONO, SUL PC IN", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+        Text(t("IMPORTATI DAL TELEFONO, SUL PC IN"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 prefs.effectiveImportFolder ?: "—",
@@ -565,21 +616,21 @@ private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolde
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            PillButton("CAMBIA", onClick = onPickImportFolder, icon = XaosIcons.Folder)
+            PillButton(t("CAMBIA"), onClick = onPickImportFolder, icon = XaosIcons.Folder)
             if (prefs.importFolder != null) {
-                PillButton("PREDEFINITA", onClick = { settings.update { it.copy(importFolder = null) } })
+                PillButton(t("PREDEFINITA"), onClick = { settings.update { it.copy(importFolder = null) } })
             }
         }
 
         Spacer(Modifier.height(4.dp))
-        Text("VERSIONE DA INVIARE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+        Text(t("VERSIONE DA INVIARE"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("MP3 QUANDO C'È", onClick = { settings.update { it.copy(preferMp3OnPhone = true) } }, filled = prefs.preferMp3OnPhone)
-            PillButton("ORIGINALE", onClick = { settings.update { it.copy(preferMp3OnPhone = false) } }, filled = !prefs.preferMp3OnPhone)
+            PillButton(t("MP3 QUANDO C'È"), onClick = { settings.update { it.copy(preferMp3OnPhone = true) } }, filled = prefs.preferMp3OnPhone)
+            PillButton(t("ORIGINALE"), onClick = { settings.update { it.copy(preferMp3OnPhone = false) } }, filled = !prefs.preferMp3OnPhone)
             Spacer(Modifier.width(8.dp))
             Text(
-                if (prefs.preferMp3OnPhone) "Se un brano ha anche la copia MP3, va quella: pesa circa un quinto del FLAC."
-                else "Sempre il file originale: qualità piena, molto più spazio.",
+                if (prefs.preferMp3OnPhone) t("Se un brano ha anche la copia MP3, va quella: pesa circa un quinto del FLAC.")
+                else t("Sempre il file originale: qualità piena, molto più spazio."),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
             )
@@ -588,11 +639,11 @@ private fun PhoneCard(prefs: SettingsData, settings: Settings, onPickImportFolde
         if (prefs.syncExcluded.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "[${prefs.syncExcluded.size}] BRANI ESCLUSI DALLA SINCRONIZZAZIONE",
+                    t("[%d] BRANI ESCLUSI DALLA SINCRONIZZAZIONE", prefs.syncExcluded.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.inkSecondary,
                 )
-                PillButton("RIPRISTINA TUTTI", onClick = { settings.update { it.copy(syncExcluded = emptySet()) } })
+                PillButton(t("RIPRISTINA TUTTI"), onClick = { settings.update { it.copy(syncExcluded = emptySet()) } })
             }
         }
     }
@@ -627,15 +678,15 @@ private fun BeamCard(prefs: SettingsData, settings: Settings, beam: xaos.desktop
             Column(Modifier.weight(1f)) {
                 Text(
                     when (val s = state) {
-                        is xaos.desktop.beam.BeamState.Running -> "ATTIVO"
-                        is xaos.desktop.beam.BeamState.Failed -> "NON PARTITO: ${s.message}"
-                        xaos.desktop.beam.BeamState.Off -> "SPENTO"
+                        is xaos.desktop.beam.BeamState.Running -> t("ATTIVO")
+                        is xaos.desktop.beam.BeamState.Failed -> t("NON PARTITO: %s", s.message)
+                        xaos.desktop.beam.BeamState.Off -> t("SPENTO")
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = colors.ink,
                 )
                 Text(
-                    "Ascolta la libreria del PC dal telefono, in streaming sulla rete di casa, senza copiarla.",
+                    t("Ascolta la libreria del PC dal telefono, in streaming sulla rete di casa, senza copiarla."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
@@ -647,21 +698,21 @@ private fun BeamCard(prefs: SettingsData, settings: Settings, beam: xaos.desktop
             Hairline()
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("PIN PER ABBINARE UN TELEFONO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                    Text(t("PIN PER ABBINARE UN TELEFONO"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
                     xaos.desktop.theme.DotText(pin, color = colors.ink, pitch = 4.dp)
                     Text(
-                        "Sul telefono: Impostazioni → Xaos Beam → Dispositivi, tocca questo PC e scrivi il PIN. Dopo l'abbinamento il PIN cambia.",
+                        t("Sul telefono: Impostazioni → Xaos Beam → Dispositivi, tocca questo PC e scrivi il PIN. Dopo l'abbinamento il PIN cambia."),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                     )
                 }
-                PillButton("NUOVO PIN", onClick = beam::newPin, icon = XaosIcons.Sync)
+                PillButton(t("NUOVO PIN"), onClick = beam::newPin, icon = XaosIcons.Sync)
             }
-            InfoLine("INDIRIZZO", running.addresses.ifEmpty { listOf("—") }.joinToString("  ·  ") { "$it:${running.port}" })
+            InfoLine(t("INDIRIZZO"), running.addresses.ifEmpty { listOf("—") }.joinToString("  ·  ") { "$it:${running.port}" })
         }
         if (prefs.beamDevices.isNotEmpty()) {
             Hairline()
-            Text("TELEFONI ABBINATI", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+            Text(t("TELEFONI ABBINATI"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
             Column(Modifier.fillMaxWidth()) {
                 prefs.beamDevices.forEach { device ->
                     val listening = active[device.name]?.let { now - it < 45_000 } == true
@@ -677,18 +728,18 @@ private fun BeamCard(prefs: SettingsData, settings: Settings, beam: xaos.desktop
                         Column(Modifier.weight(1f)) {
                             Text(device.name.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                if (listening) "COLLEGATO ORA" else "ABBINATO",
+                                if (listening) t("COLLEGATO ORA") else t("ABBINATO"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colors.inkTertiary,
                             )
                         }
-                        PillButton("TOGLI", onClick = { beam.forget(device) })
+                        PillButton(t("TOGLI"), onClick = { beam.forget(device) })
                     }
                 }
             }
         }
         Text(
-            "Il PC e il telefono devono stare sulla stessa rete Wi-Fi. La prima volta Windows chiede se Xaos può usare la rete: consenti le reti private.",
+            t("Il PC e il telefono devono stare sulla stessa rete Wi-Fi. La prima volta Windows chiede se Xaos può usare la rete: consenti le reti private."),
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
         )

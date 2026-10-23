@@ -56,6 +56,9 @@ import com.example.xaosmusicplayer.ui.components.PillButton
 import com.example.xaosmusicplayer.ui.components.SectionHeader
 import com.example.xaosmusicplayer.ui.components.nothingCard
 import com.example.xaosmusicplayer.ui.theme.Xaos
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tDot
 
 /**
  * Ricerca unica su libreria e rete.
@@ -87,12 +90,12 @@ fun SearchScreen(
 
     Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
         ScreenTitle(
-            title = "CERCA",
-            caption = "LIBRERIA · RETE",
+            title = tDot("CERCA"),
+            caption = t("LIBRERIA · RETE"),
             trailing = {
                 CircleIconButton(
                     icon = XaosIcons.Settings,
-                    contentDescription = "Impostazioni",
+                    contentDescription = t("Impostazioni"),
                     onClick = onOpenSettings,
                 )
             },
@@ -120,27 +123,27 @@ fun SearchScreen(
                 artistResults.isEmpty() && albumResults.isEmpty()
 
             if (nothingLocal) {
-                item { SectionLabel("NIENTE IN LIBRERIA") }
+                item { SectionLabel(t("NIENTE IN LIBRERIA")) }
             }
 
             // Artisti e album per primi: sono pochi, e sotto una lista di brani
             // lunga non li troverebbe nessuno.
             if (artistResults.isNotEmpty()) {
-                item { SectionLabel("ARTISTI [${artistResults.size}]") }
+                item { SectionLabel(t("ARTISTI [%d]", artistResults.size)) }
                 items(artistResults, key = { "artist-${it.name}" }) { artist ->
                     ArtistResultRow(artist) { onArtistClick(artist) }
                 }
             }
 
             if (albumResults.isNotEmpty()) {
-                item { SectionLabel("ALBUM [${albumResults.size}]") }
+                item { SectionLabel(t("ALBUM [%d]", albumResults.size)) }
                 items(albumResults, key = { "album-${it.id}" }) { album ->
                     AlbumResultRow(album) { onAlbumClick(album) }
                 }
             }
 
             if (localResults.isNotEmpty()) {
-                item { SectionLabel("BRANI [${localResults.size}]") }
+                item { SectionLabel(t("BRANI [%d]", localResults.size)) }
                 itemsIndexed(localResults, key = { _, song -> "local-${song.id}" }) { index, song ->
                     SongRow(
                         song = song,
@@ -152,7 +155,7 @@ fun SearchScreen(
             }
 
             item { Spacer(Modifier.height(20.dp)) }
-            item { SectionLabel("ONLINE") }
+            item { SectionLabel(t("ONLINE")) }
 
             when (onlineState) {
                 OnlineSearchState.Idle -> item {
@@ -164,8 +167,8 @@ fun SearchScreen(
                     )
                 }
 
-                OnlineSearchState.Preparing -> item { OnlineBusy("PREPARAZIONE DI YT-DLP...") }
-                OnlineSearchState.Searching -> item { OnlineBusy("RICERCA IN CORSO...") }
+                OnlineSearchState.Preparing -> item { OnlineBusy(t("PREPARAZIONE DI YT-DLP...")) }
+                OnlineSearchState.Searching -> item { OnlineBusy(t("RICERCA IN CORSO...")) }
 
                 is OnlineSearchState.Failed -> item {
                     OnlineFailure(onlineState.message) {
@@ -176,7 +179,7 @@ fun SearchScreen(
 
                 is OnlineSearchState.Results -> {
                     if (onlineState.tracks.isEmpty()) {
-                        item { SectionLabel("NESSUN RISULTATO ONLINE") }
+                        item { SectionLabel(t("NESSUN RISULTATO ONLINE")) }
                     } else {
                         itemsIndexed(
                             onlineState.tracks,
@@ -210,7 +213,7 @@ private fun SearchField(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         placeholder = {
             Text(
-                text = "Brani, album, artisti...",
+                text = t("Brani, album, artisti..."),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Xaos.colors.inkSecondary,
             )
@@ -227,7 +230,7 @@ private fun SearchField(
                 IconButton(onClick = { onQueryChange("") }) {
                     Icon(
                         imageVector = XaosIcons.Close,
-                        contentDescription = "Cancella ricerca",
+                        contentDescription = t("Cancella ricerca"),
                         tint = Xaos.colors.inkSecondary,
                     )
                 }
@@ -261,14 +264,14 @@ private fun ArtistResultRow(artist: Artist, onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = artist.name.uppercase(),
+            text = MusicRepository.displayName(artist.name).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = Xaos.colors.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "[${artist.songCount}] BRANI · [${artist.albumCount}] ALBUM",
+            text = t("[%d] BRANI · [%d] ALBUM", artist.songCount, artist.albumCount),
             style = MaterialTheme.typography.labelMedium,
             color = Xaos.colors.inkTertiary,
         )
@@ -290,14 +293,14 @@ private fun AlbumResultRow(album: Album, onClick: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = album.title.uppercase(),
+                text = MusicRepository.displayName(album.title).uppercase(),
                 style = MaterialTheme.typography.titleMedium,
                 color = Xaos.colors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = album.artist,
+                text = MusicRepository.displayName(album.artist),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Xaos.colors.inkSecondary,
                 maxLines = 1,
@@ -348,12 +351,12 @@ private fun OnlineTrigger(onClick: () -> Unit) {
         Spacer(Modifier.size(14.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = "CERCA IN RETE",
+                text = t("CERCA IN RETE"),
                 style = MaterialTheme.typography.titleMedium,
                 color = Xaos.colors.ink,
             )
             Text(
-                text = "Scarica il brano e aggiungilo alla libreria",
+                text = t("Scarica il brano e aggiungilo alla libreria"),
                 style = MaterialTheme.typography.labelMedium,
                 color = Xaos.colors.inkSecondary,
             )
@@ -388,7 +391,7 @@ private fun OnlineFailure(message: String, onRetry: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = Xaos.colors.inkSecondary,
         )
-        PillButton(text = "RIPROVA", icon = XaosIcons.Repeat, onClick = onRetry)
+        PillButton(text = t("RIPROVA"), icon = XaosIcons.Repeat, onClick = onRetry)
     }
 }
 
@@ -414,14 +417,14 @@ private fun OnlineRow(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = track.title.uppercase(),
+                    text = OnlineTrack.displayName(track.title).uppercase(),
                     style = MaterialTheme.typography.titleMedium,
                     color = Xaos.colors.ink,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = track.uploader,
+                    text = OnlineTrack.displayName(track.uploader),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Xaos.colors.inkSecondary,
                     maxLines = 1,
@@ -474,7 +477,7 @@ private fun DownloadControl(
         null -> IconButton(onClick = onDownload) {
             Icon(
                 imageVector = XaosIcons.MusicNote,
-                contentDescription = "Scarica",
+                contentDescription = t("Scarica"),
                 tint = Xaos.colors.accentInk,
                 modifier = Modifier.size(20.dp),
             )
@@ -487,7 +490,7 @@ private fun DownloadControl(
         is DownloadState.Running -> IconButton(onClick = onCancel) {
             Icon(
                 imageVector = XaosIcons.Close,
-                contentDescription = "Annulla download",
+                contentDescription = t("Annulla download"),
                 tint = Xaos.colors.inkSecondary,
                 modifier = Modifier.size(18.dp),
             )
@@ -495,7 +498,7 @@ private fun DownloadControl(
 
         DownloadState.Completed -> Icon(
             imageVector = XaosIcons.Check,
-            contentDescription = "Scaricato",
+            contentDescription = t("Scaricato"),
             tint = Xaos.colors.accentInk,
             modifier = Modifier.padding(14.dp).size(20.dp),
         )
@@ -503,7 +506,7 @@ private fun DownloadControl(
         is DownloadState.Failed -> IconButton(onClick = onDownload) {
             Icon(
                 imageVector = XaosIcons.Repeat,
-                contentDescription = "Riprova: ${state.message}",
+                contentDescription = t("Riprova: %s", state.message),
                 tint = Xaos.colors.inkSecondary,
                 modifier = Modifier.size(18.dp),
             )
@@ -519,12 +522,12 @@ private fun Hint() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "CERCA OVUNQUE",
+            text = t("CERCA OVUNQUE"),
             style = MaterialTheme.typography.titleMedium,
             color = Xaos.colors.inkSecondary,
         )
         Text(
-            text = "Prima nella tua libreria, poi in rete se non basta.",
+            text = t("Prima nella tua libreria, poi in rete se non basta."),
             style = MaterialTheme.typography.bodyMedium,
             color = Xaos.colors.inkSecondary,
         )

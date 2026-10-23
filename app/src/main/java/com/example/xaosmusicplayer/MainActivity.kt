@@ -43,6 +43,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.xaosmusicplayer.data.Playlist
+import com.example.xaosmusicplayer.i18n.I18n
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.data.DeleteOutcome
 import com.example.xaosmusicplayer.data.MediaDeleter
 import com.example.xaosmusicplayer.data.Song
@@ -90,6 +92,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // La lingua va letta prima del primo frame.
+        I18n.init(this)
         applySystemBars(themeStore.isDark.value, themeStore.custom.value)
         setContent {
             val dark by themeStore.isDark.collectAsStateWithLifecycle()
@@ -149,9 +153,11 @@ private sealed interface Destination {
 }
 
 /** Le due playlist che la Home costruisce dagli ascolti. */
-private enum class AutoPlaylistKind(val title: String) {
+private enum class AutoPlaylistKind(private val italian: String) {
     MOST_PLAYED("I più ascoltati"),
-    LEAST_PLAYED("Da riscoprire"),
+    LEAST_PLAYED("Da riscoprire");
+
+    val title: String get() = t(italian)
 }
 
 @Composable
@@ -199,6 +205,7 @@ private fun XaosApp(
     val recap by viewModel.monthlyRecap.collectAsStateWithLifecycle()
     val yearRecap by viewModel.yearlyRecap.collectAsStateWithLifecycle()
     val mostPlayed by viewModel.mostPlayed.collectAsStateWithLifecycle()
+    val recentlyPlayed by viewModel.recentlyPlayed.collectAsStateWithLifecycle()
     val leastPlayed by viewModel.leastPlayed.collectAsStateWithLifecycle()
 
     val knownArtists by viewModel.knownArtists.collectAsStateWithLifecycle()
@@ -240,7 +247,7 @@ private fun XaosApp(
         // I brani del PC non sono file del telefono: da qui non si cancellano.
         if (song.isRemote) {
             android.widget.Toast
-                .makeText(context, "È un brano del PC: si elimina da Xaos sul PC", android.widget.Toast.LENGTH_SHORT)
+                .makeText(context, t("È un brano del PC: si elimina da Xaos sul PC"), android.widget.Toast.LENGTH_SHORT)
                 .show()
             return
         }
@@ -382,6 +389,7 @@ private fun XaosApp(
                         },
                         onExportRecap = viewModel::exportYearlyRecap,
                         onOpenSettings = openSettings,
+                        recentlyPlayed = recentlyPlayed,
                     )
 
                     Section.LIBRARY -> LibraryScreen(
@@ -670,7 +678,7 @@ private fun DestinationContent(
     fun songList(
         title: String,
         songs: List<Song>,
-        emptyMessage: String = "Nessun brano",
+        emptyMessage: String = t("Nessun brano"),
         hero: CollectionHero? = null,
     ) {
         SongListScreen(
@@ -689,14 +697,14 @@ private fun DestinationContent(
     when (destination) {
         is Destination.Album -> {
             val songs = remember(library, destination.albumId) { viewModel.songsOfAlbum(destination.albumId) }
-            val artist = songs.map { it.albumArtist }.distinct().singleOrNull() ?: "Artisti vari"
+            val artist = songs.map { it.albumArtist }.distinct().singleOrNull() ?: t("Artisti vari")
             val year = songs.maxOfOrNull { it.year }?.takeIf { it > 0 }
             songList(
                 destination.title,
                 songs,
                 hero = CollectionHero(
                     artwork = songs.firstOrNull()?.artworkUri,
-                    kind = listOfNotNull("ALBUM", year?.toString()).joinToString(" · "),
+                    kind = listOfNotNull(t("ALBUM"), year?.toString()).joinToString(" · "),
                     subtitle = artist,
                     actions = {
                         // I brani che stanno solo sul PC si scaricano tutti insieme.
@@ -704,13 +712,13 @@ private fun DestinationContent(
                         if (pcOnly.isNotEmpty()) {
                             CircleIconButton(
                                 icon = XaosIcons.Download,
-                                contentDescription = "Scarica sul telefono i ${pcOnly.size} brani del PC",
+                                contentDescription = t("Scarica sul telefono i %d brani del PC", pcOnly.size),
                                 onClick = { com.example.xaosmusicplayer.beam.Beam.download(pcOnly) },
                             )
                         }
                         CircleIconButton(
                             icon = XaosIcons.Edit,
-                            contentDescription = "Modifica album",
+                            contentDescription = t("Modifica album"),
                             onClick = { backStack += Destination.EditAlbum(destination.albumId, destination.title) },
                         )
                     },
@@ -734,17 +742,17 @@ private fun DestinationContent(
             songList(
                 playlist?.name ?: destination.name,
                 songs,
-                "Playlist vuota",
+                t("Playlist vuota"),
                 hero = playlist?.let { pl ->
                     CollectionHero(
                         artwork = pl.coverUri(songs.firstOrNull()?.artworkUri),
-                        kind = "PLAYLIST",
+                        kind = t("PLAYLIST"),
                         description = pl.description,
                         onArtworkClick = ::launchPicker,
                         actions = {
-                            CircleIconButton(icon = XaosIcons.Edit, contentDescription = "Modifica playlist", onClick = { editing = true })
+                            CircleIconButton(icon = XaosIcons.Edit, contentDescription = t("Modifica playlist"), onClick = { editing = true })
                             Spacer(Modifier.width(10.dp))
-                            CircleIconButton(icon = XaosIcons.Delete, contentDescription = "Elimina playlist", onClick = { deleting = true })
+                            CircleIconButton(icon = XaosIcons.Delete, contentDescription = t("Elimina playlist"), onClick = { deleting = true })
                         },
                     )
                 },
@@ -769,20 +777,20 @@ private fun DestinationContent(
 
         is Destination.AutoPlaylist -> when (destination.kind) {
             AutoPlaylistKind.MOST_PLAYED ->
-                songList(destination.kind.title, mostPlayed, "Nessun ascolto registrato")
+                songList(destination.kind.title, mostPlayed, t("Nessun ascolto registrato"))
 
             AutoPlaylistKind.LEAST_PLAYED ->
-                songList(destination.kind.title, leastPlayed, "Libreria vuota")
+                songList(destination.kind.title, leastPlayed, t("Libreria vuota"))
         }
 
         Destination.Favorites -> songList(
-            "Preferiti",
+            t("Preferiti"),
             favoriteSongs,
-            "Nessun preferito",
-            hero = CollectionHero(artwork = null, kind = "PLAYLIST", description = "I brani col cuore, qui e sul PC."),
+            t("Nessun preferito"),
+            hero = CollectionHero(artwork = null, kind = t("PLAYLIST"), description = t("I brani col cuore, qui e sul PC.")),
         )
 
-        Destination.Queue -> songList("In coda", queue, "Coda vuota")
+        Destination.Queue -> songList(t("In coda"), queue, t("Coda vuota"))
 
         Destination.Playlists -> PlaylistsScreen(
             playlists = playlists,

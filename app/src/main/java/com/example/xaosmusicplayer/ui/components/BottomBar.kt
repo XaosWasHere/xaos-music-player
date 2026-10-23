@@ -22,15 +22,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.xaosmusicplayer.i18n.tc
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 
 /** Le sezioni principali dell'app, come su Spotify. */
-enum class Section(val label: String, val icon: ImageVector) {
+enum class Section(private val italian: String, val icon: ImageVector) {
     HOME("HOME", XaosIcons.Home),
     LIBRARY("LIBRERIA", XaosIcons.Library),
     PLAYLISTS("PLAYLIST", XaosIcons.Queue),
-    SEARCH("CERCA", XaosIcons.Search),
+    SEARCH("CERCA", XaosIcons.Search);
+
+    val label: String get() = tc(italian, "sezione")
 }
 
 /**

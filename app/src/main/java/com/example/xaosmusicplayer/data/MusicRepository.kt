@@ -6,6 +6,7 @@ import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.xaosmusicplayer.i18n.t
 
 /**
  * Legge la libreria musicale del dispositivo tramite MediaStore.
@@ -243,5 +244,14 @@ class MusicRepository(private val context: Context) {
         const val UNKNOWN_ARTIST = "Artista sconosciuto"
         const val UNKNOWN_ALBUM = "Album sconosciuto"
         const val VARIOUS_ARTISTS = "Artisti vari"
+
+        /**
+         * Il nome da mostrare. I segnaposto sopra restano in italiano nei dati,
+         * perché servono a raggruppare e confrontare: si traducono solo a video.
+         */
+        fun displayName(name: String): String = when (name) {
+            UNKNOWN_TITLE, UNKNOWN_ARTIST, UNKNOWN_ALBUM, VARIOUS_ARTISTS -> t(name)
+            else -> name
+        }
     }
 }

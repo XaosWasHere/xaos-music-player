@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import xaos.desktop.i18n.t
 import xaos.desktop.player.Player
 import xaos.desktop.theme.Xaos
 import androidx.compose.ui.draw.drawBehind
@@ -120,10 +121,10 @@ fun MiniPlayerCard(
                 ) {
                     OverlayButton(
                         if (showLyrics) XaosIcons.Album else XaosIcons.Mic,
-                        if (showLyrics) "Mostra la copertina" else "Mostra il testo",
+                        if (showLyrics) t("Mostra la copertina") else t("Mostra il testo"),
                         onToggleLyrics,
                     )
-                    OverlayButton(XaosIcons.Fullscreen, "Torna a Xaos (anche con doppio clic)", onExpand)
+                    OverlayButton(XaosIcons.Fullscreen, t("Torna a Xaos (anche con doppio clic)"), onExpand)
                 }
                 // Il volume, sopra la copertina: compare solo col mouse sulla
                 // card, così il miniplayer non cresce di un millimetro.
@@ -139,7 +140,7 @@ fun MiniPlayerCard(
                 ) {
                     Icon(
                         if (volume == 0) XaosIcons.VolumeOff else XaosIcons.Volume,
-                        "Volume",
+                        t("Volume"),
                         tint = colors.inkSecondary,
                         modifier = Modifier.size(14.dp),
                     )
@@ -166,14 +167,14 @@ fun MiniPlayerCard(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    track?.title?.uppercase() ?: "NIENTE IN RIPRODUZIONE",
+                    track?.title?.uppercase() ?: t("NIENTE IN RIPRODUZIONE"),
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    track?.artist ?: "—",
+                    track?.artist?.let { xaos.desktop.library.displayName(it) } ?: "—",
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.inkSecondary,
                     maxLines = 1,
@@ -194,8 +195,8 @@ fun MiniPlayerCard(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ModeButton(XaosIcons.Shuffle, "Casuale", shuffle, size = 30.dp) { player.toggleShuffle() }
-            CircleIconButton(XaosIcons.Previous, "Precedente", { player.previous() }, size = 34.dp, outlined = false)
+            ModeButton(XaosIcons.Shuffle, t("Casuale"), shuffle, size = 30.dp) { player.toggleShuffle() }
+            CircleIconButton(XaosIcons.Previous, t("Precedente"), { player.previous() }, size = 34.dp, outlined = false)
             // Tondo per costruzione: se in altezza ci fosse meno spazio del
             // previsto il diametro si riduce, invece di schiacciarsi in un ovale.
             Box(
@@ -207,9 +208,9 @@ fun MiniPlayerCard(
                     .pressable { player.togglePlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
-                PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 22.dp)
+                PlayPauseGlyph(isPlaying, if (isPlaying) t("Pausa") else t("Riproduci"), colors.onAccent, glyphSize = 22.dp)
             }
-            CircleIconButton(XaosIcons.Next, "Successivo", { player.next() }, size = 34.dp, outlined = false)
+            CircleIconButton(XaosIcons.Next, t("Successivo"), { player.next() }, size = 34.dp, outlined = false)
             // Il cuore: lo stesso della barra, ma i preferiti arrivano da fuori
             // perché questa è un'altra finestra.
             Box(
@@ -218,7 +219,7 @@ fun MiniPlayerCard(
             ) {
                 Icon(
                     if (isFavorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-                    if (isFavorite) "Togli dai preferiti" else "Aggiungi ai preferiti",
+                    if (isFavorite) t("Togli dai preferiti") else t("Aggiungi ai preferiti"),
                     tint = if (isFavorite) colors.accentInk else colors.inkTertiary,
                     modifier = Modifier.size(16.dp),
                 )

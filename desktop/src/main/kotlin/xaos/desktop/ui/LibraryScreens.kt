@@ -57,7 +57,11 @@ import xaos.desktop.library.Artist
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.ScanState
 import xaos.desktop.library.Track
+import xaos.desktop.library.displayName
 import xaos.desktop.library.rememberArtwork
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tDotIn
+import xaos.desktop.i18n.tDot
 import xaos.desktop.player.Player
 import xaos.desktop.player.PlaySource
 import xaos.desktop.online.DownloadState
@@ -111,11 +115,11 @@ fun AlbumsScreen(snapshot: LibrarySnapshot, scan: ScanState, onOpen: (Album) -> 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     DotSpinner(size = 40.dp)
                     Spacer(Modifier.height(14.dp))
-                    Text("LETTURA DELLA LIBRERIA  ${scan.done}/${scan.total}", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.inkSecondary)
+                    Text(t("LETTURA DELLA LIBRERIA  %d/%d", scan.done, scan.total), style = MaterialTheme.typography.labelLarge, color = Xaos.colors.inkSecondary)
                 }
             }
         } else {
-            EmptyMessage("NESSUN ALBUM", "Scegli la cartella della musica dalla barra a sinistra.")
+            EmptyMessage(t("NESSUN ALBUM"), t("Scegli la cartella della musica dalla barra a sinistra."))
         }
         return
     }
@@ -128,8 +132,8 @@ fun AlbumsScreen(snapshot: LibrarySnapshot, scan: ScanState, onOpen: (Album) -> 
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             ScreenTitle(
-                "ALBUM",
-                caption = "[${snapshot.albums.size}] ALBUM · [${snapshot.artists.size}] ARTISTI",
+                tDotIn("ALBUM", "sezione"),
+                caption = t("[%d] ALBUM · [%d] ARTISTI", snapshot.albums.size, snapshot.artists.size),
             )
         }
         items(snapshot.albums, key = { it.key }) { album -> AlbumCard(album) { onOpen(album) } }
@@ -149,7 +153,7 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
         BoxWithArtwork(album.tracks.firstOrNull())
         Spacer(Modifier.height(10.dp))
         Text(
-            album.title.uppercase(),
+            displayName(album.title).uppercase(),
             style = MaterialTheme.typography.titleMedium,
             color = colors.ink,
             maxLines = 1,
@@ -157,7 +161,7 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Text(
-            album.artist,
+            displayName(album.artist),
             style = MaterialTheme.typography.labelMedium,
             color = colors.inkSecondary,
             maxLines = 1,
@@ -177,7 +181,7 @@ private fun BoxWithArtwork(track: Track?) {
 @Composable
 fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> Unit, onEdit: (Album) -> Unit) {
     if (album == null) {
-        EmptyMessage("ALBUM NON TROVATO")
+        EmptyMessage(t("ALBUM NON TROVATO"))
         return
     }
     val colors = Xaos.colors
@@ -189,10 +193,10 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                 ArtworkImage(album.tracks.firstOrNull(), size = 220.dp, corner = 20.dp)
                 Spacer(Modifier.width(28.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Tag("ALBUM")
-                    Text(album.title, style = MaterialTheme.typography.headlineMedium, color = colors.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Tag(t("ALBUM"))
+                    Text(displayName(album.title), style = MaterialTheme.typography.headlineMedium, color = colors.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
-                        album.artist.uppercase(),
+                        displayName(album.artist).uppercase(),
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.accentInk,
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).pressable { onOpenArtist(album.artist) },
@@ -200,7 +204,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                     Text(
                         listOfNotNull(
                             album.year.takeIf { it > 0 }?.toString(),
-                            "[${album.tracks.size}] BRANI",
+                            t("[%d] BRANI", album.tracks.size),
                             formatDuration(album.durationMs),
                         ).joinToString(" · "),
                         style = MaterialTheme.typography.labelMedium,
@@ -208,10 +212,10 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                     )
                     Spacer(Modifier.height(6.dp))
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillButton("RIPRODUCI", onClick = { player.play(album.tracks, 0, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) }, icon = XaosIcons.Play, filled = true)
-                        PillButton("CASUALE", onClick = { player.play(album.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) }, icon = XaosIcons.Shuffle)
-                        PillButton("PLAYLIST", onClick = { actions?.onAddToPlaylist(album.tracks) }, icon = XaosIcons.PlaylistAdd)
-                        PillButton("MODIFICA", onClick = { onEdit(album) }, icon = XaosIcons.Edit)
+                        PillButton(t("RIPRODUCI"), onClick = { player.play(album.tracks, 0, PlaySource(PlaySource.Kind.ALBUM, album.key, displayName(album.title))) }, icon = XaosIcons.Play, filled = true)
+                        PillButton(t("CASUALE"), onClick = { player.play(album.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.ALBUM, album.key, displayName(album.title))) }, icon = XaosIcons.Shuffle)
+                        PillButton(t("PLAYLIST"), onClick = { actions?.onAddToPlaylist(album.tracks) }, icon = XaosIcons.PlaylistAdd)
+                        PillButton(t("MODIFICA"), onClick = { onEdit(album) }, icon = XaosIcons.Edit)
                     }
                 }
             }
@@ -224,7 +228,7 @@ fun AlbumDetailScreen(album: Album?, player: Player, onOpenArtist: (String) -> U
                 isCurrent = track.path == current?.path,
                 showAlbum = false,
                 showArtwork = false,
-                onClick = { player.play(album.tracks, index, PlaySource(PlaySource.Kind.ALBUM, album.key, album.title)) },
+                onClick = { player.play(album.tracks, index, PlaySource(PlaySource.Kind.ALBUM, album.key, displayName(album.title))) },
             )
         }
     }
@@ -247,17 +251,17 @@ fun SongsScreen(
 ) {
     val current by player.current.collectAsState()
     if (snapshot.tracks.isEmpty()) {
-        EmptyMessage("NESSUN BRANO")
+        EmptyMessage(t("NESSUN BRANO"))
         return
     }
     val tracks = remember(snapshot.tracks, sort, descending) { sortTracks(snapshot.tracks, sort, descending) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
-                "BRANI",
-                caption = "[${snapshot.tracks.size}] BRANI · ${formatDuration(snapshot.tracks.sumOf { it.durationMs })}",
+                tDot("BRANI"),
+                caption = t("[%d] BRANI · %s", snapshot.tracks.size, formatDuration(snapshot.tracks.sumOf { it.durationMs })),
                 trailing = {
-                    PillButton("CASUALE", onClick = { player.play(snapshot.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) }, icon = XaosIcons.Shuffle, filled = true)
+                    PillButton(t("CASUALE"), onClick = { player.play(snapshot.tracks.shuffled(), 0, PlaySource(PlaySource.Kind.SONGS, "", t("Brani"))) }, icon = XaosIcons.Shuffle, filled = true)
                 },
             )
         }
@@ -269,7 +273,7 @@ fun SongsScreen(
                 isCurrent = track.path == current?.path,
                 showAlbum = true,
                 showArtwork = true,
-                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SONGS, "", "Brani")) },
+                onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SONGS, "", t("Brani"))) },
             )
         }
     }
@@ -298,7 +302,7 @@ fun TrackHeader(
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     if (descending) XaosIcons.ArrowDown else XaosIcons.ArrowUp,
-                    if (descending) "Decrescente" else "Crescente",
+                    if (descending) t("Decrescente") else t("Crescente"),
                     tint = colors.accentInk,
                     modifier = Modifier.size(12.dp),
                 )
@@ -309,15 +313,15 @@ fun TrackHeader(
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Head("#", xaos.desktop.SongSort.LIBRARY, Modifier.width(40.dp))
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Head("TITOLO", xaos.desktop.SongSort.TITLE, Modifier)
+                Head(t("TITOLO"), xaos.desktop.SongSort.TITLE, Modifier)
                 if (onSort != null) {
                     Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
-                    Head("ARTISTA", xaos.desktop.SongSort.ARTIST, Modifier)
+                    Head(t("ARTISTA"), xaos.desktop.SongSort.ARTIST, Modifier)
                 }
             }
-            if (showAlbum) Head("ALBUM", xaos.desktop.SongSort.ALBUM, Modifier.weight(0.7f))
+            if (showAlbum) Head(t("ALBUM"), xaos.desktop.SongSort.ALBUM, Modifier.weight(0.7f))
             Spacer(Modifier.width(36.dp))
-            Head("DURATA", xaos.desktop.SongSort.DURATION, Modifier.width(64.dp))
+            Head(t("DURATA"), xaos.desktop.SongSort.DURATION, Modifier.width(64.dp))
         }
         Hairline()
         Spacer(Modifier.height(6.dp))
@@ -372,11 +376,11 @@ fun TrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayName(track.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (showAlbum) {
             Text(
-                track.album,
+                displayName(track.album),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkSecondary,
                 maxLines = 1,
@@ -400,7 +404,7 @@ fun TrackRow(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (hovered || menuOpen) {
-                        Icon(XaosIcons.More, "Altre azioni", tint = colors.inkSecondary, modifier = Modifier.size(18.dp))
+                        Icon(XaosIcons.More, t("Altre azioni"), tint = colors.inkSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
                 TrackMenu(
@@ -422,15 +426,15 @@ fun trackMenuItems(
 ): List<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>> = listOf(
     Triple(
         if (favorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-        if (favorite) "TOGLI DAI PREFERITI" else "AGGIUNGI AI PREFERITI",
+        if (favorite) t("TOGLI DAI PREFERITI") else t("AGGIUNGI AI PREFERITI"),
     ) { actions.onToggleFavorite(track) },
-    Triple(XaosIcons.PlaylistAdd, "AGGIUNGI A PLAYLIST") { actions.onAddToPlaylist(listOf(track)) },
+    Triple(XaosIcons.PlaylistAdd, t("AGGIUNGI A PLAYLIST")) { actions.onAddToPlaylist(listOf(track)) },
 ) + extraMenu + listOf(
-    Triple(XaosIcons.Album, "VAI ALL'ALBUM") { actions.onGoToAlbum(track) },
-    Triple(XaosIcons.Person, "VAI ALL'ARTISTA") { actions.onGoToArtist(track) },
-    Triple(XaosIcons.Edit, "MODIFICA INFO") { actions.onEdit(track) },
-    Triple(XaosIcons.Mic, "TESTO") { actions.onLyrics(track) },
-    Triple(XaosIcons.Folder, "MOSTRA NELLA CARTELLA") { actions.onShowInFolder(track) },
+    Triple(XaosIcons.Album, t("VAI ALL'ALBUM")) { actions.onGoToAlbum(track) },
+    Triple(XaosIcons.Person, t("VAI ALL'ARTISTA")) { actions.onGoToArtist(track) },
+    Triple(XaosIcons.Edit, t("MODIFICA INFO")) { actions.onEdit(track) },
+    Triple(XaosIcons.Mic, t("TESTO")) { actions.onLyrics(track) },
+    Triple(XaosIcons.Folder, t("MOSTRA NELLA CARTELLA")) { actions.onShowInFolder(track) },
 )
 
 @Composable
@@ -482,11 +486,11 @@ fun sortTracks(tracks: List<Track>, sort: xaos.desktop.SongSort, descending: Boo
 fun ArtistsScreen(snapshot: LibrarySnapshot, onOpen: (Artist) -> Unit) {
     val colors = Xaos.colors
     if (snapshot.artists.isEmpty()) {
-        EmptyMessage("NESSUN ARTISTA")
+        EmptyMessage(t("NESSUN ARTISTA"))
         return
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, bottom = 28.dp)) {
-        item { ScreenTitle("ARTISTI", caption = "[${snapshot.artists.size}] ARTISTI") }
+        item { ScreenTitle(tDot("ARTISTI"), caption = t("[%d] ARTISTI", snapshot.artists.size)) }
         items(snapshot.artists, key = { it.name }) { artist ->
             Row(
                 Modifier
@@ -498,8 +502,8 @@ fun ArtistsScreen(snapshot: LibrarySnapshot, onOpen: (Artist) -> Unit) {
             ) {
                 ArtworkImage(artist.albums.firstOrNull()?.tracks?.firstOrNull(), size = 44.dp, corner = 22.dp)
                 Spacer(Modifier.width(14.dp))
-                Text(artist.name.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("[${artist.albums.size}] ALBUM · [${artist.trackCount}] BRANI", style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
+                Text(displayName(artist.name).uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(t("[%d] ALBUM · [%d] BRANI", artist.albums.size, artist.trackCount), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary)
             }
         }
     }
@@ -508,7 +512,7 @@ fun ArtistsScreen(snapshot: LibrarySnapshot, onOpen: (Artist) -> Unit) {
 @Composable
 fun ArtistDetailScreen(artist: Artist?, player: Player, onOpenAlbum: (Album) -> Unit) {
     if (artist == null) {
-        EmptyMessage("ARTISTA NON TROVATO")
+        EmptyMessage(t("ARTISTA NON TROVATO"))
         return
     }
     val all = remember(artist) { artist.albums.flatMap { it.tracks } }
@@ -521,12 +525,12 @@ fun ArtistDetailScreen(artist: Artist?, player: Player, onOpenAlbum: (Album) -> 
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.padding(top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tag("ARTISTA")
-                Text(artist.name, style = MaterialTheme.typography.headlineMedium, color = Xaos.colors.ink)
-                Text("[${artist.albums.size}] ALBUM · [${artist.trackCount}] BRANI", style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkTertiary)
+                Tag(t("ARTISTA"))
+                Text(displayName(artist.name), style = MaterialTheme.typography.headlineMedium, color = Xaos.colors.ink)
+                Text(t("[%d] ALBUM · [%d] BRANI", artist.albums.size, artist.trackCount), style = MaterialTheme.typography.labelMedium, color = Xaos.colors.inkTertiary)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillButton("RIPRODUCI", onClick = { player.play(all, 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, artist.name)) }, icon = XaosIcons.Play, filled = true)
-                    PillButton("CASUALE", onClick = { player.play(all.shuffled(), 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, artist.name)) }, icon = XaosIcons.Shuffle)
+                    PillButton(t("RIPRODUCI"), onClick = { player.play(all, 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, displayName(artist.name))) }, icon = XaosIcons.Play, filled = true)
+                    PillButton(t("CASUALE"), onClick = { player.play(all.shuffled(), 0, PlaySource(PlaySource.Kind.ARTIST, artist.name, displayName(artist.name))) }, icon = XaosIcons.Shuffle)
                 }
             }
         }
@@ -560,7 +564,7 @@ fun SearchResults(
     val nothingLocal = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 28.dp)) {
         if (artists.isNotEmpty()) {
-            item { SectionHeader("ARTISTI", count = artists.size, modifier = Modifier.padding(vertical = 10.dp)) }
+            item { SectionHeader(t("ARTISTI"), count = artists.size, modifier = Modifier.padding(vertical = 10.dp)) }
             items(artists, key = { "a-" + it.name }) { artist ->
                 Row(
                     Modifier.fillMaxWidth().hoverRow().pressable { onOpenArtist(artist) }.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -568,12 +572,12 @@ fun SearchResults(
                 ) {
                     ArtworkImage(artist.albums.firstOrNull()?.tracks?.firstOrNull(), size = 36.dp, corner = 18.dp)
                     Spacer(Modifier.width(12.dp))
-                    Text(artist.name.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                    Text(displayName(artist.name).uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink)
                 }
             }
         }
         if (albums.isNotEmpty()) {
-            item { SectionHeader("ALBUM", count = albums.size, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp)) }
+            item { SectionHeader(t("ALBUM"), count = albums.size, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp)) }
             items(albums, key = { "b-" + it.key }) { album ->
                 Row(
                     Modifier.fillMaxWidth().hoverRow().pressable { onOpenAlbum(album) }.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -582,8 +586,8 @@ fun SearchResults(
                     ArtworkImage(album.tracks.firstOrNull(), size = 44.dp, corner = 8.dp)
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(album.title.uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(album.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                        Text(displayName(album.title).uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(displayName(album.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
                     }
                 }
             }
@@ -591,7 +595,7 @@ fun SearchResults(
         if (nothingLocal) {
             item {
                 Text(
-                    "Niente in libreria per \"$query\".",
+                    t("Niente in libreria per \"%s\".", query),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkTertiary,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -599,7 +603,7 @@ fun SearchResults(
             }
         }
         if (tracks.isNotEmpty()) {
-            item { SectionHeader("BRANI", count = tracks.size, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp)) }
+            item { SectionHeader(t("BRANI"), count = tracks.size, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp)) }
             itemsIndexed(tracks, key = { _, t -> "t-" + t.path }) { index, track ->
                 TrackRow(
                     number = index + 1,
@@ -607,14 +611,14 @@ fun SearchResults(
                     isCurrent = track.path == current?.path,
                     showAlbum = true,
                     showArtwork = true,
-                    onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SEARCH, query, "Ricerca: " + query)) },
+                    onClick = { player.play(tracks, index, PlaySource(PlaySource.Kind.SEARCH, query, t("Ricerca: %s", query))) },
                 )
             }
         }
         // ---- in rete: si cerca solo a richiesta, ogni ricerca avvia yt-dlp.
         item {
             SectionHeader(
-                "IN RETE",
+                t("IN RETE"),
                 modifier = Modifier.padding(top = 28.dp, bottom = 10.dp),
                 count = (online as? OnlineSearch.Results)?.takeIf { it.query == query }?.tracks?.size,
             )
@@ -623,7 +627,7 @@ fun SearchResults(
             val current = online
             when {
                 ytdlp.tools.collectAsState().value.let { it.first == null || it.second == null } -> Text(
-                    "Gli strumenti per scaricare non sono ancora pronti: se il messaggio resta, reinstalla Xaos.",
+                    t("Gli strumenti per scaricare non sono ancora pronti: se il messaggio resta, reinstalla Xaos."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkTertiary,
                     modifier = Modifier.padding(horizontal = 12.dp),
@@ -631,7 +635,7 @@ fun SearchResults(
                 current is OnlineSearch.Searching -> Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     DotSpinner(size = 20.dp)
                     Spacer(Modifier.width(12.dp))
-                    Text("RICERCA IN CORSO…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                    Text(t("RICERCA IN CORSO…"), style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
                 }
                 current is OnlineSearch.Results && current.query == query -> Unit
                 else -> Row(
@@ -643,10 +647,10 @@ fun SearchResults(
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
-                        Text("CERCA \"${query.uppercase()}\" IN RETE", style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                        Text(t("CERCA \"%s\" IN RETE", query.uppercase()), style = MaterialTheme.typography.titleMedium, color = colors.ink)
                         Text(
-                            if (current is OnlineSearch.Failed) "Non è andata: ${current.message}. Clicca per riprovare."
-                            else "Scarica il brano in MP3 e aggiungilo alla libreria",
+                            if (current is OnlineSearch.Failed) t("Non è andata: %s. Clicca per riprovare.", current.message)
+                            else t("Scarica il brano in MP3 e aggiungilo alla libreria"),
                             style = MaterialTheme.typography.labelMedium,
                             color = colors.inkTertiary,
                         )
@@ -677,24 +681,24 @@ private fun OnlineRow(track: OnlineTrack, state: DownloadState?, onDownload: () 
             }
             Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.width(64.dp))
             when (state) {
-                null -> PillButton("SCARICA", onClick = onDownload, icon = XaosIcons.Download)
+                null -> PillButton(t("SCARICA"), onClick = onDownload, icon = XaosIcons.Download)
                 DownloadState.Queued -> DotSpinner(size = 20.dp)
                 is DownloadState.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
                     Spacer(Modifier.width(8.dp))
-                    CircleIconButton(XaosIcons.Close, "Annulla", onCancel, size = 30.dp)
+                    CircleIconButton(XaosIcons.Close, t("Annulla"), onCancel, size = 30.dp)
                 }
                 DownloadState.Converting -> Row(verticalAlignment = Alignment.CenterVertically) {
                     DotSpinner(size = 18.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("CONVERSIONE", style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+                    Text(t("CONVERSIONE"), style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
                 }
                 is DownloadState.Completed -> Row(verticalAlignment = Alignment.CenterVertically) {
                     AccentDot(size = 6.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("IN LIBRERIA", style = MaterialTheme.typography.labelMedium, color = colors.ink)
+                    Text(t("IN LIBRERIA"), style = MaterialTheme.typography.labelMedium, color = colors.ink)
                 }
-                is DownloadState.Failed -> PillButton("RIPROVA", onClick = onDownload, icon = XaosIcons.Repeat)
+                is DownloadState.Failed -> PillButton(t("RIPROVA"), onClick = onDownload, icon = XaosIcons.Repeat)
             }
         }
         (state as? DownloadState.Running)?.let {

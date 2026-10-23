@@ -52,6 +52,8 @@ import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.t
 
 /** Come l'album va salvato: i dati comuni più l'ordine deciso dall'utente. */
 data class AlbumEdit(
@@ -119,7 +121,7 @@ fun EditAlbumScreen(
             .statusBarsPadding(),
     ) {
         ScreenHeader(
-            title = "MODIFICA ALBUM",
+            title = t("MODIFICA ALBUM"),
             onBack = onBack,
             trailing = {
                 TextButton(
@@ -138,7 +140,7 @@ fun EditAlbumScreen(
                     },
                 ) {
                     Text(
-                        text = "SALVA",
+                        text = t("SALVA"),
                         style = MaterialTheme.typography.labelLarge,
                         color = Xaos.colors.onAccent,
                         modifier = Modifier
@@ -181,7 +183,7 @@ fun EditAlbumScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "TOCCA PER CAMBIARE COPERTINA",
+                    text = t("TOCCA PER CAMBIARE COPERTINA"),
                     style = MaterialTheme.typography.labelMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -189,15 +191,15 @@ fun EditAlbumScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            LabeledTextField(label = "TITOLO", value = title, onValueChange = { title = it })
+            LabeledTextField(label = t("TITOLO"), value = title, onValueChange = { title = it })
             AlbumSuggestingField(
-                label = "ARTISTA",
+                label = t("ARTISTA"),
                 value = artist,
                 suggestions = knownArtists,
                 onValueChange = { artist = it },
             )
             AlbumSuggestingField(
-                label = "GENERE",
+                label = t("GENERE"),
                 value = genre,
                 suggestions = knownGenres,
                 onValueChange = { genre = it },
@@ -205,7 +207,7 @@ fun EditAlbumScreen(
 
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "ORDINE DELLE TRACCE",
+                text = t("ORDINE DELLE TRACCE"),
                 style = MaterialTheme.typography.labelMedium,
                 color = Xaos.colors.inkSecondary,
                 modifier = Modifier.padding(bottom = 10.dp),
@@ -217,7 +219,7 @@ fun EditAlbumScreen(
                 Spacer(Modifier.height(20.dp))
                 TextButton(onClick = onReset) {
                     Text(
-                        text = "RIPRISTINA DATI ORIGINALI",
+                        text = t("RIPRISTINA DATI ORIGINALI"),
                         style = MaterialTheme.typography.titleMedium,
                         color = Xaos.colors.inkSecondary,
                     )
@@ -267,14 +269,14 @@ private fun ReorderableTracks(ordered: SnapshotStateList<Song>) {
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = song.title.uppercase(),
+                        text = MusicRepository.displayName(song.title).uppercase(),
                         style = MaterialTheme.typography.titleMedium,
                         color = Xaos.colors.ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = song.artist,
+                        text = MusicRepository.displayName(song.artist),
                         style = MaterialTheme.typography.labelMedium,
                         color = Xaos.colors.inkSecondary,
                         maxLines = 1,
@@ -284,7 +286,7 @@ private fun ReorderableTracks(ordered: SnapshotStateList<Song>) {
 
                 Icon(
                     imageVector = XaosIcons.DragHandle,
-                    contentDescription = "Trascina per riordinare",
+                    contentDescription = t("Trascina per riordinare"),
                     tint = Xaos.colors.inkSecondary,
                     modifier = Modifier
                         .padding(horizontal = 12.dp)

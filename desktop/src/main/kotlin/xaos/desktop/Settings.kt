@@ -6,14 +6,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import xaos.desktop.i18n.t
 
 /** Lo sfondo del player a schermo intero: le stesse scelte del telefono. */
 @Serializable
-enum class FullscreenBackground(val label: String) {
+enum class FullscreenBackground(private val labelIt: String) {
     /** Le onde di tutto il brano, alla SoundCloud, che si accendono man mano. */
     WAVEFORM("ONDE"),
     ARTWORK("COPERTINA"),
-    OFF("SPENTA"),
+    OFF("SPENTA");
+
+    val label: String get() = t(labelIt)
 }
 
 /** L'equalizzatore di VLC: dieci bande e un preamplificatore, in dB (±20). */
@@ -112,6 +115,13 @@ data class SettingsData(
     val minimizeToMini: Boolean = false,
     /** Il miniplayer mostra il testo al posto della copertina. */
     val miniShowsLyrics: Boolean = false,
+    /** Dove era stato lasciato il miniplayer (angolo in alto a sinistra); null = in basso a destra. */
+    val miniX: Float? = null,
+    val miniY: Float? = null,
+    /** All'avvio i brani senza testo lo cercano su LRCLIB, e lo ricevono se la durata coincide. */
+    val autoLyrics: Boolean = true,
+    /** La lingua dell'app ("it", "en", "ja"); null = quella di Windows. */
+    val language: String? = null,
     /** Xaos Beam: la libreria si ascolta dal telefono, in streaming sulla rete di casa. */
     val beamEnabled: Boolean = false,
     /** I telefoni abbinati a Beam, ciascuno con la sua chiave. */

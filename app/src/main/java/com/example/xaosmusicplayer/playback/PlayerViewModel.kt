@@ -12,6 +12,7 @@ import androidx.media3.session.SessionToken
 import com.example.xaosmusicplayer.audio.AudioLevels
 import com.example.xaosmusicplayer.beam.Beam
 import com.example.xaosmusicplayer.beam.BeamConnect
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.audio.AudioVisualizer
 import com.example.xaosmusicplayer.audio.AudioSessionHolder
 import com.example.xaosmusicplayer.audio.EqualizerController
@@ -312,6 +313,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             YearlyRecap.empty(Calendar.getInstance().get(Calendar.YEAR)),
         )
 
+    /**
+     * La cronologia: gli ultimi dieci brani ascoltati, dal più recente. Lo
+     * stesso brano ascoltato più volte di fila conta una volta sola.
+     */
+    val recentlyPlayed: StateFlow<List<com.example.xaosmusicplayer.data.RecentPlay>> =
+        combine(_songs, playEvents) { songs, events ->
+            val byId = songs.associateBy { it.id }
+            val out = ArrayList<com.example.xaosmusicplayer.data.RecentPlay>(HISTORY_SIZE)
+            var previous: Long? = null
+            for (event in events.asReversed()) {
+                if (event.songId == previous) continue
+                previous = event.songId
+                val song = byId[event.songId] ?: continue
+                out += com.example.xaosmusicplayer.data.RecentPlay(song, event.timestampMs)
+                if (out.size == HISTORY_SIZE) break
+            }
+            out
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** Playlist automatica: i brani con più ascolti registrati. */
     val mostPlayed: StateFlow<List<Song>> =
         combine(_songs, playEvents) { songs, events ->
@@ -407,7 +427,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             _onlineSearch.value = OnlineSearchState.Preparing
             ytdlp.ensureReady().onFailure {
                 _onlineSearch.value = OnlineSearchState.Failed(
-                    "Impossibile avviare yt-dlp: ${it.readableMessage()}"
+                    t("Impossibile avviare yt-dlp: %s", it.readableMessage())
                 )
                 return@launch
             }
@@ -417,7 +437,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { tracks -> _onlineSearch.value = OnlineSearchState.Results(tracks) }
                 .onFailure {
                     _onlineSearch.value = OnlineSearchState.Failed(
-                        "Ricerca fallita: ${it.readableMessage()}"
+                        t("Ricerca fallita: %s", it.readableMessage())
                     )
                 }
         }
@@ -426,12 +446,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** Salva in galleria l'immagine del riepilogo annuale. */
     fun exportYearlyRecap() {
         viewModelScope.launch {
-            _engineMessage.value = "Creazione immagine..."
+            _engineMessage.value = t("Creazione immagine...")
             RecapCardRenderer(getApplication())
                 .render(yearlyRecap.value)
-                .onSuccess { _engineMessage.value = "Salvata in Immagini/Xaos" }
+                .onSuccess { _engineMessage.value = t("Salvata in Immagini/Xaos") }
                 .onFailure {
-                    _engineMessage.value = "Immagine non salvata: ${it.readableMessage()}"
+                    _engineMessage.value = t("Immagine non salvata: %s", it.readableMessage())
                 }
         }
     }
@@ -446,10 +466,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateEngine() {
         viewModelScope.launch {
-            _engineMessage.value = "Aggiornamento del motore in corso..."
+            _engineMessage.value = t("Aggiornamento del motore in corso...")
             ytdlp.updateYtdlp()
                 .onSuccess { _engineMessage.value = it }
-                .onFailure { _engineMessage.value = "Aggiornamento fallito: ${it.readableMessage()}" }
+                .onFailure { _engineMessage.value = t("Aggiornamento fallito: %s", it.readableMessage()) }
         }
     }
 
@@ -492,7 +512,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun Throwable.readableMessage(): String =
         message?.lineSequence()?.lastOrNull { it.isNotBlank() }?.trim()
             ?: this::class.simpleName
-            ?: "errore sconosciuto"
+            ?: t("errore sconosciuto")
 
     // ---------- Equalizzatore ----------
 
@@ -1406,6 +1426,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Lunghezza delle playlist automatiche della Home. */
         const val AUTO_PLAYLIST_SIZE = 30
+
+        /** Quanti brani mostra la cronologia degli ascolti. */
+        const val HISTORY_SIZE = 10
 
         /** Quanti artisti e album mostrare fra i risultati di ricerca. */
         const val SEARCH_GROUP_LIMIT = 8

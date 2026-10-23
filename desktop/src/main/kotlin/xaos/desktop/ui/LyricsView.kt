@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import xaos.desktop.i18n.t
 import xaos.desktop.library.Lyrics
 import xaos.desktop.library.TagEditor
 import xaos.desktop.library.Track
@@ -93,15 +94,15 @@ fun LyricsView(
         LyricsLoad.Loading -> Box(modifier, contentAlignment = Alignment.Center) { DotSpinner(size = 20.dp) }
         LyricsLoad.Missing -> Box(modifier, contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(if (track == null) "NIENTE IN RIPRODUZIONE" else "NESSUN TESTO", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                Text(if (track == null) t("NIENTE IN RIPRODUZIONE") else t("NESSUN TESTO"), style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
                 if (track != null && onEdit != null) {
                     Text(
-                        "Puoi cercarlo online o scriverlo tu: finisce nel file, e arriva anche sul telefono.",
+                        t("Puoi cercarlo online o scriverlo tu: finisce nel file, e arriva anche sul telefono."),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.inkTertiary,
                         modifier = Modifier.width(240.dp),
                     )
-                    PillButton("AGGIUNGI IL TESTO", onClick = { onEdit(track) }, icon = XaosIcons.Mic)
+                    PillButton(t("AGGIUNGI IL TESTO"), onClick = { onEdit(track) }, icon = XaosIcons.Mic)
                 }
             }
         }
@@ -141,7 +142,7 @@ fun LyricsView(
             ) {
                 if (!lyrics.synced) {
                     item {
-                        Text("TESTO NON SINCRONIZZATO", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                        Text(t("TESTO NON SINCRONIZZATO"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                     }
                 }
                 itemsIndexed(lyrics.lines) { i, line ->
@@ -211,16 +212,16 @@ fun LyricsSidePanel(player: Player, width: Dp, onClose: () -> Unit, onEdit: (Tra
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AccentDot(size = 6.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("TESTO", style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.weight(1f))
-                track?.let { t ->
-                    CircleIconButton(XaosIcons.Edit, "Modifica il testo", { onEdit(t) }, size = 30.dp, outlined = false)
+                Text(t("TESTO"), style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.weight(1f))
+                track?.let { tr ->
+                    CircleIconButton(XaosIcons.Edit, t("Modifica il testo"), { onEdit(tr) }, size = 30.dp, outlined = false)
                 }
-                CircleIconButton(XaosIcons.Close, "Chiudi", onClose, size = 30.dp, outlined = false)
+                CircleIconButton(XaosIcons.Close, t("Chiudi"), onClose, size = 30.dp, outlined = false)
             }
             track?.let { t ->
                 Spacer(Modifier.height(6.dp))
                 Text(t.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(t.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(xaos.desktop.library.displayName(t.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(10.dp))
             Hairline()
@@ -249,7 +250,7 @@ fun MiniLyrics(player: Player, track: Track?, modifier: Modifier = Modifier) {
         LyricsLoad.Loading -> Box(modifier, contentAlignment = Alignment.Center) { DotSpinner(size = 16.dp) }
         LyricsLoad.Missing -> Box(modifier, contentAlignment = Alignment.Center) {
             Text(
-                if (track == null) "NIENTE IN RIPRODUZIONE" else "NESSUN TESTO",
+                if (track == null) t("NIENTE IN RIPRODUZIONE") else t("NESSUN TESTO"),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkTertiary,
             )

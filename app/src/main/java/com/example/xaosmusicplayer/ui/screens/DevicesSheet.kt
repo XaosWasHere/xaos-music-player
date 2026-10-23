@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.beam.BeamConnect
 import com.example.xaosmusicplayer.data.Song
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.components.AccentDot
 import com.example.xaosmusicplayer.ui.components.Artwork
 import com.example.xaosmusicplayer.ui.components.PillButton
@@ -59,14 +60,14 @@ fun DevicesSheet(
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("DISPOSITIVI", style = MaterialTheme.typography.titleMedium, color = colors.ink)
+            Text(t("DISPOSITIVI"), style = MaterialTheme.typography.titleMedium, color = colors.ink)
 
             // Solo l'altro dispositivo: cosa suona e come spostare l'ascolto. I
             // comandi stanno già nel player, che segue il dispositivo attivo.
             if (pcName == null || pc == null) {
                 Text(
-                    if (pcName == null) "Nessun PC abbinato: accendi Xaos Beam e abbina il PC per vederlo e comandarlo da qui."
-                    else "$pcName non è raggiungibile in questo momento.",
+                    if (pcName == null) t("Nessun PC abbinato: accendi Xaos Beam e abbina il PC per vederlo e comandarlo da qui.")
+                    else t("%s non è raggiungibile in questo momento.", pcName),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.inkTertiary,
                 )
@@ -74,7 +75,7 @@ fun DevicesSheet(
             } else {
                 DeviceLine(
                     name = pcName.uppercase(),
-                    detail = if (pc.hasTrack) "${pc.title} · ${pc.artist}" else "Niente in riproduzione",
+                    detail = if (pc.hasTrack) "${pc.title} · ${pc.artist}" else t("Niente in riproduzione"),
                     live = pc.playing && pc.hasTrack,
                     artwork = pc.pcId?.let(BeamConnect::artworkUrl)?.let(Uri::parse),
                     icon = true,
@@ -83,10 +84,10 @@ fun DevicesSheet(
                     // "Ascolta qui" non serve se qui sta già suonando qualcosa;
                     // "Manda al PC" non serve se suona già solo il PC.
                     if (pc.hasTrack && pc.queue.isNotEmpty() && !phonePlaying) {
-                        PillButton("ASCOLTA QUI", onClick = { onTakeFromPc(); onDismiss() }, icon = XaosIcons.Play, filled = true)
+                        PillButton(t("ASCOLTA QUI"), onClick = { onTakeFromPc(); onDismiss() }, icon = XaosIcons.Play, filled = true)
                     }
                     if (phoneSong != null && (phonePlaying || !pc.playing)) {
-                        PillButton("MANDA AL PC", onClick = { onSendToPc(); onDismiss() }, icon = XaosIcons.Computer)
+                        PillButton(t("MANDA AL PC"), onClick = { onSendToPc(); onDismiss() }, icon = XaosIcons.Computer)
                     }
                 }
             }

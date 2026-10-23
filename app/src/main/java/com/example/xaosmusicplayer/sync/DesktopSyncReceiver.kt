@@ -8,6 +8,7 @@ import com.example.xaosmusicplayer.data.PlayEvent
 import com.example.xaosmusicplayer.data.Playlist
 import com.example.xaosmusicplayer.data.PlaylistCovers
 import com.example.xaosmusicplayer.data.UserPreferences
+import com.example.xaosmusicplayer.i18n.I18n
 import com.example.xaosmusicplayer.ui.theme.CustomTheme
 import com.example.xaosmusicplayer.ui.theme.ThemePreset
 import com.example.xaosmusicplayer.ui.theme.ThemeStore
@@ -36,6 +37,8 @@ import java.io.File
 class DesktopSyncReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Può arrivare senza che l'activity sia mai partita.
+        I18n.init(context)
         val pending = goAsync()
         val app = context.applicationContext
         scope.launch {

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.SubcomposeAsyncImage
 import com.example.xaosmusicplayer.data.Song
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import java.util.Locale
@@ -133,7 +134,7 @@ fun SongRow(
                 )
             }
             Text(
-                text = song.artist,
+                text = com.example.xaosmusicplayer.data.MusicRepository.displayName(song.artist),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkSecondary,
                 maxLines = 1,
@@ -152,7 +153,7 @@ fun SongRow(
         IconButton(onClick = onMenuClick) {
             Icon(
                 imageVector = XaosIcons.Sort,
-                contentDescription = "Opzioni brano",
+                contentDescription = t("Opzioni brano"),
                 tint = colors.inkTertiary,
                 modifier = Modifier.size(18.dp),
             )
@@ -182,7 +183,7 @@ fun PcDownloadButton(song: Song, modifier: Modifier = Modifier) {
             else -> IconButton(onClick = { com.example.xaosmusicplayer.beam.Beam.download(listOf(song)) }) {
                 Icon(
                     imageVector = XaosIcons.Download,
-                    contentDescription = "Solo sul PC: scarica sul telefono",
+                    contentDescription = t("Solo sul PC: scarica sul telefono"),
                     tint = if (state is com.example.xaosmusicplayer.beam.Beam.Download.Failed) colors.accentInk else colors.inkTertiary,
                     modifier = Modifier.size(18.dp),
                 )
@@ -228,7 +229,7 @@ fun AlbumCell(
                 ) {
                     Icon(
                         imageVector = XaosIcons.Download,
-                        contentDescription = "Brani solo sul PC",
+                        contentDescription = t("Brani solo sul PC"),
                         tint = colors.ink,
                         modifier = Modifier.size(16.dp),
                     )

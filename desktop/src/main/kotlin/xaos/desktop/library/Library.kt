@@ -15,6 +15,7 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import xaos.desktop.i18n.t
 import xaos.desktop.sync.SongMatcher
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -57,6 +58,14 @@ data class Track(
     /** Il percorso principale e tutti quelli dei file uniti a lui. */
     val allPaths: List<String> get() = listOf(path) + aliases
 }
+
+/**
+ * Il nome di un artista o di un album come si mostra. I segnaposto
+ * ([Library.UNKNOWN_ARTIST], [Library.UNKNOWN_ALBUM]) restano in italiano
+ * nell'indice e nei raggruppamenti: si traducono solo qui.
+ */
+fun displayName(name: String): String =
+    if (name == Library.UNKNOWN_ARTIST || name == Library.UNKNOWN_ALBUM) t(name) else name
 
 /** Se accanto al brano c'è un file .lrc con il testo. */
 fun Track.hasLyricsFile(): Boolean =

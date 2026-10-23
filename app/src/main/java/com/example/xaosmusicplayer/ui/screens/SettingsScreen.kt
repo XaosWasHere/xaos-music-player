@@ -2,6 +2,9 @@ package com.example.xaosmusicplayer.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,9 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.xaosmusicplayer.i18n.I18n
+import com.example.xaosmusicplayer.i18n.Language
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.components.Hairline
 import com.example.xaosmusicplayer.ui.components.SectionHeader
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
@@ -65,18 +73,18 @@ fun SettingsScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader(title = "IMPOSTAZIONI", onBack = onBack)
+        ScreenHeader(title = t("IMPOSTAZIONI"), onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
-            Group("ASPETTO")
+            Group(t("ASPETTO"))
             SettingRow(
                 icon = XaosIcons.Contrast,
-                title = "TEMA SCURO",
-                hint = if (custom.enabled) "Il tema di partenza per i colori personalizzati" else "Nero, oppure chiaro come la carta",
+                title = t("TEMA SCURO"),
+                hint = if (custom.enabled) t("Il tema di partenza per i colori personalizzati") else t("Nero, oppure chiaro come la carta"),
                 onClick = store::toggle,
                 trailing = {
                     Switch(
@@ -95,36 +103,43 @@ fun SettingsScreen(
             )
             SettingRow(
                 icon = XaosIcons.Edit,
-                title = "PERSONALIZZA TEMA",
-                hint = if (custom.enabled) "Attivo · preset condivisi col PC" else "Sfondo, pannelli, testo, accento e preset",
+                title = t("PERSONALIZZA TEMA"),
+                hint = if (custom.enabled) t("Attivo · preset condivisi col PC") else t("Sfondo, pannelli, testo, accento e preset"),
                 onClick = onOpenTheme,
             )
 
-            Group("RIPRODUZIONE")
+            Group(t("LINGUA"))
+            LanguageSelector(
+                selected = I18n.choice,
+                onSelect = { I18n.setChoice(context, it) },
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+
+            Group(t("RIPRODUZIONE"))
             SettingRow(
                 icon = XaosIcons.Equalizer,
-                title = "EQUALIZZATORE",
-                hint = "Bande, preamplificazione, bass boost e virtualizer",
+                title = t("EQUALIZZATORE"),
+                hint = t("Bande, preamplificazione, bass boost e virtualizer"),
                 onClick = onOpenEqualizer,
             )
             SettingRow(
                 icon = XaosIcons.Timer,
-                title = "SLEEP TIMER",
-                hint = sleepRemainingMs?.let { "Attivo: ancora ${formatMinutes(it)}" } ?: "Ferma la musica dopo un po'",
+                title = t("SLEEP TIMER"),
+                hint = sleepRemainingMs?.let { t("Attivo: ancora %s", formatMinutes(it)) } ?: t("Ferma la musica dopo un po'"),
                 onClick = onOpenSleepTimer,
             )
 
-            Group("LIBRERIA")
+            Group(t("LIBRERIA"))
             SettingRow(
                 icon = XaosIcons.Sync,
-                title = "RISCANSIONA",
-                hint = "Rilegge la musica del telefono",
+                title = t("RISCANSIONA"),
+                hint = t("Rilegge la musica del telefono"),
                 onClick = onRescan,
             )
             SettingRow(
                 icon = XaosIcons.Download,
-                title = "AGGIORNA MOTORE DOWNLOAD",
-                hint = "Scarica l'ultima versione di yt-dlp, se i download non vanno",
+                title = t("AGGIORNA MOTORE DOWNLOAD"),
+                hint = t("Scarica l'ultima versione di yt-dlp, se i download non vanno"),
                 onClick = onUpdateEngine,
             )
 
@@ -132,8 +147,8 @@ fun SettingsScreen(
             SettingRow(
                 icon = XaosIcons.Computer,
                 title = "XAOS BEAM",
-                hint = if (!beamOn) "Ascolta la libreria del PC in Wi-Fi, senza copiarla"
-                else beamPc?.let { "${it.name} · ${statusText(beamStatus).lowercase()}" } ?: "Acceso · nessun PC abbinato",
+                hint = if (!beamOn) t("Ascolta la libreria del PC in Wi-Fi, senza copiarla")
+                else beamPc?.let { "${it.name} · ${statusText(beamStatus).lowercase()}" } ?: t("Acceso · nessun PC abbinato"),
                 onClick = onOpenBeam,
                 trailing = {
                     Switch(
@@ -145,16 +160,16 @@ fun SettingsScreen(
             )
             SettingRow(
                 icon = XaosIcons.Sync,
-                title = "DISPOSITIVI",
-                hint = "Cerca i PC in rete e abbina questo telefono",
+                title = t("DISPOSITIVI"),
+                hint = t("Cerca i PC in rete e abbina questo telefono"),
                 onClick = onOpenBeam,
             )
 
-            Group("INFO")
+            Group(t("INFO"))
             SettingRow(
                 icon = XaosIcons.MusicNote,
                 title = "XAOS $version",
-                hint = "Il progetto su GitHub",
+                hint = t("Il progetto su GitHub"),
                 onClick = {
                     runCatching {
                         context.startActivity(
@@ -172,7 +187,59 @@ private const val GITHUB_URL = "https://github.com/XaosWasHere/xaos-music-player
 
 private fun formatMinutes(ms: Long): String {
     val minutes = (ms + 59_999) / 60_000
-    return if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
+    return if (minutes >= 60) t("%d h %d min", minutes / 60, minutes % 60) else t("%d min", minutes)
+}
+
+/**
+ * La lingua dell'app, in una capsula come le modalità dello sfondo:
+ * automatica (quella del telefono) o una delle lingue, col nome nella lingua stessa.
+ */
+@Composable
+private fun LanguageSelector(
+    selected: Language?,
+    onSelect: (Language?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Xaos.colors
+    val shape = RoundedCornerShape(22.dp)
+    val options: List<Language?> = listOf(null) + Language.entries
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.card, shape)
+            .border(1.dp, colors.line, shape)
+            .padding(4.dp),
+    ) {
+        options.forEach { lang ->
+            val isSelected = lang == selected
+            val fill by animateColorAsState(
+                if (isSelected) colors.ink else Color.Transparent,
+                label = "lang-fill",
+            )
+            val tint by animateColorAsState(
+                if (isSelected) colors.background else colors.inkSecondary,
+                label = "lang-tint",
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(fill)
+                    .clickable { onSelect(lang) }
+                    .padding(vertical = 12.dp, horizontal = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = lang?.nativeName ?: t("AUTOMATICA"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
 
 @Composable

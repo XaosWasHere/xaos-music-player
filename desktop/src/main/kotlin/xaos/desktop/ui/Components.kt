@@ -52,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import xaos.desktop.i18n.t
 import xaos.desktop.theme.Xaos
 import kotlin.math.PI
 import kotlin.math.floor
@@ -117,6 +118,35 @@ fun Modifier.nothingCard(shape: Shape = CardShape): Modifier {
 /** Cliccabile con la manina sopra: su desktop è il segnale che si può premere. */
 fun Modifier.pressable(onClick: () -> Unit): Modifier =
     pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick)
+
+/**
+ * Il nome dell'artista che porta all'artista, come "Vai all'artista" dal
+ * menu del brano. Al passaggio del mouse si sottolinea: si capisce che è un
+ * collegamento. Senza [onClick] è un testo normale.
+ */
+@Composable
+fun ArtistLink(
+    name: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    if (onClick == null) {
+        androidx.compose.material3.Text(name, style = style, color = color, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = modifier)
+        return
+    }
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    androidx.compose.material3.Text(
+        name,
+        style = if (hovered) style.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) else style,
+        color = color,
+        maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        modifier = modifier.hoverable(source).pressable(onClick),
+    )
+}
 
 /** Riga che si illumina appena al passaggio del mouse. */
 @Composable
@@ -561,7 +591,7 @@ fun FavoriteButton(
         if (on || visible) {
             Icon(
                 if (on) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-                if (on) "Togli dai preferiti" else "Aggiungi ai preferiti",
+                if (on) t("Togli dai preferiti") else t("Aggiungi ai preferiti"),
                 tint = if (on) c.accentInk else c.inkSecondary,
                 modifier = Modifier.size(size * 0.56f),
             )

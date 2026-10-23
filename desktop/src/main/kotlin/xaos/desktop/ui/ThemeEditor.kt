@@ -44,14 +44,19 @@ import xaos.desktop.theme.customized
 import xaos.desktop.theme.DarkPalette
 import xaos.desktop.theme.LightPalette
 import xaos.desktop.theme.Xaos
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tc
 
 /** I colori del tema che si possono scegliere, e dove stanno in [CustomTheme]. */
-private enum class ThemeSlot(val label: String, val hint: String) {
+private enum class ThemeSlot(private val labelIt: String, private val hintIt: String) {
     BACKGROUND("SFONDO", "Il fondo di tutta l'app"),
     BACKGROUND2("SFUMATURA", "Il secondo colore dello sfondo, in diagonale"),
     PANELS("PANNELLI", "Schede, menu e finestre"),
     INK("TESTO", "Testo e icone; le tonalità più tenui se ne ricavano"),
-    ACCENT("ACCENTO", "Play, pallini d'accento, selezioni"),
+    ACCENT("ACCENTO", "Play, pallini d'accento, selezioni");
+
+    val label: String get() = tc(labelIt, "colore")
+    val hint: String get() = t(hintIt)
 }
 
 /**
@@ -61,16 +66,16 @@ private enum class ThemeSlot(val label: String, val hint: String) {
 @Composable
 fun ThemeEditor(prefs: SettingsData, settings: Settings) {
     val colors = Xaos.colors
-    val t = prefs.customTheme
+    val custom = prefs.customTheme
     val base = if (prefs.dark) DarkPalette else LightPalette
     var editing by remember { mutableStateOf<ThemeSlot?>(null) }
 
     fun current(slot: ThemeSlot): Color? = when (slot) {
-        ThemeSlot.BACKGROUND -> t.background
-        ThemeSlot.BACKGROUND2 -> t.background2
-        ThemeSlot.PANELS -> t.panels
-        ThemeSlot.INK -> t.ink
-        ThemeSlot.ACCENT -> t.accent
+        ThemeSlot.BACKGROUND -> custom.background
+        ThemeSlot.BACKGROUND2 -> custom.background2
+        ThemeSlot.PANELS -> custom.panels
+        ThemeSlot.INK -> custom.ink
+        ThemeSlot.ACCENT -> custom.accent
     }?.let { Color(it.toInt()) }
 
     fun fallback(slot: ThemeSlot): Color = when (slot) {
@@ -95,17 +100,21 @@ fun ThemeEditor(prefs: SettingsData, settings: Settings) {
         }
     }
 
-    Text("TEMA PERSONALIZZATO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+    Text(t("TEMA PERSONALIZZATO"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            if (t.enabled) "I tuoi colori, sopra il tema ${if (prefs.dark) "scuro" else "chiaro"}." else "Scegli i colori di sfondo, pannelli, testo e accento.",
+            when {
+                !custom.enabled -> t("Scegli i colori di sfondo, pannelli, testo e accento.")
+                prefs.dark -> t("I tuoi colori, sopra il tema scuro.")
+                else -> t("I tuoi colori, sopra il tema chiaro.")
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkSecondary,
             modifier = Modifier.weight(1f),
         )
-        XaosSwitch(t.enabled, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(enabled = on)) } })
+        XaosSwitch(custom.enabled, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(enabled = on)) } })
     }
-    if (t.enabled) {
+    if (custom.enabled) {
 
         ThemeSlot.entries.forEach { slot ->
             val value = current(slot)
@@ -118,26 +127,26 @@ fun ThemeEditor(prefs: SettingsData, settings: Settings) {
                 Column(Modifier.weight(1f)) {
                     Text(slot.label, style = MaterialTheme.typography.labelLarge, color = colors.ink)
                     Text(
-                        if (slot == ThemeSlot.BACKGROUND2 && value == null) "Nessuna: sfondo in tinta unita" else slot.hint,
+                        if (slot == ThemeSlot.BACKGROUND2 && value == null) t("Nessuna: sfondo in tinta unita") else slot.hint,
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkTertiary,
                     )
                 }
-                Text(value?.hex() ?: "PREDEFINITO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+                Text(value?.hex() ?: t("PREDEFINITO"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
                 if (value != null) {
                     Spacer(Modifier.width(8.dp))
-                    CircleIconButton(XaosIcons.Close, "Torna al predefinito", { set(slot, null) }, size = 26.dp, outlined = false)
+                    CircleIconButton(XaosIcons.Close, t("Torna al predefinito"), { set(slot, null) }, size = 26.dp, outlined = false)
                 }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("PALLINI DI SFONDO", style = MaterialTheme.typography.labelLarge, color = colors.ink)
-                Text("La griglia di punti dietro le schermate", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                Text(t("PALLINI DI SFONDO"), style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                Text(t("La griglia di punti dietro le schermate"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
             }
-            XaosSwitch(t.dots, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(dots = on)) } })
+            XaosSwitch(custom.dots, onChange = { on -> settings.update { it.copy(customTheme = it.customTheme.copy(dots = on)) } })
         }
-        PillButton("RIPRISTINA I COLORI", onClick = {
+        PillButton(t("RIPRISTINA I COLORI"), onClick = {
             settings.update { it.copy(customTheme = CustomTheme(enabled = true)) }
         }, icon = XaosIcons.Sync)
 
@@ -265,7 +274,7 @@ private fun ColorPickerDialog(title: String, initial: Color, onChange: (Color) -
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Swatch(colorOf(hue, sat, bri), size = 34.dp)
-                    XaosTextField("CODICE", hex, { typed ->
+                    XaosTextField(t("CODICE"), hex, { typed ->
                         hex = typed.uppercase().take(7)
                         val clean = typed.trim().removePrefix("#")
                         if (clean.length == 6) clean.toLongOrNull(16)?.let { setFrom(Color((0xFF000000 or it).toInt())) }
@@ -273,7 +282,7 @@ private fun ColorPickerDialog(title: String, initial: Color, onChange: (Color) -
                 }
             }
         },
-        confirmButton = { PillButton("FATTO", onClick = onDismiss, filled = true) },
+        confirmButton = { PillButton(t("FATTO"), onClick = onDismiss, filled = true) },
     )
 }
 
@@ -289,10 +298,10 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
     var renaming by remember { mutableStateOf<ThemePreset?>(null) }
 
     Spacer(Modifier.height(6.dp))
-    Text("PRESET", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+    Text(t("PRESET"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
     if (prefs.themePresets.isEmpty()) {
         Text(
-            "Salva i colori di adesso con un nome, per riapplicarli quando vuoi. I preset arrivano anche sul telefono.",
+            t("Salva i colori di adesso con un nome, per riapplicarli quando vuoi. I preset arrivano anche sul telefono."),
             style = MaterialTheme.typography.bodySmall,
             color = colors.inkTertiary,
         )
@@ -312,16 +321,16 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
             Column(Modifier.weight(1f)) {
                 Text(preset.name.uppercase(), style = MaterialTheme.typography.labelLarge, color = colors.ink)
                 Text(
-                    if (inUse) "IN USO" else "Clic per applicarlo",
+                    if (inUse) t("IN USO") else t("Clic per applicarlo"),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (inUse) colors.accentInk else colors.inkTertiary,
                 )
             }
-            CircleIconButton(XaosIcons.Edit, "Rinomina", { renaming = preset }, size = 28.dp, outlined = false)
+            CircleIconButton(XaosIcons.Edit, t("Rinomina"), { renaming = preset }, size = 28.dp, outlined = false)
             Spacer(Modifier.width(4.dp))
             CircleIconButton(
                 XaosIcons.Delete,
-                "Elimina il preset",
+                t("Elimina il preset"),
                 { settings.update { s -> s.copy(themePresets = s.themePresets.filter { it.id != preset.id }) } },
                 size = 28.dp,
                 outlined = false,
@@ -329,14 +338,14 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
         }
     }
     if (prefs.customTheme.enabled) {
-        PillButton("SALVA COME PRESET", onClick = { saving = true }, icon = XaosIcons.Add)
+        PillButton(t("SALVA COME PRESET"), onClick = { saving = true }, icon = XaosIcons.Add)
     }
 
     if (saving) {
         NameDialog(
-            title = "SALVA COME PRESET",
+            title = t("SALVA COME PRESET"),
             initial = "",
-            hint = "Con un nome già usato, quel preset prende i colori di adesso.",
+            hint = t("Con un nome già usato, quel preset prende i colori di adesso."),
             onConfirm = { name ->
                 saving = false
                 settings.update { s ->
@@ -353,7 +362,7 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
     }
     renaming?.let { preset ->
         NameDialog(
-            title = "RINOMINA",
+            title = t("RINOMINA"),
             initial = preset.name,
             hint = null,
             onConfirm = { name ->
@@ -376,12 +385,12 @@ private fun NameDialog(title: String, initial: String, hint: String?, onConfirm:
         title = { Text(title, style = MaterialTheme.typography.titleLarge, color = colors.ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                XaosTextField("NOME", name, { name = it.take(40) }, modifier = Modifier.width(300.dp), placeholder = "Notte, Carta, Ufficio…")
+                XaosTextField(t("NOME"), name, { name = it.take(40) }, modifier = Modifier.width(300.dp), placeholder = t("Notte, Carta, Ufficio…"))
                 if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
             }
         },
-        confirmButton = { PillButton("SALVA", onClick = { if (ok) onConfirm(name.trim()) }, filled = true, enabled = ok) },
-        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+        confirmButton = { PillButton(t("SALVA"), onClick = { if (ok) onConfirm(name.trim()) }, filled = true, enabled = ok) },
+        dismissButton = { PillButton(t("ANNULLA"), onClick = onDismiss) },
     )
 }
 

@@ -1,5 +1,7 @@
 package com.example.xaosmusicplayer.data
 
+import com.example.xaosmusicplayer.i18n.t
+
 /** Come si comporta lo sfondo della schermata di riproduzione. */
 enum class GlowMode {
     /** Matrice di punti che deriva e pulsa con l'audio. */
@@ -16,9 +18,9 @@ enum class GlowMode {
 
     val label: String
         get() = when (this) {
-            ANIMATED -> "MATRICE REATTIVA"
-            STATIC -> "MATRICE FISSA"
-            ARTWORK -> "COPERTINA"
-            OFF -> "MATRICE SPENTA"
+            ANIMATED -> t("MATRICE REATTIVA")
+            STATIC -> t("MATRICE FISSA")
+            ARTWORK -> t("COPERTINA")
+            OFF -> t("MATRICE SPENTA")
         }
 }

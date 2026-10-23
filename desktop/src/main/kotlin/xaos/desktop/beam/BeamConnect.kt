@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
 import xaos.desktop.library.Track
 import xaos.desktop.player.PlaySource
 import xaos.desktop.player.Player
+import xaos.desktop.i18n.t
 
 /** Il brano in corso su un dispositivo, quanto basta per mostrarlo. */
 @Serializable
@@ -298,7 +299,7 @@ class BeamConnect(
         if (tracks.isEmpty()) return
         val start = wanted?.let { w -> tracks.indexOfFirst { BeamServer.idOf(it.path) == w } }?.takeIf { it >= 0 } ?: 0
         // Parte già dal punto giusto: niente attimo di inizio brano.
-        player.playHere(tracks, start, PlaySource(PlaySource.Kind.SONGS, "beam", "DAL TELEFONO"), positionMs.coerceAtLeast(0))
+        player.playHere(tracks, start, PlaySource(PlaySource.Kind.SONGS, "beam", t("DAL TELEFONO")), positionMs.coerceAtLeast(0))
     }
 
     /**

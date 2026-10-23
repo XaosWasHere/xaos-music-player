@@ -28,6 +28,7 @@ import xaos.desktop.Settings
 import xaos.desktop.library.ArtworkLoader
 import xaos.desktop.library.Track
 import xaos.desktop.player.Player
+import xaos.desktop.i18n.t
 import java.io.BufferedWriter
 import java.io.File
 import java.util.concurrent.Executors
@@ -112,9 +113,9 @@ class TaskbarButtons private constructor(private val window: java.awt.Window, pr
         if (added) return
         val tb = list() ?: return
         val buttons = Structure.newInstance(ThumbButton::class.java).toArray(3).map { it as ThumbButton }
-        fill(buttons[0], ID_PREVIOUS, "previous", "Precedente")
+        fill(buttons[0], ID_PREVIOUS, "previous", t("Precedente"))
         fill(buttons[1], ID_PLAY, playIconName(), playTip())
-        fill(buttons[2], ID_NEXT, "next", "Successivo")
+        fill(buttons[2], ID_NEXT, "next", t("Successivo"))
         buttons.forEach { it.write() }
         val hr = tb.addButtons(hwnd, buttons.size, buttons[0].pointer)
         added = hr == 0
@@ -131,7 +132,7 @@ class TaskbarButtons private constructor(private val window: java.awt.Window, pr
     }
 
     private fun playIconName() = if (player.isPlaying.value) "pause" else "play"
-    private fun playTip() = if (player.isPlaying.value) "Pausa" else "Riproduci"
+    private fun playTip() = if (player.isPlaying.value) t("Pausa") else t("Riproduci")
 
     private fun fill(b: ThumbButton, id: Int, icon: String, tip: String) {
         b.dwMask = THB_ICON or THB_TOOLTIP or THB_FLAGS

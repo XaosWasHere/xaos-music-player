@@ -15,6 +15,8 @@ import android.text.TextPaint
 import android.text.TextUtils
 import androidx.compose.ui.graphics.toArgb
 import com.example.xaosmusicplayer.data.Lyrics
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tDot
 import com.example.xaosmusicplayer.ui.theme.XaosPalette
 import java.io.File
 import kotlin.math.max
@@ -83,7 +85,7 @@ internal object WidgetRenderer {
             val pad = side * 0.1f
             val width = side - pad * 2
             val label = textPaint(dot, palette.inkTertiary.toArgb(), side * 0.05f)
-            canvas.drawText("TESTO", pad, pad + label.textSize * 0.8f, label)
+            canvas.drawText(tDot("TESTO"), pad, pad + label.textSize * 0.8f, label)
 
             val previous = lyrics.lines.getOrNull(index - 1)?.text?.takeIf { it.isNotBlank() }
             val current = lyrics.lines.getOrNull(index)?.text?.takeIf { it.isNotBlank() } ?: "♪"
@@ -126,7 +128,7 @@ internal object WidgetRenderer {
             val big = textPaint(dot, palette.ink.toArgb(), side * 0.16f).apply { textAlign = Paint.Align.CENTER }
             canvas.drawText("XAOS", side / 2f, side * 0.5f, big)
             val small = textPaint(mono, palette.inkTertiary.toArgb(), side * 0.055f).apply { textAlign = Paint.Align.CENTER }
-            canvas.drawText("TOCCA PER APRIRE", side / 2f, side * 0.66f, small)
+            canvas.drawText(t("TOCCA PER APRIRE"), side / 2f, side * 0.66f, small)
             canvas.drawCircle(side * 0.5f, side * 0.25f, side * 0.022f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accent.toArgb() })
         }
 

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.File
+import xaos.desktop.i18n.t
 import java.util.concurrent.ConcurrentHashMap
 
 /** Un risultato della ricerca in rete. */
@@ -177,7 +178,7 @@ class YtDlp(private val scope: CoroutineScope) {
             }
             _search.value = result.fold(
                 onSuccess = { OnlineSearch.Results(query, it) },
-                onFailure = { OnlineSearch.Failed(it.message ?: "Ricerca non riuscita") },
+                onFailure = { OnlineSearch.Failed(it.message ?: t("Ricerca non riuscita")) },
             )
         }
     }
@@ -204,13 +205,13 @@ class YtDlp(private val scope: CoroutineScope) {
                 set(track.id, DownloadState.Completed(file))
                 onDone(file)
             }.onFailure {
-                set(track.id, DownloadState.Failed(it.message ?: "Download non riuscito"))
+                set(track.id, DownloadState.Failed(it.message ?: t("Download non riuscito")))
             }
         }
     }
 
     private fun runDownload(track: OnlineTrack, folder: File, ff: File): File {
-        val yt = exe ?: error("yt-dlp non trovato")
+        val yt = exe ?: error(t("yt-dlp non trovato"))
         folder.mkdirs()
         val process = ProcessBuilder(
             listOf(yt.path, track.url) + runtimeArgs() + listOf(
@@ -246,7 +247,7 @@ class YtDlp(private val scope: CoroutineScope) {
         }
         val code = process.waitFor()
         val file = finalPath?.let(::File)
-        if (code != 0 || file == null || !file.isFile) error(lastError ?: "yt-dlp ha terminato con errore ($code)")
+        if (code != 0 || file == null || !file.isFile) error(lastError ?: t("yt-dlp ha terminato con errore (%d)", code))
         return file
     }
 

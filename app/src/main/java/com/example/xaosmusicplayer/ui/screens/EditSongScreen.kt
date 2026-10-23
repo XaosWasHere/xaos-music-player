@@ -49,6 +49,7 @@ import com.example.xaosmusicplayer.data.SongOverride
 import com.example.xaosmusicplayer.ui.components.Artwork
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import kotlinx.coroutines.launch
+import com.example.xaosmusicplayer.i18n.t
 
 /**
  * Correzione dei metadati di un brano.
@@ -111,7 +112,7 @@ fun EditSongScreen(
             .statusBarsPadding(),
     ) {
         ScreenHeader(
-            title = "MODIFICA",
+            title = t("MODIFICA"),
             onBack = onBack,
             trailing = {
                 TextButton(
@@ -139,7 +140,7 @@ fun EditSongScreen(
                     },
                 ) {
                     Text(
-                        text = "SALVA",
+                        text = t("SALVA"),
                         style = MaterialTheme.typography.labelLarge,
                         color = Xaos.colors.onAccent,
                         modifier = Modifier
@@ -182,7 +183,7 @@ fun EditSongScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "TOCCA PER CAMBIARE COPERTINA",
+                    text = t("TOCCA PER CAMBIARE COPERTINA"),
                     style = MaterialTheme.typography.labelMedium,
                     color = Xaos.colors.inkSecondary,
                 )
@@ -190,10 +191,10 @@ fun EditSongScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            LabeledTextField(label = "TITOLO", value = title, onValueChange = { title = it })
+            LabeledTextField(label = t("TITOLO"), value = title, onValueChange = { title = it })
 
             SuggestingField(
-                label = "ARTISTA (CREDITO)",
+                label = t("ARTISTA (CREDITO)"),
                 value = artist,
                 suggestions = knownArtists,
                 onValueChange = { artist = it },
@@ -203,28 +204,28 @@ fun EditSongScreen(
                 // Il credito sopra è quello che si legge sulla traccia; questo
                 // decide sotto quale artista il brano viene raggruppato, come
                 // fa l'"artista dell'album" nei tag.
-                label = "ARTISTA PRINCIPALE",
+                label = t("ARTISTA PRINCIPALE"),
                 value = ownerValue,
                 suggestions = knownArtists,
                 onValueChange = { ownerTouched = true; albumArtist = it },
             )
 
             SuggestingField(
-                label = "ALBUM",
+                label = t("ALBUM"),
                 value = album,
                 suggestions = knownAlbums,
                 onValueChange = { album = it },
             )
 
             SuggestingField(
-                label = "GENERE",
+                label = t("GENERE"),
                 value = genre,
                 suggestions = knownGenres,
                 onValueChange = { genre = it },
             )
 
             LabeledTextField(
-                label = "N. TRACCIA",
+                label = t("N. TRACCIA"),
                 value = track,
                 // Solo cifre: il campo decide una posizione, non è testo libero.
                 onValueChange = { input -> track = input.filter { it.isDigit() }.take(3) },
@@ -235,7 +236,7 @@ fun EditSongScreen(
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = onReset) {
                     Text(
-                        text = "RIPRISTINA DATI ORIGINALI",
+                        text = t("RIPRISTINA DATI ORIGINALI"),
                         style = MaterialTheme.typography.titleMedium,
                         color = Xaos.colors.inkSecondary,
                     )

@@ -26,6 +26,7 @@ import xaos.desktop.beam.BeamServer
 import xaos.desktop.beam.ConnectedPhone
 import xaos.desktop.player.Player
 import xaos.desktop.theme.Xaos
+import xaos.desktop.i18n.t
 
 /**
  * Il pulsante dei dispositivi nella barra del player, come su Spotify: si
@@ -38,7 +39,7 @@ fun DevicesButton(beam: BeamServer, player: Player) {
     var open by remember { mutableStateOf(false) }
     val someonePlaying = phones.values.any { it.now.playing && it.now.track != null }
     Box {
-        ModeButton(XaosIcons.Phone, "Dispositivi", someonePlaying) { open = true }
+        ModeButton(XaosIcons.Phone, t("Dispositivi"), someonePlaying) { open = true }
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -58,10 +59,10 @@ private fun DevicesPanel(beam: BeamServer, player: Player) {
     // Solo gli altri dispositivi: cosa suonano e come spostare l'ascolto. I
     // comandi stanno già nella barra del player, che segue chi suona.
     Column(Modifier.width(360.dp).padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("DISPOSITIVI")
+        SectionHeader(t("DISPOSITIVI"))
         if (phones.isEmpty()) {
             Text(
-                "Nessun telefono collegato. Sul telefono apri Xaos con Beam acceso e abbinato a questo PC.",
+                t("Nessun telefono collegato. Sul telefono apri Xaos con Beam acceso e abbinato a questo PC."),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
             )
@@ -78,7 +79,7 @@ private fun PhoneDevice(phone: ConnectedPhone, beam: BeamServer, hasPcTrack: Boo
     val track = phone.now.track
     DeviceHeader(
         name = phone.name.uppercase(),
-        detail = track?.let { "${it.title} · ${it.artist}" } ?: "Niente in riproduzione",
+        detail = track?.let { "${it.title} · ${xaos.desktop.library.displayName(it.artist)}" } ?: t("Niente in riproduzione"),
         live = phone.now.playing && track != null,
         icon = XaosIcons.Phone,
     )
@@ -90,10 +91,10 @@ private fun PhoneDevice(phone: ConnectedPhone, beam: BeamServer, hasPcTrack: Boo
         // qui sta già suonando qualcosa, non serve. "Manda al telefono" non
         // serve se suona già solo il telefono.
         if (track != null && phone.now.queue.any { it != null } && !pcPlaying) {
-            PillButton("ASCOLTA QUI", onClick = { beam.connect.takeFromPhone(phone.name) }, icon = XaosIcons.Play, filled = true)
+            PillButton(t("ASCOLTA QUI"), onClick = { beam.connect.takeFromPhone(phone.name) }, icon = XaosIcons.Play, filled = true)
         }
         if (hasPcTrack && (pcPlaying || !phone.now.playing)) {
-            PillButton("MANDA AL TELEFONO", onClick = { beam.connect.transferToPhone(phone.name) }, icon = XaosIcons.Phone)
+            PillButton(t("MANDA AL TELEFONO"), onClick = { beam.connect.transferToPhone(phone.name) }, icon = XaosIcons.Phone)
         }
     }
 }

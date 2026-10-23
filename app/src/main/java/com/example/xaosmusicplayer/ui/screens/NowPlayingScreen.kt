@@ -68,6 +68,7 @@ import androidx.media3.common.Player
 import com.example.xaosmusicplayer.audio.AudioLevels
 import com.example.xaosmusicplayer.data.GlowMode
 import com.example.xaosmusicplayer.data.Lyrics
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.data.LyricsState
 import com.example.xaosmusicplayer.data.Song
 import com.example.xaosmusicplayer.ui.components.Artwork
@@ -316,6 +317,7 @@ fun NowPlayingScreen(
                         onToggleFavorite = onToggleFavorite,
                         onNext = onNext,
                         onPrevious = onPrevious,
+                        onArtistClick = onGoToArtist,
                         modifier = if (lyrics == null) Modifier else Modifier.draggable(
                             orientation = Orientation.Vertical,
                             state = rememberDraggableState { delta -> drag(delta) },
@@ -438,6 +440,8 @@ private fun MorphingHeader(
     onToggleFavorite: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    /** Il nome dell'artista porta all'artista, come "Vai all'artista" dal menu. */
+    onArtistClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val artworkSize = lerpDp(artworkMax, ARTWORK_MIN.dp, collapse)
@@ -502,7 +506,7 @@ private fun MorphingHeader(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = song.artist,
+                text = com.example.xaosmusicplayer.data.MusicRepository.displayName(song.artist),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontSize = lerpSp(ARTIST_SIZE_MAX.sp, ARTIST_SIZE_MIN.sp, collapse),
                 ),
@@ -512,7 +516,14 @@ private fun MorphingHeader(
                 // è lunga almeno quanto lui, e due righe attaccate che si
                 // comportano in modo diverso stonerebbero.
                 softWrap = false,
-                modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = onArtistClick,
+                    )
+                    .basicMarquee(iterations = Int.MAX_VALUE),
             )
         }
     }
@@ -711,7 +722,7 @@ private fun ResyncButton(
         )
         Spacer(Modifier.size(6.dp))
         Text(
-            text = "TORNA AL PUNTO",
+            text = t("TORNA AL PUNTO"),
             style = MaterialTheme.typography.labelMedium,
             color = palette.onAccent,
         )
@@ -737,7 +748,7 @@ private fun TopBar(
         IconButton(onClick = onCollapse) {
             Icon(
                 imageVector = XaosIcons.ChevronDown,
-                contentDescription = "Chiudi",
+                contentDescription = t("Chiudi"),
                 tint = content,
             )
         }
@@ -746,12 +757,12 @@ private fun TopBar(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = if (device != null) "IN RIPRODUZIONE SU" else "IN RIPRODUZIONE DA",
+                text = if (device != null) t("IN RIPRODUZIONE SU") else t("IN RIPRODUZIONE DA"),
                 style = MaterialTheme.typography.labelSmall,
                 color = content.copy(alpha = 0.55f),
             )
             Text(
-                text = (device ?: song.album).uppercase(),
+                text = (device ?: com.example.xaosmusicplayer.data.MusicRepository.displayName(song.album)).uppercase(),
                 style = MaterialTheme.typography.labelLarge,
                 color = content,
                 maxLines = 1,
@@ -761,7 +772,7 @@ private fun TopBar(
         IconButton(onClick = onOpenOptions) {
             Icon(
                 imageVector = XaosIcons.More,
-                contentDescription = "Altre opzioni",
+                contentDescription = t("Altre opzioni"),
                 tint = content,
             )
         }
@@ -900,7 +911,7 @@ private fun TransportControls(
     ) {
         ModeToggle(
             icon = XaosIcons.Shuffle,
-            description = "Riproduzione casuale",
+            description = t("Riproduzione casuale"),
             active = shuffleEnabled,
             content = content,
             dimmed = dimmed,
@@ -910,7 +921,7 @@ private fun TransportControls(
         IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
             Icon(
                 imageVector = XaosIcons.Previous,
-                contentDescription = "Brano precedente",
+                contentDescription = t("Brano precedente"),
                 tint = content,
                 modifier = Modifier.size(34.dp),
             )
@@ -926,13 +937,13 @@ private fun TransportControls(
                 .clickable(onClick = onPlayPause),
             contentAlignment = Alignment.Center,
         ) {
-            PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", palette.onAccent, glyphSize = 34.dp)
+            PlayPauseGlyph(isPlaying, if (isPlaying) t("Pausa") else t("Riproduci"), palette.onAccent, glyphSize = 34.dp)
         }
 
         IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
             Icon(
                 imageVector = XaosIcons.Next,
-                contentDescription = "Brano successivo",
+                contentDescription = t("Brano successivo"),
                 tint = content,
                 modifier = Modifier.size(34.dp),
             )
@@ -941,7 +952,7 @@ private fun TransportControls(
         ModeToggle(
             icon = if (repeatMode == Player.REPEAT_MODE_ONE) XaosIcons.RepeatOne
             else XaosIcons.Repeat,
-            description = "Ripetizione",
+            description = t("Ripetizione"),
             active = repeatMode != Player.REPEAT_MODE_OFF,
             content = content,
             dimmed = dimmed,
@@ -1001,7 +1012,7 @@ private fun FavoriteButton(
     IconButton(onClick = onClick, modifier = modifier) {
         Icon(
             imageVector = if (isFavorite) XaosIcons.Favorite else XaosIcons.FavoriteBorder,
-            contentDescription = if (isFavorite) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+            contentDescription = if (isFavorite) t("Rimuovi dai preferiti") else t("Aggiungi ai preferiti"),
             tint = if (isFavorite) activeTint else content.copy(alpha = 0.7f),
             modifier = Modifier.size(24.dp),
         )
@@ -1059,7 +1070,7 @@ private fun BottomRow(
             IconButton(onClick = onOpenDevices) {
                 Icon(
                     imageVector = XaosIcons.Computer,
-                    contentDescription = "Dispositivi",
+                    contentDescription = t("Dispositivi"),
                     tint = content,
                     modifier = Modifier.size(22.dp),
                 )
@@ -1069,7 +1080,7 @@ private fun BottomRow(
         IconButton(onClick = onOpenQueue) {
             Icon(
                 imageVector = XaosIcons.Queue,
-                contentDescription = "Coda di riproduzione",
+                contentDescription = t("Coda di riproduzione"),
                 tint = content,
                 modifier = Modifier.size(22.dp),
             )

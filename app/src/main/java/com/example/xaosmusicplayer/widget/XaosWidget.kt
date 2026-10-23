@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import com.example.xaosmusicplayer.i18n.I18n
 
 /**
  * Il widget quadrato: copertina e, scorrendo in verticale, il testo in
@@ -22,6 +23,8 @@ class XaosWidget : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Da qui passano anche onUpdate e il ridimensionamento: la lingua prima di disegnare.
+        I18n.init(context)
         if (intent.action == ACTION_TAP) {
             // Un tocco su una pagina qualsiasi: play o pausa. Se la musica non
             // è mai partita (servizio spento), apre l'app.

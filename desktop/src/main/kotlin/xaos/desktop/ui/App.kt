@@ -50,12 +50,14 @@ import xaos.desktop.online.YtDlp
 import xaos.desktop.library.UserData
 import xaos.desktop.sync.DataSync
 import androidx.compose.runtime.CompositionLocalProvider
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tc
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 import xaos.desktop.theme.appBackground
 
 /** Le sezioni della barra laterale. */
-enum class Section(val label: String, val icon: ImageVector) {
+enum class Section(private val italian: String, val icon: ImageVector) {
     ALBUMS("ALBUM", XaosIcons.Album),
     SONGS("BRANI", XaosIcons.MusicNote),
     ARTISTS("ARTISTI", XaosIcons.Person),
@@ -63,7 +65,10 @@ enum class Section(val label: String, val icon: ImageVector) {
     PLAYLISTS("PLAYLIST", XaosIcons.PlaylistMusic),
     STATS("ASCOLTI", XaosIcons.Stats),
     PHONE("TELEFONO", XaosIcons.Phone),
-    SETTINGS("IMPOSTAZIONI", XaosIcons.Settings),
+    SETTINGS("IMPOSTAZIONI", XaosIcons.Settings);
+
+    /** Il nome nella lingua dell'app. */
+    val label: String get() = tc(italian, "sezione")
 }
 
 /** Le sezioni della navigazione principale; le impostazioni stanno in fondo, a parte. */
@@ -441,7 +446,7 @@ private fun Sidebar(
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                if (update != null) "NUOVA VERSIONE ${update.version} · SCARICALA" else "MUSIC PLAYER · DESKTOP",
+                if (update != null) t("NUOVA VERSIONE %s · SCARICALA", update.version) else t("MUSIC PLAYER · DESKTOP"),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (update != null) colors.accentInk else colors.inkTertiary,
             )
@@ -476,9 +481,9 @@ private fun Sidebar(
         )
         Text(
             text = when (scan) {
-                is ScanState.Scanning -> "SCANSIONE ${scan.done}/${scan.total}"
-                is ScanState.Failed -> "ERRORE DI LETTURA"
-                ScanState.Idle -> "[$trackCount] BRANI IN LIBRERIA"
+                is ScanState.Scanning -> t("SCANSIONE %d/%d", scan.done, scan.total)
+                is ScanState.Failed -> t("ERRORE DI LETTURA")
+                ScanState.Idle -> t("[%d] BRANI IN LIBRERIA", trackCount)
             },
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
@@ -535,10 +540,10 @@ private fun NavItem(section: Section, selected: Boolean, badge: Boolean, onClick
 private fun PhoneStatusCard(state: PhoneState, onClick: () -> Unit) {
     val colors = Xaos.colors
     val (title, subtitle, live) = when (state) {
-        is PhoneState.Connected -> Triple(state.name.uppercase(), "COLLEGATO", true)
-        is PhoneState.Unauthorized -> Triple("TELEFONO", "CONFERMA SUL TELEFONO", false)
-        PhoneState.Disconnected -> Triple("NESSUN TELEFONO", "COLLEGA VIA USB", false)
-        PhoneState.NoAdb -> Triple("ADB NON TROVATO", "SERVE ANDROID PLATFORM-TOOLS", false)
+        is PhoneState.Connected -> Triple(state.name.uppercase(), t("COLLEGATO"), true)
+        is PhoneState.Unauthorized -> Triple(t("TELEFONO"), t("CONFERMA SUL TELEFONO"), false)
+        PhoneState.Disconnected -> Triple(t("NESSUN TELEFONO"), t("COLLEGA VIA USB"), false)
+        PhoneState.NoAdb -> Triple(t("ADB NON TROVATO"), t("SERVE ANDROID PLATFORM-TOOLS"), false)
     }
     Row(
         Modifier
@@ -571,7 +576,7 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (canGoBack) {
-            CircleIconButton(XaosIcons.Back, "Indietro", onBack)
+            CircleIconButton(XaosIcons.Back, t("Indietro"), onBack)
             Spacer(Modifier.width(12.dp))
         }
         val shape = RoundedCornerShape(50)
@@ -588,7 +593,7 @@ private fun TopBar(
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text("Cerca brani, album, artisti", style = MaterialTheme.typography.bodyMedium, color = colors.inkTertiary)
+                    Text(t("Cerca brani, album, artisti"), style = MaterialTheme.typography.bodyMedium, color = colors.inkTertiary)
                 }
                 BasicTextField(
                     value = query,
@@ -602,7 +607,7 @@ private fun TopBar(
             }
             if (query.isNotEmpty()) {
                 Icon(
-                    XaosIcons.Close, "Cancella",
+                    XaosIcons.Close, t("Cancella"),
                     tint = colors.inkSecondary,
                     modifier = Modifier.size(16.dp).pressable { onQueryChange("") },
                 )

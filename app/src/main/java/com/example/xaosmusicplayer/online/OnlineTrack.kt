@@ -1,5 +1,7 @@
 package com.example.xaosmusicplayer.online
 
+import com.example.xaosmusicplayer.i18n.t
+
 /** Un risultato di ricerca online, prima che diventi un file locale. */
 data class OnlineTrack(
     val id: String,
@@ -11,6 +13,20 @@ data class OnlineTrack(
     /** URL canonico da passare a yt-dlp per il download. */
     val pageUrl: String
         get() = "https://www.youtube.com/watch?v=$id"
+
+    companion object {
+        /**
+         * Segnaposto per i campi mancanti. Restano in italiano perché finiscono
+         * nei metadati del file scaricato: si traducono solo a video.
+         */
+        const val UNTITLED = "Senza titolo"
+        const val UNKNOWN_UPLOADER = "Sconosciuto"
+
+        fun displayName(name: String): String = when (name) {
+            UNTITLED, UNKNOWN_UPLOADER -> t(name)
+            else -> name
+        }
+    }
 }
 
 /** Avanzamento del download di un singolo brano. */

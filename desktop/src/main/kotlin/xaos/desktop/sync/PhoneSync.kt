@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import xaos.desktop.i18n.t
 import xaos.desktop.library.Library
 import xaos.desktop.library.TagEditor
 import xaos.desktop.library.Track
@@ -249,7 +250,7 @@ class PhoneSync(
                 _plan.value = it
                 if (_status.value is SyncStatus.Planning) _status.value = SyncStatus.Idle
             }
-            result.onFailure { _status.value = SyncStatus.Failed(it.message ?: "Impossibile leggere il telefono") }
+            result.onFailure { _status.value = SyncStatus.Failed(it.message ?: t("Impossibile leggere il telefono")) }
         }
     }
 
@@ -414,7 +415,7 @@ class PhoneSync(
                 _importPlan.value = it
                 if (_importStatus.value is ImportStatus.Planning) _importStatus.value = ImportStatus.Idle
             }
-            result.onFailure { _importStatus.value = ImportStatus.Failed(it.message ?: "Impossibile leggere il telefono") }
+            result.onFailure { _importStatus.value = ImportStatus.Failed(it.message ?: t("Impossibile leggere il telefono")) }
         }
     }
 
@@ -602,10 +603,9 @@ class PhoneSync(
                 val raw = out?.lineSequence()?.firstOrNull { it.contains("Failure") }?.trim()
                 val reason = when {
                     raw?.contains("UPDATE_INCOMPATIBLE") == true ->
-                        "l'app sul telefono è firmata con un'altra chiave. Per passare a questa va " +
-                            "disinstallata prima, e si perdono playlist e preferiti del telefono."
-                    raw?.contains("VERSION_DOWNGRADE") == true -> "sul telefono c'è già una versione più nuova."
-                    else -> raw ?: "installazione non riuscita"
+                        t("l'app sul telefono è firmata con un'altra chiave. Per passare a questa va disinstallata prima, e si perdono playlist e preferiti del telefono.")
+                    raw?.contains("VERSION_DOWNGRADE") == true -> t("sul telefono c'è già una versione più nuova.")
+                    else -> raw ?: t("installazione non riuscita")
                 }
                 _install.value = AppInstall.Failed(reason)
             }

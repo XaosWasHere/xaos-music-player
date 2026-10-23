@@ -18,6 +18,8 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.util.Log
 import com.example.xaosmusicplayer.data.YearlyRecap
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -52,7 +54,7 @@ class RecapCardRenderer(private val context: Context) {
         drawBackground(canvas, artwork)
 
         var y = 165f
-        y = drawTitle(canvas, "IL MIO ${recap.year}", y)
+        y = drawTitle(canvas, t("IL MIO %d", recap.year), y)
 
         // Il totale dell'anno sta in testa, sotto il titolo: i minuti che
         // compaiono più sotto sono quelli del solo artista di punta, e due
@@ -108,8 +110,8 @@ class RecapCardRenderer(private val context: Context) {
     /** Quanto ha suonato l'anno in totale, non il solo artista di punta. */
     private fun drawYearTotals(canvas: Canvas, recap: YearlyRecap, y: Float): Float {
         val paint = textPaint(34f, Color.WHITE).apply { textAlign = Paint.Align.CENTER }
-        val plays = if (recap.playCount == 1) "1 ASCOLTO" else "${recap.playCount} ASCOLTI"
-        canvas.drawText("${recap.minutesListened} MINUTI · $plays", WIDTH / 2f, y, paint)
+        val plays = if (recap.playCount == 1) t("1 ASCOLTO") else t("%d ASCOLTI", recap.playCount)
+        canvas.drawText(t("%d MINUTI · %s", recap.minutesListened, plays), WIDTH / 2f, y, paint)
         return y
     }
 
@@ -133,7 +135,7 @@ class RecapCardRenderer(private val context: Context) {
         // L'etichetta chiarisce che tutto il blocco — minuti compresi — parla
         // di questo artista e non dell'anno intero.
         val heading = textPaint(26f, GREY).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawText("ARTISTA DELL'ANNO", WIDTH / 2f, cursor, heading)
+        canvas.drawText(t("ARTISTA DELL'ANNO"), WIDTH / 2f, cursor, heading)
         cursor += 50f
 
         val name = textPaint(52f, RED, bold = true).apply { textAlign = Paint.Align.CENTER }
@@ -141,12 +143,12 @@ class RecapCardRenderer(private val context: Context) {
 
         cursor += 56f
         val minutes = textPaint(34f, Color.WHITE).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawText("${recap.topArtistMinutes} MINUTI", WIDTH / 2f, cursor, minutes)
+        canvas.drawText(t("%d MINUTI", recap.topArtistMinutes), WIDTH / 2f, cursor, minutes)
 
         recap.topArtistTopSong?.let { top ->
             cursor += 64f
             val label = textPaint(26f, GREY).apply { textAlign = Paint.Align.CENTER }
-            canvas.drawText("BRANO PIÙ ASCOLTATO", WIDTH / 2f, cursor, label)
+            canvas.drawText(t("BRANO PIÙ ASCOLTATO"), WIDTH / 2f, cursor, label)
 
             cursor += 44f
             val title = textPaint(36f, Color.WHITE).apply { textAlign = Paint.Align.CENTER }
@@ -167,8 +169,8 @@ class RecapCardRenderer(private val context: Context) {
         val columnWidth = WIDTH / 2f - MARGIN - 20f
 
         val header = textPaint(26f, GREY)
-        canvas.drawText("ALTRI ARTISTI", leftX, y, header)
-        canvas.drawText("BRANI DELL'ANNO", rightX, y, header)
+        canvas.drawText(t("ALTRI ARTISTI"), leftX, y, header)
+        canvas.drawText(t("BRANI DELL'ANNO"), rightX, y, header)
 
         val entry = textPaint(30f, Color.WHITE)
         val rank = textPaint(30f, RED, bold = true)
@@ -264,12 +266,12 @@ class RecapCardRenderer(private val context: Context) {
             val uri = resolver.insert(
                 MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
                 values,
-            ) ?: error("MediaStore ha rifiutato l'inserimento")
+            ) ?: error(tc("MediaStore ha rifiutato l'inserimento", "immagine"))
 
             try {
                 resolver.openOutputStream(uri)?.use { out ->
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                } ?: error("Impossibile scrivere su $uri")
+                } ?: error(t("Impossibile scrivere su %s", uri))
                 resolver.update(
                     uri,
                     ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },

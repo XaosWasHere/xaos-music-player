@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import com.example.xaosmusicplayer.i18n.t
 
 /**
  * yt-dlp incorporato nell'app.
@@ -83,11 +84,11 @@ class YtdlpEngine(private val context: Context) {
         val id = obj.optString("id").takeIf { it.isNotBlank() } ?: return null
         OnlineTrack(
             id = id,
-            title = obj.optString("title").ifBlank { "Senza titolo" },
+            title = obj.optString("title").ifBlank { OnlineTrack.UNTITLED },
             // A seconda dell'estrattore l'autore sta in uno di questi campi.
             uploader = listOf("uploader", "channel", "artist")
                 .firstNotNullOfOrNull { key -> obj.optString(key).takeIf { it.isNotBlank() } }
-                ?: "Sconosciuto",
+                ?: OnlineTrack.UNKNOWN_UPLOADER,
             durationMs = (obj.optDouble("duration", 0.0) * 1000).toLong(),
             thumbnailUrl = obj.optString("thumbnail").takeIf { it.isNotBlank() }
                 ?: obj.optJSONArray("thumbnails")?.let { arr ->
@@ -141,7 +142,7 @@ class YtdlpEngine(private val context: Context) {
                 restoreBundledYtdlp()
                 return@withContext Result.failure(
                     IllegalStateException(
-                        "Aggiornamento incompatibile, motore ripristinato. Riprova."
+                        t("Aggiornamento incompatibile, motore ripristinato. Riprova.")
                     )
                 )
             }
@@ -154,7 +155,7 @@ class YtdlpEngine(private val context: Context) {
             if (failure.isStreamRejected()) {
                 return@withContext Result.failure(
                     IllegalStateException(
-                        "YouTube ha rifiutato il download. Riprova fra qualche minuto."
+                        t("YouTube ha rifiutato il download. Riprova fra qualche minuto.")
                     )
                 )
             }
@@ -197,12 +198,12 @@ class YtdlpEngine(private val context: Context) {
                 if (lastError.isStreamRejected()) break
             }
         }
-        return lastError ?: IllegalStateException("Download fallito")
+        return lastError ?: IllegalStateException(t("Download fallito"))
     }
 
     private fun publish(track: OnlineTrack, trackDir: File): Result<Unit> {
         val audioFile = trackDir.listFiles()?.firstOrNull { it.isFile && it.length() > 0 }
-            ?: return Result.failure(IllegalStateException("yt-dlp non ha prodotto alcun file"))
+            ?: return Result.failure(IllegalStateException(t("yt-dlp non ha prodotto alcun file")))
         return LibraryPublisher(context).publish(
             source = audioFile,
             title = track.title,
@@ -317,9 +318,9 @@ class YtdlpEngine(private val context: Context) {
                 .updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE)
             Log.i(TAG, "Aggiornamento yt-dlp: $status")
             when (status?.name) {
-                "DONE" -> "Motore aggiornato"
-                "ALREADY_UP_TO_DATE" -> "Motore già aggiornato"
-                else -> "Aggiornamento: ${status?.name ?: "esito sconosciuto"}"
+                "DONE" -> t("Motore aggiornato")
+                "ALREADY_UP_TO_DATE" -> t("Motore già aggiornato")
+                else -> t("Aggiornamento: %s", status?.name ?: t("esito sconosciuto"))
             }
         }.onFailure { Log.e(TAG, "Aggiornamento di yt-dlp fallito", it) }
     }

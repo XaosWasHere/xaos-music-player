@@ -35,6 +35,8 @@ import com.example.xaosmusicplayer.ui.components.CircleIconButton
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 import java.io.File
+import com.example.xaosmusicplayer.i18n.t
+import com.example.xaosmusicplayer.i18n.tc
 
 /** La copertina di una playlist: quella scelta, altrimenti quella del primo brano. */
 fun Playlist.coverUri(firstSongArtwork: Uri?): Uri? =
@@ -69,21 +71,21 @@ fun PlaylistsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "PLAYLIST",
+                tc("PLAYLIST", "sezione"),
                 style = MaterialTheme.typography.headlineSmall,
                 color = Xaos.colors.ink,
                 modifier = Modifier.weight(1f),
             )
             CircleIconButton(
                 icon = XaosIcons.Add,
-                contentDescription = "Nuova playlist",
+                contentDescription = t("Nuova playlist"),
                 onClick = { showCreateDialog = true },
                 filled = true,
             )
             Spacer(Modifier.width(10.dp))
             CircleIconButton(
                 icon = XaosIcons.Settings,
-                contentDescription = "Impostazioni",
+                contentDescription = t("Impostazioni"),
                 onClick = onOpenSettings,
             )
         }
@@ -96,8 +98,8 @@ fun PlaylistsScreen(
         ) {
             item(key = "favorites") {
                 AlbumCell(
-                    title = "Preferiti",
-                    subtitle = "[$favoritesCount] brani",
+                    title = t("Preferiti"),
+                    subtitle = t("[%d] brani", favoritesCount),
                     artworkUri = null,
                     onClick = onOpenFavorites,
                 )
@@ -105,7 +107,7 @@ fun PlaylistsScreen(
             items(playlists, key = { it.id }) { playlist ->
                 AlbumCell(
                     title = playlist.name,
-                    subtitle = "[${playlist.songIds.size}] brani",
+                    subtitle = t("[%d] brani", playlist.songIds.size),
                     artworkUri = playlist.coverUri(artworkOf(playlist)),
                     onClick = { onOpen(playlist) },
                     onLongClick = { toDelete = playlist },
@@ -114,7 +116,7 @@ fun PlaylistsScreen(
             if (playlists.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "Crea una playlist con il + in alto, o dal menu di un brano.",
+                        t("Crea una playlist con il + in alto, o dal menu di un brano."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Xaos.colors.inkSecondary,
                         modifier = Modifier.padding(top = 12.dp),
@@ -126,7 +128,7 @@ fun PlaylistsScreen(
 
     if (showCreateDialog) {
         NameDialog(
-            title = "NUOVA PLAYLIST",
+            title = t("NUOVA PLAYLIST"),
             initialValue = "",
             onDismiss = { showCreateDialog = false },
             onConfirm = { name ->
@@ -146,22 +148,22 @@ fun DeletePlaylistDialog(playlist: Playlist, onDismiss: () -> Unit, onConfirm: (
         onDismissRequest = onDismiss,
         containerColor = Xaos.colors.surface,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        title = { Text("ELIMINARE \"${playlist.name.uppercase()}\"?", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        title = { Text(t("ELIMINARE \"%s\"?", playlist.name.uppercase()), style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
         text = {
             Text(
-                "I brani restano dove sono. La playlist sparisce anche dal PC alla prossima sincronizzazione.",
+                t("I brani restano dove sono. La playlist sparisce anche dal PC alla prossima sincronizzazione."),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Xaos.colors.inkSecondary,
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("ELIMINA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.accentInk)
+                Text(t("ELIMINA"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.accentInk)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+                Text(t("ANNULLA"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
             }
         },
     )
@@ -189,14 +191,14 @@ fun PlaylistInfoDialog(
         onDismissRequest = onDismiss,
         containerColor = Xaos.colors.surface,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        title = { Text("MODIFICA PLAYLIST", style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
+        title = { Text(t("MODIFICA PLAYLIST"), style = MaterialTheme.typography.titleLarge, color = Xaos.colors.ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
-                    label = { Text("Nome") },
+                    label = { Text(t("Nome")) },
                     textStyle = MaterialTheme.typography.bodyLarge,
                     colors = fieldColors,
                 )
@@ -205,18 +207,18 @@ fun PlaylistInfoDialog(
                     onValueChange = { description = it.take(DESCRIPTION_MAX) },
                     minLines = 2,
                     maxLines = 4,
-                    label = { Text("Descrizione") },
+                    label = { Text(t("Descrizione")) },
                     supportingText = { Text("${description.length}/$DESCRIPTION_MAX") },
                     textStyle = MaterialTheme.typography.bodyLarge,
                     colors = fieldColors,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onPickCover) {
-                        Text("SCEGLI COPERTINA", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
+                        Text(t("SCEGLI COPERTINA"), style = MaterialTheme.typography.labelLarge, color = Xaos.colors.ink)
                     }
                     if (playlist.coverPath != null) {
                         TextButton(onClick = onRemoveCover) {
-                            Text("TOGLI", style = MaterialTheme.typography.labelLarge, color = Xaos.colors.inkSecondary)
+                            Text(t("TOGLI"), style = MaterialTheme.typography.labelLarge, color = Xaos.colors.inkSecondary)
                         }
                     }
                 }
@@ -225,7 +227,7 @@ fun PlaylistInfoDialog(
         confirmButton = {
             TextButton(onClick = { onConfirm(name.trim(), description.trim()) }, enabled = name.isNotBlank()) {
                 Text(
-                    "SALVA",
+                    t("SALVA"),
                     style = MaterialTheme.typography.titleMedium,
                     color = if (name.isNotBlank()) Xaos.colors.accentInk else Xaos.colors.inkSecondary,
                 )
@@ -233,7 +235,7 @@ fun PlaylistInfoDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("ANNULLA", style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
+                Text(t("ANNULLA"), style = MaterialTheme.typography.titleMedium, color = Xaos.colors.inkSecondary)
             }
         },
     )
@@ -270,7 +272,7 @@ fun NameDialog(
                 singleLine = true,
                 placeholder = {
                     Text(
-                        text = "Nome",
+                        text = t("Nome"),
                         style = MaterialTheme.typography.bodyLarge,
                         color = Xaos.colors.inkSecondary,
                     )
@@ -291,7 +293,7 @@ fun NameDialog(
                 enabled = name.isNotBlank(),
             ) {
                 Text(
-                    text = "CONFERMA",
+                    text = t("CONFERMA"),
                     style = MaterialTheme.typography.titleMedium,
                     color = if (name.isNotBlank()) Xaos.colors.accentInk else Xaos.colors.inkSecondary,
                 )
@@ -300,7 +302,7 @@ fun NameDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "ANNULLA",
+                    text = t("ANNULLA"),
                     style = MaterialTheme.typography.titleMedium,
                     color = Xaos.colors.inkSecondary,
                 )

@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.xaosmusicplayer.data.Song
+import com.example.xaosmusicplayer.i18n.t
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
 
@@ -98,7 +99,7 @@ fun MiniPlayer(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = song.artist,
+                                text = com.example.xaosmusicplayer.data.MusicRepository.displayName(song.artist),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = colors.inkSecondary,
                                 maxLines = 1,
@@ -115,7 +116,7 @@ fun MiniPlayer(
                                     )
                                     Box(Modifier.size(5.dp))
                                     Text(
-                                        text = "SUL PC · ${device.uppercase()}",
+                                        text = t("SUL PC · %s", device.uppercase()),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = colors.accentInk,
                                         maxLines = 1,
@@ -135,12 +136,12 @@ fun MiniPlayer(
                                 .clickable(onClick = onPlayPause),
                             contentAlignment = Alignment.Center,
                         ) {
-                            PlayPauseGlyph(isPlaying, if (isPlaying) "Pausa" else "Riproduci", colors.onAccent, glyphSize = 20.dp)
+                            PlayPauseGlyph(isPlaying, if (isPlaying) t("Pausa") else t("Riproduci"), colors.onAccent, glyphSize = 20.dp)
                         }
                         IconButton(onClick = onNext) {
                             Icon(
                                 imageVector = XaosIcons.Next,
-                                contentDescription = "Brano successivo",
+                                contentDescription = t("Brano successivo"),
                                 tint = colors.ink,
                             )
                         }

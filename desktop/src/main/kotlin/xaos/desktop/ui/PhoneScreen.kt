@@ -47,6 +47,8 @@ import androidx.compose.ui.draw.rotate
 import xaos.desktop.sync.SyncStatus
 import xaos.desktop.sync.DataSync
 import xaos.desktop.sync.DataSyncStatus
+import xaos.desktop.i18n.t
+import xaos.desktop.i18n.tDot
 import xaos.desktop.theme.DotText
 import xaos.desktop.theme.Xaos
 import java.util.Locale
@@ -115,9 +117,9 @@ fun PhoneScreen(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 18.dp, bottom = 28.dp)) {
         item {
             ScreenTitle(
-                "TELEFONO",
-                caption = if (importMode) "IMPORTAZIONE VIA USB · SOLO COPIE, SUL TELEFONO NON CAMBIA NIENTE"
-                else "INVIO VIA USB · SOLO AGGIUNTE, NIENTE VIENE CANCELLATO",
+                tDot("TELEFONO"),
+                caption = if (importMode) t("IMPORTAZIONE VIA USB · SOLO COPIE, SUL TELEFONO NON CAMBIA NIENTE")
+                else t("INVIO VIA USB · SOLO AGGIUNTE, NIENTE VIENE CANCELLATO"),
                 trailing = if (state is PhoneState.Connected) {
                     { DirectionSelector(importMode) { importMode = it } }
                 } else null,
@@ -139,19 +141,16 @@ fun PhoneScreen(
         } else item {
             when (val s = state) {
                 PhoneState.NoAdb -> InfoCard(
-                    "ADB NON TROVATO",
-                    "Serve l'utilità adb di Android (platform-tools). Installala con Android Studio " +
-                        "o scaricala da developer.android.com, poi riavvia Xaos.",
+                    t("ADB NON TROVATO"),
+                    t("Serve l'utilità adb di Android (platform-tools). Installala con Android Studio o scaricala da developer.android.com, poi riavvia Xaos."),
                 )
                 PhoneState.Disconnected -> InfoCard(
-                    "COLLEGA IL TELEFONO",
-                    "Collegalo con il cavo USB e tieni attivo il Debug USB nelle Opzioni sviluppatore. " +
-                        "Xaos lo riconosce da solo in un paio di secondi.",
+                    t("COLLEGA IL TELEFONO"),
+                    t("Collegalo con il cavo USB e tieni attivo il Debug USB nelle Opzioni sviluppatore. Xaos lo riconosce da solo in un paio di secondi."),
                 )
                 is PhoneState.Unauthorized -> InfoCard(
-                    "CONFERMA SUL TELEFONO",
-                    "Sul telefono è comparso \"Consentire il debug USB?\": tocca Consenti " +
-                        "(e \"Consenti sempre da questo computer\", così non lo chiede più).",
+                    t("CONFERMA SUL TELEFONO"),
+                    t("Sul telefono è comparso \"Consentire il debug USB?\": tocca Consenti (e \"Consenti sempre da questo computer\", così non lo chiede più)."),
                 )
                 is PhoneState.Connected -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AppCard(
@@ -170,7 +169,7 @@ fun PhoneScreen(
                     ConnectedPanel(
                         state = s,
                         remoteRoot = phone.remoteRoot,
-                        formatLabel = if (preferMp3) "MP3 QUANDO C'È" else "ORIGINALE",
+                        formatLabel = if (preferMp3) t("MP3 QUANDO C'È") else t("ORIGINALE"),
                         plan = plan,
                         selected = selected,
                         status = status,
@@ -242,8 +241,8 @@ fun PhoneScreen(
 @Composable
 private fun DirectionSelector(importMode: Boolean, onChange: (Boolean) -> Unit) {
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        PillButton("INVIA AL TELEFONO", onClick = { onChange(false) }, icon = XaosIcons.Phone, filled = !importMode)
-        PillButton("IMPORTA DAL TELEFONO", onClick = { onChange(true) }, icon = XaosIcons.Download, filled = importMode)
+        PillButton(t("INVIA AL TELEFONO"), onClick = { onChange(false) }, icon = XaosIcons.Phone, filled = !importMode)
+        PillButton(t("IMPORTA DAL TELEFONO"), onClick = { onChange(true) }, icon = XaosIcons.Download, filled = importMode)
     }
 }
 
@@ -337,9 +336,9 @@ private fun ImportPanel(
             Icon(XaosIcons.Folder, null, tint = colors.ink, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("SUL PC IN", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                Text(t("SUL PC IN"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                 Text(
-                    folder ?: "Aggiungi una cartella di musica nelle impostazioni",
+                    folder ?: t("Aggiungi una cartella di musica nelle impostazioni"),
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.ink,
                     maxLines = 1,
@@ -364,47 +363,48 @@ private fun ImportPanel(
                     DotSpinner(size = 16.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(status.name, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    PillButton("ANNULLA", onClick = onCancel, icon = XaosIcons.Close)
+                    PillButton(t("ANNULLA"), onClick = onCancel, icon = XaosIcons.Close)
                 }
             }
             plan == null || status is ImportStatus.Planning -> Row(verticalAlignment = Alignment.CenterVertically) {
                 DotSpinner(size = 22.dp)
                 Spacer(Modifier.width(12.dp))
-                Text("CONFRONTO FRA TELEFONO E PC…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                Text(t("CONFRONTO FRA TELEFONO E PC…"), style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
             else -> {
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    BigStat(chosen.size.toString(), "DA IMPORTARE")
-                    BigStat(formatBytes(chosen.sumOf { it.size }), "DA COPIARE")
-                    BigStat(plan.onlyOnPhone.size.toString(), "SOLO SUL TELEFONO")
-                    BigStat(plan.phoneTotal.toString(), "BRANI SUL TELEFONO")
+                    BigStat(chosen.size.toString(), t("DA IMPORTARE"))
+                    BigStat(formatBytes(chosen.sumOf { it.size }), t("DA COPIARE"))
+                    BigStat(plan.onlyOnPhone.size.toString(), t("SOLO SUL TELEFONO"))
+                    BigStat(plan.phoneTotal.toString(), t("BRANI SUL TELEFONO"))
                 }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillButton(
                         text = when {
-                            plan.onlyOnPhone.isEmpty() -> "IL PC HA GIÀ TUTTO"
-                            chosen.isEmpty() -> "NIENTE SELEZIONATO"
-                            else -> "IMPORTA SUL PC [${chosen.size}]"
+                            plan.onlyOnPhone.isEmpty() -> t("IL PC HA GIÀ TUTTO")
+                            chosen.isEmpty() -> t("NIENTE SELEZIONATO")
+                            else -> t("IMPORTA SUL PC [%d]", chosen.size)
                         },
                         onClick = onImport,
                         icon = XaosIcons.Download,
                         filled = true,
                         enabled = chosen.isNotEmpty() && folder != null,
                     )
-                    PillButton("RICONTROLLA", onClick = onRefresh)
+                    PillButton(t("RICONTROLLA"), onClick = onRefresh)
                 }
             }
         }
         when (status) {
             is ImportStatus.Done -> ResultLine(
                 text = buildString {
-                    append(if (status.cancelled) "INTERROTTO · " else "COMPLETATO · ")
-                    append("[${status.copied}] COPIATI SUL PC")
-                    if (status.failed > 0) append(" · [${status.failed}] NON RIUSCITI")
+                    append(if (status.cancelled) t("INTERROTTO") else t("COMPLETATO"))
+                    append(" · ")
+                    append(t("[%d] COPIATI SUL PC", status.copied))
+                    if (status.failed > 0) append(" · " + t("[%d] NON RIUSCITI", status.failed))
                 },
                 onDismiss = onDismiss,
             )
-            is ImportStatus.Failed -> ResultLine("ERRORE · ${status.message}", onDismiss)
+            is ImportStatus.Failed -> ResultLine(t("ERRORE · %s", status.message), onDismiss)
             else -> Unit
         }
     }
@@ -436,7 +436,7 @@ private fun ImportAlbumRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                first.artist.ifBlank { "Artista sconosciuto" },
+                first.artist.ifBlank { t("Artista sconosciuto") },
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkSecondary,
                 maxLines = 1,
@@ -447,7 +447,7 @@ private fun ImportAlbumRow(
         Spacer(Modifier.width(10.dp))
         Icon(
             XaosIcons.ChevronDown,
-            if (expanded) "Chiudi" else "Mostra i brani",
+            if (expanded) t("Chiudi") else t("Mostra i brani"),
             tint = colors.inkSecondary,
             modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
         )
@@ -496,20 +496,20 @@ private fun SelectAllRow(
             XaosCheckbox(state, onToggle)
             Spacer(Modifier.width(14.dp))
             Text(
-                if (state == Check.ON) "DESELEZIONA TUTTO" else "SELEZIONA TUTTO",
+                if (state == Check.ON) t("DESELEZIONA TUTTO") else t("SELEZIONA TUTTO"),
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.ink,
                 modifier = Modifier.pressable(onToggle),
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "[$selectedCount/$total] SELEZIONATI · ${formatBytes(selectedBytes)}",
+                t("[%d/%d] SELEZIONATI · %s", selectedCount, total, formatBytes(selectedBytes)),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkTertiary,
             )
         }
         Text(
-            "Le spunte vengono ricordate: quello che togli resta escluso anche le prossime volte.",
+            t("Le spunte vengono ricordate: quello che togli resta escluso anche le prossime volte."),
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
             modifier = Modifier.padding(start = 46.dp, bottom = 8.dp),
@@ -556,7 +556,7 @@ private fun AlbumSelectRow(
         Spacer(Modifier.width(10.dp))
         Icon(
             XaosIcons.ChevronDown,
-            if (expanded) "Chiudi" else "Mostra i brani",
+            if (expanded) t("Chiudi") else t("Mostra i brani"),
             tint = colors.inkSecondary,
             modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
         )
@@ -579,7 +579,7 @@ private fun TrackSelectRow(item: SyncItem, checked: Boolean, onToggle: () -> Uni
         Spacer(Modifier.width(12.dp))
         // Già sul telefono, ma modificato sul PC da allora: va rimandato.
         if (item.isUpdate) {
-            Tag("AGGIORNATO")
+            Tag(t("AGGIORNATO"))
             Spacer(Modifier.width(8.dp))
         }
         Text(
@@ -619,7 +619,7 @@ private fun ConnectedPanel(
                 Text(state.name.uppercase(), style = MaterialTheme.typography.titleLarge, color = colors.ink)
                 // Cartella e versione si cambiano dalle impostazioni: un clic ci porta.
                 Text(
-                    "CARTELLA  $remoteRoot  ·  VERSIONE  $formatLabel",
+                    t("CARTELLA  %s  ·  VERSIONE  %s", remoteRoot, formatLabel),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.inkTertiary,
                     modifier = Modifier.pressable(onOpenSettings),
@@ -627,7 +627,7 @@ private fun ConnectedPanel(
             }
             AccentDot(size = 8.dp)
             Spacer(Modifier.width(8.dp))
-            Text("COLLEGATO", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+            Text(t("COLLEGATO"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
         }
 
         Hairline()
@@ -637,7 +637,7 @@ private fun ConnectedPanel(
             plan == null || status is SyncStatus.Planning -> Row(verticalAlignment = Alignment.CenterVertically) {
                 DotSpinner(size = 22.dp)
                 Spacer(Modifier.width(12.dp))
-                Text("CONFRONTO CON LA LIBRERIA DEL TELEFONO…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                Text(t("CONFRONTO CON LA LIBRERIA DEL TELEFONO…"), style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
             else -> PlanView(plan, selected, onSync, onRefresh)
         }
@@ -645,13 +645,14 @@ private fun ConnectedPanel(
         when (status) {
             is SyncStatus.Done -> ResultLine(
                 text = buildString {
-                    append(if (status.cancelled) "INTERROTTO · " else "COMPLETATO · ")
-                    append("[${status.sent}] INVIATI")
-                    if (status.failed > 0) append(" · [${status.failed}] NON RIUSCITI")
+                    append(if (status.cancelled) t("INTERROTTO") else t("COMPLETATO"))
+                    append(" · ")
+                    append(t("[%d] INVIATI", status.sent))
+                    if (status.failed > 0) append(" · " + t("[%d] NON RIUSCITI", status.failed))
                 },
                 onDismiss = onDismiss,
             )
-            is SyncStatus.Failed -> ResultLine("ERRORE · ${status.message}", onDismiss)
+            is SyncStatus.Failed -> ResultLine(t("ERRORE · %s", status.message), onDismiss)
             else -> Unit
         }
     }
@@ -663,27 +664,27 @@ private fun PlanView(plan: SyncPlan, selected: List<SyncItem>, onSync: () -> Uni
     val bytes = selected.sumOf { it.size }
     val fits = plan.freeBytes == null || bytes < plan.freeBytes - SyncPlan.SPACE_MARGIN
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        BigStat(selected.size.toString(), "DA INVIARE")
-        BigStat(formatBytes(bytes), "DA COPIARE")
-        BigStat(plan.alreadyThere.toString(), "GIÀ SUL TELEFONO")
-        plan.freeBytes?.let { BigStat(formatBytes(it), "SPAZIO LIBERO") }
+        BigStat(selected.size.toString(), t("DA INVIARE"))
+        BigStat(formatBytes(bytes), t("DA COPIARE"))
+        BigStat(plan.alreadyThere.toString(), t("GIÀ SUL TELEFONO"))
+        plan.freeBytes?.let { BigStat(formatBytes(it), t("SPAZIO LIBERO")) }
     }
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         PillButton(
             text = when {
-                plan.missing.isEmpty() -> "TUTTO SINCRONIZZATO"
-                selected.isEmpty() -> "NIENTE SELEZIONATO"
-                else -> "SINCRONIZZA [${selected.size}]"
+                plan.missing.isEmpty() -> t("TUTTO SINCRONIZZATO")
+                selected.isEmpty() -> t("NIENTE SELEZIONATO")
+                else -> t("SINCRONIZZA [%d]", selected.size)
             },
             onClick = onSync,
             icon = XaosIcons.Sync,
             filled = true,
             enabled = selected.isNotEmpty() && fits,
         )
-        PillButton("RICONTROLLA", onClick = onRefresh)
+        PillButton(t("RICONTROLLA"), onClick = onRefresh)
         if (!fits) {
             Text(
-                "NON C'È ABBASTANZA SPAZIO SUL TELEFONO",
+                t("NON C'È ABBASTANZA SPAZIO SUL TELEFONO"),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.accentInk,
             )
@@ -708,7 +709,7 @@ private fun RunningView(status: SyncStatus.Running, onCancel: () -> Unit) {
             DotSpinner(size = 16.dp)
             Spacer(Modifier.width(10.dp))
             Text(status.currentName, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            PillButton("ANNULLA", onClick = onCancel, icon = XaosIcons.Close)
+            PillButton(t("ANNULLA"), onClick = onCancel, icon = XaosIcons.Close)
         }
     }
 }
@@ -729,7 +730,7 @@ private fun ResultLine(text: String, onDismiss: () -> Unit) {
         AccentDot(size = 6.dp)
         Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.weight(1f))
-        Icon(XaosIcons.Close, "Chiudi", tint = colors.inkTertiary, modifier = Modifier.size(16.dp).pressable(onDismiss))
+        Icon(XaosIcons.Close, t("Chiudi"), tint = colors.inkTertiary, modifier = Modifier.size(16.dp).pressable(onDismiss))
     }
 }
 
@@ -771,12 +772,12 @@ private fun AppCard(
             AccentDot(size = 6.dp)
             Spacer(Modifier.width(10.dp))
             Text(
-                "XAOS PER ANDROID INSTALLATO SUL TELEFONO" + (phone.appVersionName?.let { " · $it" } ?: ""),
+                t("XAOS PER ANDROID INSTALLATO SUL TELEFONO") + (phone.appVersionName?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkSecondary,
                 modifier = Modifier.weight(1f),
             )
-            PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone)
+            PillButton(t("APRI SUL TELEFONO"), onClick = onLaunch, icon = XaosIcons.Phone)
         }
         return
     }
@@ -789,27 +790,28 @@ private fun AppCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Tag(
                     when {
-                        justInstalled && isUpdate -> "AGGIORNATO"
-                        justInstalled -> "INSTALLATO"
-                        isUpdate -> "AGGIORNAMENTO DISPONIBILE"
-                        else -> "NON INSTALLATO"
+                        justInstalled && isUpdate -> t("AGGIORNATO")
+                        justInstalled -> t("INSTALLATO")
+                        isUpdate -> t("AGGIORNAMENTO DISPONIBILE")
+                        else -> t("NON INSTALLATO")
                     }
                 )
                 Spacer(Modifier.width(10.dp))
-                Text("XAOS PER ANDROID", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                Text(t("XAOS PER ANDROID"), style = MaterialTheme.typography.labelLarge, color = colors.ink)
             }
             Text(
                 text = when {
-                    justInstalled && isUpdate -> "Il telefono ha ora la versione ${bundledVersionName.orEmpty()}. Playlist e preferiti sono rimasti."
-                    justInstalled -> "Pronto: aprilo sul telefono per dargli l'accesso alla musica."
-                    isUpdate && install !is AppInstall.Failed ->
-                        "Sul telefono c'è la ${phone.appVersionName ?: "versione precedente"}, qui la ${bundledVersionName.orEmpty()}. " +
-                            "L'aggiornamento mantiene playlist, preferiti e impostazioni del telefono."
-                    install is AppInstall.Failed -> "Non è andata: ${install.message}"
-                    !canInstall && apkSize == null -> "Questa versione di Xaos desktop non include l'app per il telefono."
-                    !canInstall -> "L'app inclusa è per processori arm64, il telefono è ${phone.abi}."
-                    else -> "Sul telefono non c'è. Puoi installarlo da qui, oppure continuare con il " +
-                        "player che usi già: i brani sincronizzati li vede qualunque app."
+                    justInstalled && isUpdate -> t("Il telefono ha ora la versione %s. Playlist e preferiti sono rimasti.", bundledVersionName.orEmpty())
+                    justInstalled -> t("Pronto: aprilo sul telefono per dargli l'accesso alla musica.")
+                    isUpdate && install !is AppInstall.Failed -> t(
+                        "Sul telefono c'è la %s, qui la %s. L'aggiornamento mantiene playlist, preferiti e impostazioni del telefono.",
+                        phone.appVersionName ?: t("versione precedente"),
+                        bundledVersionName.orEmpty(),
+                    )
+                    install is AppInstall.Failed -> t("Non è andata: %s", install.message)
+                    !canInstall && apkSize == null -> t("Questa versione di Xaos desktop non include l'app per il telefono.")
+                    !canInstall -> t("L'app inclusa è per processori arm64, il telefono è %s.", phone.abi)
+                    else -> t("Sul telefono non c'è. Puoi installarlo da qui, oppure continuare con il player che usi già: i brani sincronizzati li vede qualunque app.")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.inkSecondary,
@@ -820,17 +822,17 @@ private fun AppCard(
             install is AppInstall.Installing -> Row(verticalAlignment = Alignment.CenterVertically) {
                 DotSpinner(size = 20.dp)
                 Spacer(Modifier.width(10.dp))
-                Text("INSTALLAZIONE…", style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
+                Text(t("INSTALLAZIONE…"), style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
             }
             justInstalled -> androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton("APRI SUL TELEFONO", onClick = onLaunch, icon = XaosIcons.Phone, filled = true)
+                PillButton(t("APRI SUL TELEFONO"), onClick = onLaunch, icon = XaosIcons.Phone, filled = true)
                 PillButton("OK", onClick = onDismiss)
             }
             canInstall -> PillButton(
                 text = when {
-                    install is AppInstall.Failed -> "RIPROVA"
-                    isUpdate -> "AGGIORNA XAOS"
-                    else -> "INSTALLA XAOS"
+                    install is AppInstall.Failed -> t("RIPROVA")
+                    isUpdate -> t("AGGIORNA XAOS")
+                    else -> t("INSTALLA XAOS")
                 },
                 onClick = onInstall,
                 icon = XaosIcons.Download,
@@ -856,28 +858,31 @@ private fun ConfirmInstallDialog(
         containerColor = colors.surface,
         title = {
             Text(
-                if (isUpdate) "Aggiornare Xaos sul telefono?" else "Installare Xaos sul telefono?",
+                if (isUpdate) t("Aggiornare Xaos sul telefono?") else t("Installare Xaos sul telefono?"),
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.ink,
             )
         },
         text = {
+            val sizeNote = apkSize?.let { " (${formatBytes(it)})" } ?: ""
             Text(
                 if (isUpdate) {
-                    "Xaos su $phoneName passa dalla ${fromVersion ?: "versione installata"} alla ${toVersion.orEmpty()}" +
-                        (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
-                        ". Playlist, preferiti e impostazioni restano come sono."
+                    t(
+                        "Xaos su %s passa dalla %s alla %s%s. Playlist, preferiti e impostazioni restano come sono.",
+                        phoneName, fromVersion ?: t("versione installata"), toVersion.orEmpty(), sizeNote,
+                    )
                 } else {
-                    "Xaos Music Player per Android verrà installato su $phoneName" +
-                        (apkSize?.let { " (${formatBytes(it)})" } ?: "") +
-                        ". Non tocca le altre app né la musica già presente."
+                    t(
+                        "Xaos Music Player per Android verrà installato su %s%s. Non tocca le altre app né la musica già presente.",
+                        phoneName, sizeNote,
+                    )
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.inkSecondary,
             )
         },
-        confirmButton = { PillButton(if (isUpdate) "AGGIORNA" else "INSTALLA", onClick = onConfirm, filled = true) },
-        dismissButton = { PillButton("ANNULLA", onClick = onDismiss) },
+        confirmButton = { PillButton(if (isUpdate) t("AGGIORNA") else t("INSTALLA"), onClick = onConfirm, filled = true) },
+        dismissButton = { PillButton(t("ANNULLA"), onClick = onDismiss) },
     )
 }
 
@@ -893,12 +898,12 @@ private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
         Icon(XaosIcons.Favorite, null, tint = colors.ink, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("PREFERITI · PLAYLIST · ASCOLTI", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            Text(t("PREFERITI · PLAYLIST · ASCOLTI"), style = MaterialTheme.typography.labelLarge, color = colors.ink)
             when (val st = status) {
-                DataSyncStatus.Idle -> Text("Si scambiano nei due sensi a ogni collegamento.", style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
-                DataSyncStatus.NoApp -> Text("Serve Xaos anche sul telefono: installalo qui sopra.", style = MaterialTheme.typography.bodySmall, color = colors.inkSecondary)
+                DataSyncStatus.Idle -> Text(t("Si scambiano nei due sensi a ogni collegamento."), style = MaterialTheme.typography.bodySmall, color = colors.inkTertiary)
+                DataSyncStatus.NoApp -> Text(t("Serve Xaos anche sul telefono: installalo qui sopra."), style = MaterialTheme.typography.bodySmall, color = colors.inkSecondary)
                 DataSyncStatus.NeedsAppUpdate -> Text(
-                    "L'app sul telefono è troppo vecchia per scambiare questi dati: aggiornala qui sopra (restano tutti).",
+                    t("L'app sul telefono è troppo vecchia per scambiare questi dati: aggiornala qui sopra (restano tutti)."),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.accentInk,
                 )
@@ -912,35 +917,35 @@ private fun DataSyncCard(dataSync: DataSync, onSync: () -> Unit) {
                     val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
                         .format(java.time.Instant.ofEpochMilli(st.at).atZone(java.time.ZoneId.systemDefault()))
                     Text(
-                        if (r.nothingChanged) "ALLINEATI ALLE $time · [${r.playlists}] PLAYLIST IN COMUNE"
+                        if (r.nothingChanged) t("ALLINEATI ALLE %s · [%d] PLAYLIST IN COMUNE", time, r.playlists)
                         else buildList {
-                            if (r.favoritesToPc > 0) add("+${r.favoritesToPc} PREFERITI SUL PC")
-                            if (r.favoritesToPhone > 0) add("+${r.favoritesToPhone} SUL TELEFONO")
-                            if (r.favoritesRemoved > 0) add("${r.favoritesRemoved} TOLTI")
-                            if (r.playsToPc > 0) add("${r.playsToPc} ASCOLTI → PC")
-                            if (r.playsToPhone > 0) add("${r.playsToPhone} → TELEFONO")
-                            if (r.themeToPc) add("TEMA DAL TELEFONO")
-                            if (r.themeToPhone) add("TEMA AL TELEFONO")
-                            if (r.presetsChanged) add("PRESET AGGIORNATI")
-                            add("[${r.playlists}] PLAYLIST")
-                        }.joinToString(" · ", prefix = "SINCRONIZZATI ALLE $time · "),
+                            if (r.favoritesToPc > 0) add(t("+%d PREFERITI SUL PC", r.favoritesToPc))
+                            if (r.favoritesToPhone > 0) add(t("+%d SUL TELEFONO", r.favoritesToPhone))
+                            if (r.favoritesRemoved > 0) add(t("%d TOLTI", r.favoritesRemoved))
+                            if (r.playsToPc > 0) add(t("%d ASCOLTI → PC", r.playsToPc))
+                            if (r.playsToPhone > 0) add(t("%d → TELEFONO", r.playsToPhone))
+                            if (r.themeToPc) add(t("TEMA DAL TELEFONO"))
+                            if (r.themeToPhone) add(t("TEMA AL TELEFONO"))
+                            if (r.presetsChanged) add(t("PRESET AGGIORNATI"))
+                            add(t("[%d] PLAYLIST", r.playlists))
+                        }.joinToString(" · ", prefix = t("SINCRONIZZATI ALLE %s", time) + " · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.inkSecondary,
                     )
                     if (r.unmatched > 0) {
                         Text(
-                            "${r.unmatched} preferiti riguardano brani che ci sono solo da una parte: restano dove sono.",
+                            t("%d preferiti riguardano brani che ci sono solo da una parte: restano dove sono.", r.unmatched),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.inkTertiary,
                         )
                     }
                 }
-                is DataSyncStatus.Failed -> Text("NON RIUSCITO · ${st.message}", style = MaterialTheme.typography.labelSmall, color = colors.accentInk)
+                is DataSyncStatus.Failed -> Text(t("NON RIUSCITO · %s", st.message), style = MaterialTheme.typography.labelSmall, color = colors.accentInk)
             }
         }
         Spacer(Modifier.width(16.dp))
         PillButton(
-            "SINCRONIZZA ORA",
+            t("SINCRONIZZA ORA"),
             onClick = onSync,
             icon = XaosIcons.Sync,
             enabled = status !is DataSyncStatus.Running && status != DataSyncStatus.NeedsAppUpdate && status != DataSyncStatus.NoApp,
@@ -967,24 +972,24 @@ private fun ThemeTransferCard(
         Icon(XaosIcons.Contrast, null, tint = colors.ink, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("TEMA", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            Text(t("TEMA"), style = MaterialTheme.typography.labelLarge, color = colors.ink)
             Text(
-                "Ognuno tiene il suo: scegli tu quale copiare sull'altro. I preset invece si sincronizzano da soli.",
+                t("Ognuno tiene il suo: scegli tu quale copiare sull'altro. I preset invece si sincronizzano da soli."),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.inkTertiary,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 ThemeSide("PC", deskTheme, dark)
-                ThemeSide("TELEFONO", phoneTheme, dark)
+                ThemeSide(t("TELEFONO"), phoneTheme, dark)
                 if (deskTheme.normalized() == phoneTheme) {
-                    Text("UGUALI", style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
+                    Text(t("UGUALI"), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
                 }
             }
         }
         Spacer(Modifier.width(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
-            PillButton("PC → TELEFONO", onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PC_TO_PHONE) }, enabled = !busy)
-            PillButton("TELEFONO → PC", onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PHONE_TO_PC) }, enabled = !busy)
+            PillButton(t("PC → TELEFONO"), onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PC_TO_PHONE) }, enabled = !busy)
+            PillButton(t("TELEFONO → PC"), onClick = { onTransfer(xaos.desktop.sync.ThemeTransfer.PHONE_TO_PC) }, enabled = !busy)
         }
     }
 }
@@ -1001,9 +1006,9 @@ private fun ThemeSide(label: String, theme: xaos.desktop.CustomTheme?, dark: Boo
             Text(label, style = MaterialTheme.typography.labelMedium, color = colors.ink)
             Text(
                 when {
-                    theme == null -> "Da leggere"
-                    theme.enabled -> "Personalizzato"
-                    else -> "Standard"
+                    theme == null -> t("Da leggere")
+                    theme.enabled -> t("Personalizzato")
+                    else -> t("Standard")
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
@@ -1027,10 +1032,10 @@ private fun LyricsPanel(phone: PhoneSync) {
         is LyricsCheck.Checking -> Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             DotSpinner(size = 16.dp)
             Spacer(Modifier.width(10.dp))
-            Text("CONTROLLO DEI TESTI SUL TELEFONO  ${c.done}/${c.total}", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
+            Text(t("CONTROLLO DEI TESTI SUL TELEFONO  %d/%d", c.done, c.total), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary)
         }
         is LyricsCheck.Updating -> Column(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionHeader("AGGIORNAMENTO DEI TESTI", count = c.total)
+            SectionHeader(t("AGGIORNAMENTO DEI TESTI"), count = c.total)
             DotProgressLine(c.done.toFloat() / c.total.coerceAtLeast(1), modifier = Modifier.fillMaxWidth().height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 DotSpinner(size = 14.dp)
@@ -1042,19 +1047,19 @@ private fun LyricsPanel(phone: PhoneSync) {
             AccentDot(size = 6.dp)
             Spacer(Modifier.width(10.dp))
             Text(
-                "TESTI AGGIORNATI SUL TELEFONO · [${c.ok}]" + if (c.failed > 0) " · [${c.failed}] NON RIUSCITI" else "",
+                t("TESTI AGGIORNATI SUL TELEFONO · [%d]", c.ok) + if (c.failed > 0) " · " + t("[%d] NON RIUSCITI", c.failed) else "",
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.ink,
                 modifier = Modifier.weight(1f),
             )
-            Icon(XaosIcons.Close, "Chiudi", tint = colors.inkTertiary, modifier = Modifier.size(16.dp).pressable(phone::dismissLyricsResult))
+            Icon(XaosIcons.Close, t("Chiudi"), tint = colors.inkTertiary, modifier = Modifier.size(16.dp).pressable(phone::dismissLyricsResult))
         }
         is LyricsCheck.Ready -> if (c.updates.isNotEmpty()) {
             val chosen = c.updates.filter { it.track.path !in deselected }
             Column(Modifier.fillMaxWidth().nothingCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionHeader("TESTI DA AGGIORNARE SUL TELEFONO", count = c.updates.size) {
+                SectionHeader(t("TESTI DA AGGIORNARE SUL TELEFONO"), count = c.updates.size) {
                     PillButton(
-                        "AGGIORNA TESTI [${chosen.size}]",
+                        t("AGGIORNA TESTI [%d]", chosen.size),
                         onClick = { phone.updateLyrics(chosen) },
                         icon = XaosIcons.Sync,
                         filled = true,
@@ -1062,8 +1067,7 @@ private fun LyricsPanel(phone: PhoneSync) {
                     )
                 }
                 Text(
-                    "Sul PC questi brani hanno un testo che sul telefono manca o è diverso. " +
-                        "L'aggiornamento scrive solo il testo nel file del telefono: audio, nome e cartella restano quelli.",
+                    t("Sul PC questi brani hanno un testo che sul telefono manca o è diverso. L'aggiornamento scrive solo il testo nel file del telefono: audio, nome e cartella restano quelli."),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.inkTertiary,
                 )
@@ -1073,7 +1077,7 @@ private fun LyricsPanel(phone: PhoneSync) {
                         if (all) deselected.addAll(c.updates.map { it.track.path }) else deselected.clear()
                     }, size = 18.dp)
                     Spacer(Modifier.width(12.dp))
-                    Text(if (all) "DESELEZIONA TUTTO" else "SELEZIONA TUTTO", style = MaterialTheme.typography.labelMedium, color = colors.ink)
+                    Text(if (all) t("DESELEZIONA TUTTO") else t("SELEZIONA TUTTO"), style = MaterialTheme.typography.labelMedium, color = colors.ink)
                 }
                 c.updates.forEach { u ->
                     val on = u.track.path !in deselected
@@ -1094,7 +1098,7 @@ private fun LyricsPanel(phone: PhoneSync) {
                             Text(u.phonePath.substringAfterLast('/'), style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Text(
-                            if (u.missingOnPhone) "MANCA SUL TELEFONO" else "DIVERSO",
+                            if (u.missingOnPhone) t("MANCA SUL TELEFONO") else t("DIVERSO"),
                             style = MaterialTheme.typography.labelSmall,
                             color = colors.inkSecondary,
                         )

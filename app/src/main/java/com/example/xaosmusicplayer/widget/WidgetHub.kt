@@ -21,6 +21,7 @@ import com.example.xaosmusicplayer.R
 import com.example.xaosmusicplayer.beam.BeamConnect
 import com.example.xaosmusicplayer.data.Lyrics
 import com.example.xaosmusicplayer.data.LyricsReader
+import com.example.xaosmusicplayer.i18n.I18n
 import com.example.xaosmusicplayer.ui.theme.DarkPalette
 import com.example.xaosmusicplayer.ui.theme.LightPalette
 import com.example.xaosmusicplayer.ui.theme.ThemeStore
@@ -116,6 +117,7 @@ object WidgetHub {
 
     /** Da chiamare quando il servizio crea il player. */
     fun attach(context: Context, player: Player) {
+        I18n.init(context)
         this.context = context.applicationContext
         this.player = player
         scope?.cancel()
@@ -138,6 +140,7 @@ object WidgetHub {
      */
     @Synchronized
     fun watchRemote(context: Context) {
+        I18n.init(context)
         if (this.context == null) this.context = context.applicationContext
         if (remoteScope != null) return
         remoteScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { s ->
@@ -217,6 +220,7 @@ object WidgetHub {
 
     /** Il widget è stato aggiunto o ridimensionato: ridisegna tutto. */
     fun refresh(context: Context) {
+        I18n.init(context)
         if (this.context == null) this.context = context.applicationContext
         // Un widget appena aggiunto: copertina e testo del brano vanno letti ora,
         // perché senza widget non li si prepara.

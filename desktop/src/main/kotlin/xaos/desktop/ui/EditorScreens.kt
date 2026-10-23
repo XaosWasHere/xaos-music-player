@@ -48,6 +48,8 @@ import xaos.desktop.library.Album
 import xaos.desktop.library.TagEdit
 import xaos.desktop.library.TagEditor
 import xaos.desktop.library.Track
+import xaos.desktop.library.displayName
+import xaos.desktop.i18n.t
 import xaos.desktop.online.LrcLib
 import xaos.desktop.online.LrcResult
 import xaos.desktop.theme.Xaos
@@ -62,7 +64,7 @@ import javax.swing.filechooser.FileNameExtensionFilter
  */
 @Composable
 fun EditTrackScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
-    if (track == null) { EmptyMessage("BRANO NON TROVATO"); return }
+    if (track == null) { EmptyMessage(t("BRANO NON TROVATO")); return }
     val colors = Xaos.colors
     val scope = rememberCoroutineScope()
     var title by remember(track.path) { mutableStateOf(track.title) }
@@ -77,9 +79,9 @@ fun EditTrackScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     EditorFrame(
-        tag = "MODIFICA BRANO",
+        tag = t("MODIFICA BRANO"),
         title = track.title,
-        subtitle = File(track.path).name + (track.mobilePath?.let { "  +  copia MP3" } ?: ""),
+        subtitle = File(track.path).name.let { name -> if (track.mobilePath != null) t("%s  +  copia MP3", name) else name },
         saving = saving,
         error = error,
         onSave = {
@@ -97,7 +99,7 @@ fun EditTrackScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
                 )
                 TagEditor.write(track, edit)
                     .onSuccess { onSaved() }
-                    .onFailure { error = it.message ?: "Scrittura non riuscita"; saving = false }
+                    .onFailure { error = it.message ?: t("Scrittura non riuscita"); saving = false }
             }
         },
         onCancel = onCancel,
@@ -105,20 +107,20 @@ fun EditTrackScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             ArtworkPicker(track, artwork) { artwork = it }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                XaosTextField("TITOLO", title, { title = it })
+                XaosTextField(t("TITOLO"), title, { title = it })
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    XaosTextField("ARTISTA", artist, { artist = it }, Modifier.weight(1f))
-                    XaosTextField("ARTISTA DELL'ALBUM", albumArtist, { albumArtist = it }, Modifier.weight(1f))
+                    XaosTextField(t("ARTISTA"), artist, { artist = it }, Modifier.weight(1f))
+                    XaosTextField(t("ARTISTA DELL'ALBUM"), albumArtist, { albumArtist = it }, Modifier.weight(1f))
                 }
-                XaosTextField("ALBUM", album, { album = it })
+                XaosTextField(t("ALBUM"), album, { album = it })
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    XaosTextField("GENERE", genre, { genre = it }, Modifier.weight(1f))
-                    XaosTextField("ANNO", year, { year = it.filter(Char::isDigit).take(4) }, Modifier.width(110.dp))
-                    XaosTextField("N. TRACCIA", number, { number = it.filter(Char::isDigit).take(3) }, Modifier.width(110.dp))
+                    XaosTextField(t("GENERE"), genre, { genre = it }, Modifier.weight(1f))
+                    XaosTextField(t("ANNO"), year, { year = it.filter(Char::isDigit).take(4) }, Modifier.width(110.dp))
+                    XaosTextField(t("N. TRACCIA"), number, { number = it.filter(Char::isDigit).take(3) }, Modifier.width(110.dp))
                 }
                 Text(
-                    "Le modifiche vanno nel file" + (if (track.mobilePath != null) " e nella sua copia MP3" else "") +
-                        ". Al prossimo collegamento il telefono riceve la versione aggiornata.",
+                    if (track.mobilePath != null) t("Le modifiche vanno nel file e nella sua copia MP3. Al prossimo collegamento il telefono riceve la versione aggiornata.")
+                    else t("Le modifiche vanno nel file. Al prossimo collegamento il telefono riceve la versione aggiornata."),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.inkTertiary,
                 )
@@ -130,7 +132,7 @@ fun EditTrackScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
 /** Modifica di un album intero: i campi comuni, scritti in tutte le tracce. */
 @Composable
 fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
-    if (album == null) { EmptyMessage("ALBUM NON TROVATO"); return }
+    if (album == null) { EmptyMessage(t("ALBUM NON TROVATO")); return }
     val colors = Xaos.colors
     val scope = rememberCoroutineScope()
     val first = album.tracks.first()
@@ -148,11 +150,11 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
     val multiDisc = album.tracks.map { it.discNumber }.distinct().size > 1
 
     EditorFrame(
-        tag = "MODIFICA ALBUM",
-        title = album.title,
-        subtitle = "[${album.tracks.size}] BRANI",
+        tag = t("MODIFICA ALBUM"),
+        title = displayName(album.title),
+        subtitle = t("[%d] BRANI", album.tracks.size),
         saving = saving,
-        savingLabel = "SCRITTURA $progress/${album.tracks.size}",
+        savingLabel = t("SCRITTURA %d/%d", progress, album.tracks.size),
         error = error,
         onSave = {
             saving = true
@@ -177,7 +179,7 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
                     TagEditor.write(t, trackEdit).onFailure { failure = it }
                 }
                 if (failure == null) onSaved()
-                else { error = failure?.message ?: "Alcuni file non sono stati scritti"; saving = false }
+                else { error = failure?.message ?: t("Alcuni file non sono stati scritti"); saving = false }
             }
         },
         onCancel = onCancel,
@@ -185,14 +187,14 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             ArtworkPicker(first, artwork) { artwork = it }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                XaosTextField("ALBUM", title, { title = it })
-                XaosTextField("ARTISTA DELL'ALBUM", artist, { artist = it })
+                XaosTextField(t("ALBUM"), title, { title = it })
+                XaosTextField(t("ARTISTA DELL'ALBUM"), artist, { artist = it })
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    XaosTextField("GENERE", genre, { genre = it }, Modifier.weight(1f), placeholder = if (commonGenre.isEmpty()) "diversi" else "")
-                    XaosTextField("ANNO", year, { year = it.filter(Char::isDigit).take(4) }, Modifier.width(110.dp))
+                    XaosTextField(t("GENERE"), genre, { genre = it }, Modifier.weight(1f), placeholder = if (commonGenre.isEmpty()) t("diversi") else "")
+                    XaosTextField(t("ANNO"), year, { year = it.filter(Char::isDigit).take(4) }, Modifier.width(110.dp))
                 }
                 Text(
-                    "Titolo e artista del singolo brano non cambiano: per quelli si modifica il brano.",
+                    t("Titolo e artista del singolo brano non cambiano: per quelli si modifica il brano."),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.inkTertiary,
                 )
@@ -200,14 +202,14 @@ fun EditAlbumScreen(album: Album?, onSaved: () -> Unit, onCancel: () -> Unit) {
         }
         Spacer(Modifier.height(24.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("ORDINE DELLE TRACCE", style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f))
+            Text(t("ORDINE DELLE TRACCE"), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, modifier = Modifier.weight(1f))
             if (ordered.toList() != album.tracks) {
-                PillButton("RIPRISTINA ORDINE", onClick = { ordered.clear(); ordered.addAll(album.tracks) })
+                PillButton(t("RIPRISTINA ORDINE"), onClick = { ordered.clear(); ordered.addAll(album.tracks) })
             }
         }
         Text(
-            "Trascina la maniglia o usa le frecce. Salvando, il numero di traccia di ogni brano diventa la sua posizione" +
-                if (multiDisc) " (i dischi diventano un'unica sequenza)." else ".",
+            if (multiDisc) t("Trascina la maniglia o usa le frecce. Salvando, il numero di traccia di ogni brano diventa la sua posizione (i dischi diventano un'unica sequenza).")
+            else t("Trascina la maniglia o usa le frecce. Salvando, il numero di traccia di ogni brano diventa la sua posizione."),
             style = MaterialTheme.typography.labelSmall,
             color = colors.inkTertiary,
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -245,7 +247,7 @@ private fun ReorderableTracks(ordered: androidx.compose.runtime.snapshots.Snapsh
             ) {
                 Icon(
                     XaosIcons.DragHandle,
-                    "Trascina per riordinare",
+                    t("Trascina per riordinare"),
                     tint = colors.inkSecondary,
                     modifier = Modifier
                         .padding(horizontal = 10.dp)
@@ -280,13 +282,13 @@ private fun ReorderableTracks(ordered: androidx.compose.runtime.snapshots.Snapsh
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(track.title, style = MaterialTheme.typography.titleMedium, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(displayName(track.artist), style = MaterialTheme.typography.labelMedium, color = colors.inkSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, modifier = Modifier.padding(horizontal = 10.dp))
-                CircleIconButton(XaosIcons.ArrowUp, "Sposta su", {
+                CircleIconButton(XaosIcons.ArrowUp, t("Sposta su"), {
                     if (index > 0) ordered.add(index - 1, ordered.removeAt(index))
                 }, size = 30.dp, outlined = false, tint = if (index > 0) colors.inkSecondary else colors.track)
-                CircleIconButton(XaosIcons.ArrowDown, "Sposta giù", {
+                CircleIconButton(XaosIcons.ArrowDown, t("Sposta giù"), {
                     if (index < ordered.lastIndex) ordered.add(index + 1, ordered.removeAt(index))
                 }, size = 30.dp, outlined = false, tint = if (index < ordered.lastIndex) colors.inkSecondary else colors.track)
                 Spacer(Modifier.width(6.dp))
@@ -302,7 +304,7 @@ private fun ReorderableTracks(ordered: androidx.compose.runtime.snapshots.Snapsh
  */
 @Composable
 fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
-    if (track == null) { EmptyMessage("BRANO NON TROVATO"); return }
+    if (track == null) { EmptyMessage(t("BRANO NON TROVATO")); return }
     val colors = Xaos.colors
     val scope = rememberCoroutineScope()
     var text by remember(track.path) { mutableStateOf("") }
@@ -319,9 +321,9 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
     val synced = remember(text) { TIMESTAMP.containsMatchIn(text) }
 
     EditorFrame(
-        tag = "TESTO",
+        tag = t("TESTO"),
         title = track.title,
-        subtitle = track.artist,
+        subtitle = displayName(track.artist),
         saving = saving,
         error = error,
         onSave = {
@@ -329,7 +331,7 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
             scope.launch {
                 TagEditor.writeLyrics(track, text)
                     .onSuccess { onSaved() }
-                    .onFailure { error = it.message ?: "Scrittura non riuscita"; saving = false }
+                    .onFailure { error = it.message ?: t("Scrittura non riuscita"); saving = false }
             }
         },
         onCancel = onCancel,
@@ -343,10 +345,10 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
         val editor = @Composable { modifier: Modifier ->
             Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (text.isNotBlank()) Tag(if (synced) "SINCRONIZZATO" else "SENZA TEMPI")
+                    if (text.isNotBlank()) Tag(if (synced) t("SINCRONIZZATO") else t("SENZA TEMPI"))
                     Spacer(Modifier.weight(1f))
                     PillButton(
-                        if (searching) "RICERCA…" else "CERCA ONLINE",
+                        if (searching) t("RICERCA…") else t("CERCA ONLINE"),
                         onClick = {
                             searching = true
                             scope.launch {
@@ -358,7 +360,7 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
                         enabled = !searching,
                     )
                     Spacer(Modifier.width(8.dp))
-                    PillButton("SVUOTA", onClick = { text = "" }, enabled = text.isNotEmpty())
+                    PillButton(t("SVUOTA"), onClick = { text = "" }, enabled = text.isNotEmpty())
                 }
                 val shape = RoundedCornerShape(14.dp)
                 Box(
@@ -372,8 +374,7 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
                 ) {
                     if (loaded && text.isEmpty()) {
                         Text(
-                            "Nessun testo. Scrivilo qui, oppure cercalo online.\n\n" +
-                                "Per un testo sincronizzato ogni riga comincia col suo tempo:\n[01:23.45] così",
+                            t("Nessun testo. Scrivilo qui, oppure cercalo online.\n\nPer un testo sincronizzato ogni riga comincia col suo tempo:\n[01:23.45] così"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.inkTertiary,
                         )
@@ -391,9 +392,9 @@ fun LyricsScreen(track: Track?, onSaved: () -> Unit, onCancel: () -> Unit) {
         val found = @Composable { modifier: Modifier ->
             results?.let { list ->
                 Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeader("TROVATI SU LRCLIB", count = list.size)
+                    SectionHeader(t("TROVATI SU LRCLIB"), count = list.size)
                     if (list.isEmpty()) {
-                        Text("Niente per questo brano.", style = MaterialTheme.typography.bodyMedium, color = colors.inkTertiary)
+                        Text(t("Niente per questo brano."), style = MaterialTheme.typography.bodyMedium, color = colors.inkTertiary)
                     }
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(list, key = { it.id }) { r ->
@@ -431,10 +432,10 @@ private fun LrcCard(result: LrcResult, trackDurationMs: Long, onUse: (String) ->
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        val length = formatDuration(((result.duration ?: 0.0) * 1000).toLong())
         Text(
-            formatDuration(((result.duration ?: 0.0) * 1000).toLong()) +
-                // La durata dice se è la stessa versione del brano.
-                if (diff <= 2) "  ·  STESSA DURATA" else "  ·  ${diff.toInt()}s DI DIFFERENZA",
+            // La durata dice se è la stessa versione del brano.
+            if (diff <= 2) t("%s  ·  STESSA DURATA", length) else t("%s  ·  %ds DI DIFFERENZA", length, diff.toInt()),
             style = MaterialTheme.typography.labelSmall,
             color = if (diff <= 2) colors.inkSecondary else colors.inkTertiary,
         )
@@ -444,8 +445,8 @@ private fun LrcCard(result: LrcResult, trackDurationMs: Long, onUse: (String) ->
             Text(preview, style = MaterialTheme.typography.labelMedium, color = colors.inkTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            result.syncedLyrics?.takeIf { it.isNotBlank() }?.let { PillButton("USA SINCRONIZZATO", onClick = { onUse(it) }, filled = true) }
-            result.plainLyrics?.takeIf { it.isNotBlank() }?.let { PillButton("USA TESTO", onClick = { onUse(it) }) }
+            result.syncedLyrics?.takeIf { it.isNotBlank() }?.let { PillButton(t("USA SINCRONIZZATO"), onClick = { onUse(it) }, filled = true) }
+            result.plainLyrics?.takeIf { it.isNotBlank() }?.let { PillButton(t("USA TESTO"), onClick = { onUse(it) }) }
         }
     }
 }
@@ -460,7 +461,7 @@ private fun EditorFrame(
     error: String?,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    savingLabel: String = "SALVATAGGIO…",
+    savingLabel: String = t("SALVATAGGIO…"),
     scrollable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
@@ -477,14 +478,14 @@ private fun EditorFrame(
                     DotSpinner(size = 20.dp)
                     Text(savingLabel, style = MaterialTheme.typography.labelLarge, color = colors.inkSecondary)
                 } else {
-                    PillButton("ANNULLA", onClick = onCancel)
-                    PillButton("SALVA", onClick = onSave, icon = XaosIcons.Check, filled = true)
+                    PillButton(t("ANNULLA"), onClick = onCancel)
+                    PillButton(t("SALVA"), onClick = onSave, icon = XaosIcons.Check, filled = true)
                 }
             }
         }
         if (error != null) {
             Spacer(Modifier.height(10.dp))
-            Text("ERRORE · $error", style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
+            Text(t("ERRORE · %s", error), style = MaterialTheme.typography.labelLarge, color = colors.accentInk)
         }
         Spacer(Modifier.height(24.dp))
         Box(
@@ -525,7 +526,7 @@ private fun ArtworkPicker(track: Track, chosen: File?, onPick: (File) -> Unit) {
             Icon(XaosIcons.Edit, null, tint = colors.inkTertiary, modifier = Modifier.size(12.dp))
             Spacer(Modifier.width(6.dp))
             Text(
-                if (chosen != null) "NUOVA: ${chosen.name.uppercase()}" else "CLICCA PER CAMBIARE",
+                if (chosen != null) t("NUOVA: %s", chosen.name.uppercase()) else t("CLICCA PER CAMBIARE"),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.inkTertiary,
                 maxLines = 1,
@@ -539,8 +540,8 @@ private fun ArtworkPicker(track: Track, chosen: File?, onPick: (File) -> Unit) {
 internal fun pickImage(): File? {
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
     val chooser = JFileChooser().apply {
-        dialogTitle = "Scegli la copertina"
-        fileFilter = FileNameExtensionFilter("Immagini (JPG, PNG)", "jpg", "jpeg", "png")
+        dialogTitle = t("Scegli la copertina")
+        fileFilter = FileNameExtensionFilter(t("Immagini (JPG, PNG)"), "jpg", "jpeg", "png")
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
 }

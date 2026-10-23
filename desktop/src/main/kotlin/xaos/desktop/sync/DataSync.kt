@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import xaos.desktop.CustomTheme
 import xaos.desktop.ThemePreset
 import xaos.desktop.Settings
+import xaos.desktop.i18n.t
 import xaos.desktop.library.LibrarySnapshot
 import xaos.desktop.library.PlayEntry
 import xaos.desktop.library.Playlist
@@ -168,19 +169,19 @@ class DataSync(
         if ((connected.appVersionCode ?: 0) < MIN_APP_VERSION) { _status.value = DataSyncStatus.NeedsAppUpdate; return }
         job = scope.launch(Dispatchers.IO) {
             _status.value = runCatching { DataSyncStatus.Done(exchange(connected.serial, snapshot, roots), System.currentTimeMillis()) }
-                .getOrElse { DataSyncStatus.Failed(it.message ?: "sincronizzazione non riuscita") }
+                .getOrElse { DataSyncStatus.Failed(it.message ?: t("sincronizzazione non riuscita")) }
         }
     }
 
     private fun exchange(serial: String, snapshot: LibrarySnapshot, roots: List<File>): DataSyncReport {
         // 1. Il telefono scrive i suoi dati, e noi li leggiamo.
-        _status.value = DataSyncStatus.Running("LETTURA DEI DATI DEL TELEFONO")
+        _status.value = DataSyncStatus.Running(t("LETTURA DEI DATI DEL TELEFONO"))
         broadcast(serial, ACTION_EXPORT).let { (code, data) ->
-            if (code != RESULT_OK) error("l'app sul telefono non ha risposto (${data ?: code})")
+            if (code != RESULT_OK) error(t("l'app sul telefono non ha risposto (%s)", data ?: code))
         }
         val raw = phone.run(listOf("-s", serial, "exec-out", "cat $PHONE_DIR/$STATE_FILE"), timeoutS = 30)
-            ?: error("impossibile leggere i dati del telefono")
-        val p = runCatching { json.decodeFromString<PhoneData>(raw) }.getOrElse { error("dati del telefono illeggibili") }
+            ?: error(t("impossibile leggere i dati del telefono"))
+        val p = runCatching { json.decodeFromString<PhoneData>(raw) }.getOrElse { error(t("dati del telefono illeggibili")) }
 
         // Le copertine delle playlist del telefono che qui non ci sono ancora.
         p.playlists.mapNotNull { it.cover }.distinct()
@@ -191,7 +192,7 @@ class DataSync(
             }
 
         // 2. La corrispondenza fra i brani dei due lati.
-        _status.value = DataSyncStatus.Running("CONFRONTO DEI BRANI")
+        _status.value = DataSyncStatus.Running(t("CONFRONTO DEI BRANI"))
         val map = SongMap(phone.listPhoneSongs(serial), snapshot) { phone.remotePathOf(roots, it) }
 
         // 3. L'unione.
@@ -212,7 +213,7 @@ class DataSync(
         val presets = p.themePresets?.map { it.normalized() }?.let { mergePresets(it, base.themePresets, deskPresets) }
 
         // 4. Il telefono adotta il risultato; il PC solo se il telefono ha accettato.
-        _status.value = DataSyncStatus.Running("SCRITTURA SUL TELEFONO")
+        _status.value = DataSyncStatus.Running(t("SCRITTURA SUL TELEFONO"))
         val syncId = "s${System.currentTimeMillis()}"
         val inbox = PhoneInbox(
             syncId = syncId,
@@ -232,15 +233,15 @@ class DataSync(
         val tmp = File.createTempFile("xaos-inbox-", ".json")
         try {
             tmp.writeText(json.encodeToString(inbox), Charsets.UTF_8)
-            if (!phone.push(serial, tmp, "$PHONE_DIR/$INBOX_FILE")) error("impossibile scrivere sul telefono")
+            if (!phone.push(serial, tmp, "$PHONE_DIR/$INBOX_FILE")) error(t("impossibile scrivere sul telefono"))
         } finally {
             tmp.delete()
         }
         val (code, message) = broadcast(serial, ACTION_APPLY)
         when (code) {
             RESULT_OK -> Unit
-            RESULT_STALE -> error("sul telefono qualcosa è cambiato proprio ora: riprova")
-            else -> error("il telefono non ha accettato i dati (${message ?: code})")
+            RESULT_STALE -> error(t("sul telefono qualcosa è cambiato proprio ora: riprova"))
+            else -> error(t("il telefono non ha accettato i dati (%s)", message ?: code))
         }
 
         // Le modifiche fatte sul PC mentre si sincronizzava non vanno perse.
@@ -302,7 +303,7 @@ class DataSync(
             serial,
             "am broadcast -f 32 -a $action -n ${PhoneSync.APP_PACKAGE}/$RECEIVER",
             timeoutS = 30,
-        ) ?: return RESULT_NONE to "adb non risponde"
+        ) ?: return RESULT_NONE to t("adb non risponde")
         val m = Regex("""result=(-?\d+)(?:, data="(.*)")?""").find(out) ?: return RESULT_NONE to out.trim().take(120)
         return m.groupValues[1].toInt() to m.groupValues.getOrNull(2)?.takeIf { it.isNotEmpty() }
     }

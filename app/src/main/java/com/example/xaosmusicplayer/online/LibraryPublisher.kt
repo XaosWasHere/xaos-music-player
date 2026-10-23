@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
+import com.example.xaosmusicplayer.i18n.t
 
 /**
  * Consegna un file scaricato alla libreria musicale del dispositivo.
@@ -42,12 +43,12 @@ class LibraryPublisher(private val context: Context) {
         }
 
         val uri = resolver.insert(collection, values)
-            ?: throw IllegalStateException("MediaStore ha rifiutato l'inserimento")
+            ?: throw IllegalStateException(t("MediaStore ha rifiutato l'inserimento"))
 
         try {
             resolver.openOutputStream(uri)?.use { output ->
                 source.inputStream().use { input -> input.copyTo(output) }
-            } ?: throw IllegalStateException("Impossibile scrivere su $uri")
+            } ?: throw IllegalStateException(t("Impossibile scrivere su %s", uri))
 
             resolver.update(
                 uri,

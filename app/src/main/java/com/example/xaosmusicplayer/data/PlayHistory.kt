@@ -24,6 +24,9 @@ data class RecentEntry(
     val lastPlayedMs: Long,
 )
 
+/** Un brano della cronologia: cosa si è ascoltato, e quando. */
+data class RecentPlay(val song: Song, val timestampMs: Long)
+
 /** Una voce di classifica: l'elemento e quante volte è stato ascoltato. */
 data class RankedSong(val song: Song, val plays: Int)
 data class RankedAlbum(val album: Album, val plays: Int)

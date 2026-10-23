@@ -22,9 +22,26 @@ object AutoLyrics {
     /** true se ha aggiunto un testo al file. */
     suspend fun fetchAndEmbed(track: Track): Boolean {
         if (!TagEditor.readLyrics(track).isNullOrBlank()) return false
-        val found = candidates(track).firstNotNullOfOrNull { (title, artist) -> bestMatch(title, artist, track.durationMs) }
+        val found = candidates(track).firstNotNullOfOrNull { (title, artist) -> bestMatch(title, artist, track.durationMs, strict = false) }
             ?: return false
         return TagEditor.writeLyrics(track, found).isSuccess
+    }
+
+    enum class Outcome { ADDED, NOT_FOUND, UNAVAILABLE }
+
+    /**
+     * Come [fetchAndEmbed], per la ricerca su tutta la libreria: distingue
+     * "LRCLIB non ce l'ha" (il brano non va più cercato) da "LRCLIB non
+     * risponde" (si riprova la prossima volta).
+     */
+    suspend fun lookup(track: Track): Outcome {
+        if (!TagEditor.readLyrics(track).isNullOrBlank()) return Outcome.NOT_FOUND
+        val found = try {
+            candidates(track).firstNotNullOfOrNull { (title, artist) -> bestMatch(title, artist, track.durationMs, strict = true) }
+        } catch (e: LrcLib.Unavailable) {
+            return Outcome.UNAVAILABLE
+        } ?: return Outcome.NOT_FOUND
+        return if (TagEditor.writeLyrics(track, found).isSuccess) Outcome.ADDED else Outcome.NOT_FOUND
     }
 
     /**
@@ -39,9 +56,9 @@ object AutoLyrics {
         if (parts.size == 2 && parts.all { it.isNotBlank() }) add(parts[1].trim() to parts[0].trim())
     }.distinct()
 
-    private suspend fun bestMatch(title: String, artist: String, durationMs: Long): String? {
+    private suspend fun bestMatch(title: String, artist: String, durationMs: Long, strict: Boolean): String? {
         if (durationMs <= 0) return null
-        val matching = LrcLib.search(title, artist, durationMs).filter { r ->
+        val matching = LrcLib.search(title, artist, durationMs, strict).filter { r ->
             !r.instrumental && r.duration != null && abs((r.duration * 1000).toLong() - durationMs) <= TOLERANCE_MS
         }
         return matching.firstNotNullOfOrNull { it.syncedLyrics?.takeIf(String::isNotBlank) }

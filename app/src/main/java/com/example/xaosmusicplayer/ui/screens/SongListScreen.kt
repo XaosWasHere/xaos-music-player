@@ -39,6 +39,8 @@ import com.example.xaosmusicplayer.ui.components.SongRow
 import com.example.xaosmusicplayer.ui.components.formatDuration
 import com.example.xaosmusicplayer.ui.icons.XaosIcons
 import com.example.xaosmusicplayer.ui.theme.Xaos
+import com.example.xaosmusicplayer.data.MusicRepository
+import com.example.xaosmusicplayer.i18n.t
 
 /**
  * La testata di una raccolta, come su Spotify: copertina grande al centro,
@@ -73,7 +75,7 @@ fun SongListScreen(
     onShuffleAll: () -> Unit,
     onSongMenu: (Song) -> Unit,
     modifier: Modifier = Modifier,
-    emptyMessage: String = "Nessun brano",
+    emptyMessage: String = t("Nessun brano"),
     hero: CollectionHero? = null,
 ) {
     Column(
@@ -84,7 +86,7 @@ fun SongListScreen(
         if (hero != null) {
             // Con la testata il titolo sta sotto la copertina: in alto solo il ritorno.
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 10.dp, bottom = 4.dp)) {
-                CircleIconButton(icon = XaosIcons.Back, contentDescription = "Indietro", onClick = onBack)
+                CircleIconButton(icon = XaosIcons.Back, contentDescription = t("Indietro"), onClick = onBack)
             }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -110,7 +112,7 @@ fun SongListScreen(
             return@Column
         }
 
-        ScreenHeader(title = title.uppercase(), onBack = onBack)
+        ScreenHeader(title = MusicRepository.displayName(title).uppercase(), onBack = onBack)
 
         if (songs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -131,12 +133,12 @@ fun SongListScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PillButton(
-                text = "RIPRODUCI",
+                text = t("RIPRODUCI"),
                 icon = XaosIcons.Play,
                 filled = true,
                 onClick = { onPlay(0) },
             )
-            PillButton(text = "CASUALE", icon = XaosIcons.Shuffle, onClick = onShuffleAll)
+            PillButton(text = t("CASUALE"), icon = XaosIcons.Shuffle, onClick = onShuffleAll)
             Spacer(Modifier.weight(1f))
             Text(
                 text = "[${songs.size}] ${formatDuration(songs.sumOf { it.durationMs })}",
@@ -198,7 +200,7 @@ private fun HeroHeader(
             Text(hero.kind, style = MaterialTheme.typography.labelSmall, color = colors.inkTertiary)
             Spacer(Modifier.height(4.dp))
             Text(
-                title,
+                MusicRepository.displayName(title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = colors.ink,
                 maxLines = 2,
@@ -206,7 +208,7 @@ private fun HeroHeader(
             )
             if (!hero.subtitle.isNullOrBlank()) {
                 Text(
-                    hero.subtitle.uppercase(),
+                    MusicRepository.displayName(hero.subtitle).uppercase(),
                     style = MaterialTheme.typography.titleSmall,
                     color = colors.accentInk,
                     maxLines = 1,
@@ -215,7 +217,7 @@ private fun HeroHeader(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "[${songs.size}] BRANI · ${totalLength(songs.sumOf { it.durationMs })}",
+                t("[%d] BRANI · %s", songs.size, totalLength(songs.sumOf { it.durationMs })),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkTertiary,
             )
@@ -223,7 +225,7 @@ private fun HeroHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 hero.actions?.invoke(this)
                 Spacer(Modifier.weight(1f))
-                CircleIconButton(icon = XaosIcons.Shuffle, contentDescription = "Casuale", onClick = onShuffle)
+                CircleIconButton(icon = XaosIcons.Shuffle, contentDescription = t("Casuale"), onClick = onShuffle)
                 Spacer(Modifier.width(12.dp))
                 // Il play grande a destra, nel colore d'accento, come su Spotify.
                 Box(
@@ -234,7 +236,7 @@ private fun HeroHeader(
                         .clickable(enabled = songs.isNotEmpty(), onClick = onPlay),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(XaosIcons.Play, "Riproduci", tint = colors.onAccent, modifier = Modifier.size(28.dp))
+                    Icon(XaosIcons.Play, t("Riproduci"), tint = colors.onAccent, modifier = Modifier.size(28.dp))
                 }
             }
         }
@@ -245,5 +247,5 @@ private fun HeroHeader(
 /** "42 MIN" o "1 H 12 MIN": per una raccolta i secondi non servono. */
 private fun totalLength(ms: Long): String {
     val minutes = ms / 60_000
-    return if (minutes >= 60) "${minutes / 60} H ${minutes % 60} MIN" else "$minutes MIN"
+    return if (minutes >= 60) t("%d H %d MIN", minutes / 60, minutes % 60) else t("%d MIN", minutes)
 }
