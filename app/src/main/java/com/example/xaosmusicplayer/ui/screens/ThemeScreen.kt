@@ -383,6 +383,20 @@ private fun PresetsSection(store: ThemeStore, dark: Boolean) {
     val current by store.custom.collectAsState()
     var saving by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ThemePreset?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Un file .xtheme scelto dai file del telefono.
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val file = com.example.xaosmusicplayer.ui.theme.XTheme.read(context, uri)
+        if (file != null) com.example.xaosmusicplayer.ui.theme.XTheme.importTheme(store, file)
+        android.widget.Toast.makeText(
+            context,
+            if (file != null) t("Tema «%s» aggiunto ai preset e applicato", file.name) else t("Questo file non è un tema di Xaos"),
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
+    }
 
     Text(
         t("PRESET"),
@@ -417,6 +431,8 @@ private fun PresetsSection(store: ThemeStore, dark: Boolean) {
                     color = if (inUse) colors.accentInk else colors.inkTertiary,
                 )
             }
+            CircleIconButton(XaosIcons.Share, t("Condividi il tema"), { com.example.xaosmusicplayer.ui.theme.XTheme.share(context, preset) }, size = 34.dp)
+            Spacer(Modifier.width(8.dp))
             CircleIconButton(XaosIcons.Edit, t("Rinomina"), { renaming = preset }, size = 34.dp)
             Spacer(Modifier.width(8.dp))
             CircleIconButton(
@@ -431,6 +447,14 @@ private fun PresetsSection(store: ThemeStore, dark: Boolean) {
         Spacer(Modifier.height(8.dp))
         PillButton(text = t("SALVA COME PRESET"), icon = XaosIcons.Add, onClick = { saving = true })
     }
+    Spacer(Modifier.height(8.dp))
+    PillButton(text = t("IMPORTA DA FILE"), icon = XaosIcons.Download, onClick = { pick.launch(arrayOf("*/*")) })
+    Text(
+        t("I temi si passano come file .xtheme: condividine uno, o tocca un file .xtheme ricevuto per aggiungerlo."),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.inkTertiary,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 
     if (saving) {
         NameDialog(

@@ -57,7 +57,39 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- I temi di Xaos (.xtheme) ricevuti in una chat o salvati nei file:
+                 toccandoli si aggiungono ai preset e si applicano. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.xaos.theme+json" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.xtheme" />
+                <data android:pathPattern=".*\\..*\\.xtheme" />
+                <data android:pathPattern=".*\\..*\\..*\\.xtheme" />
+            </intent-filter>
         </activity>
+
+        <!-- I file che Xaos condivide (i temi .xtheme). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Scambio di preferiti, playlist e ascolti con Xaos desktop, via adb.
              DUMP ce l'hanno solo il sistema e la shell di adb: nessuna app

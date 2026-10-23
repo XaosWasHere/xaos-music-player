@@ -40,16 +40,18 @@ import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.UIManager
 
-fun main() {
-    // Una sola copia alla volta: una seconda richiama la prima e si chiude.
+fun main(args: Array<String>) {
+    // I file aperti con Xaos (doppio clic su un tema .xtheme).
+    val files = args.map(::File).filter { it.extension.equals(xaos.desktop.theme.XTheme.EXTENSION, ignoreCase = true) }
+    // Una sola copia alla volta: una seconda passa i file alla prima e si chiude.
     if (!Settings.isTestInstance && !SingleInstance.acquire()) {
-        SingleInstance.activateExisting()
+        SingleInstance.activateExisting(files)
         return
     }
-    runApp()
+    runApp(files)
 }
 
-private fun runApp() = application {
+private fun runApp(openFiles: List<File>) = application {
     remember { StartupLog.mark("main") }
     val settings = remember { Settings(File(Settings.appDir, "settings.json")) }
     // La lingua va scelta prima di comporre qualunque cosa.
@@ -162,6 +164,12 @@ private fun runApp() = application {
     }
     // Chi prova ad aprire una seconda copia ritrova questa, in primo piano.
     SingleInstance.onActivate = { expandFromMini() }
+    // Un tema aperto con doppio clic: si aggiunge ai preset e si applica.
+    fun openTheme(file: File) {
+        xaos.desktop.theme.XTheme.read(file)?.let { xaos.desktop.ui.importTheme(settings, it) }
+    }
+    SingleInstance.onOpenFile = ::openTheme
+    LaunchedEffect(Unit) { openFiles.forEach(::openTheme) }
 
     // Il player a tutto schermo è una finestra sua (la apre XaosDesktopApp);
     // chiudendola si torna davanti alla finestra principale.
@@ -209,75 +217,78 @@ private fun runApp() = application {
             xaos.desktop.online.LocalLibraryLyrics provides libraryLyrics,
             xaos.desktop.ui.LocalActivePhone provides activePhone,
           ) {
-            XaosDesktopApp(
-                settings = settings,
-                library = library,
-                player = player,
-                phone = phone,
-                ytdlp = ytdlp,
-                userData = userData,
-                dataSync = dataSync,
-                beam = beam,
-                fullscreen = fullscreen,
-                onFullscreenChange = ::setFullscreen,
-                screenBounds = { mainWindow[0]?.graphicsConfiguration?.bounds },
-                appIcon = appIcon,
-                onOpenMini = { mini = true },
-                onAddFolder = {
-                    scope.launch {
-                        pickFolder(prefs.roots.firstOrNull())?.let { dir ->
-                            settings.setRoots(prefs.roots + dir.path)
-                        }
-                    }
-                },
-                onRescan = {
-                    scope.launch { library.load(prefs.roots.map { File(it) }.filter { it.isDirectory }) }
-                },
-                onPickDownloadFolder = {
-                    scope.launch {
-                        pickFolder(prefs.effectiveDownloadFolder)?.let { dir ->
-                            settings.update { it.copy(downloadFolder = dir.path) }
-                        }
-                    }
-                },
-                onPickImportFolder = {
-                    scope.launch {
-                        pickFolder(prefs.effectiveImportFolder)?.let { dir ->
-                            settings.update { it.copy(importFolder = dir.path) }
-                        }
-                    }
-                },
-                onImport = { files ->
-                    val folder = prefs.effectiveImportFolder?.let(::File) ?: return@XaosDesktopApp
-                    // Come per i download: la cartella d'arrivo entra in libreria.
-                    if (prefs.roots.none { folder.path.startsWith(it) }) settings.setRoots(prefs.roots + folder.path)
-                    phone.importFiles(files, folder) {
+            // Tutta la finestra accetta un file .xtheme trascinato.
+            xaos.desktop.ui.ThemeDropZone(settings) {
+                XaosDesktopApp(
+                    settings = settings,
+                    library = library,
+                    player = player,
+                    phone = phone,
+                    ytdlp = ytdlp,
+                    userData = userData,
+                    dataSync = dataSync,
+                    beam = beam,
+                    fullscreen = fullscreen,
+                    onFullscreenChange = ::setFullscreen,
+                    screenBounds = { mainWindow[0]?.graphicsConfiguration?.bounds },
+                    appIcon = appIcon,
+                    onOpenMini = { mini = true },
+                    onAddFolder = {
                         scope.launch {
-                            library.load(settings.data.value.roots.map(::File).filter { it.isDirectory })
-                            phone.planImport(library.snapshot.value.tracks)
+                            pickFolder(prefs.roots.firstOrNull())?.let { dir ->
+                                settings.setRoots(prefs.roots + dir.path)
+                            }
                         }
-                    }
-                },
-                onDownload = { track ->
-                    val folder = prefs.effectiveDownloadFolder?.let(::File) ?: return@XaosDesktopApp
-                    // Se i download finiscono fuori dalla libreria, la cartella
-                    // entra fra quelle scansionate: un brano scaricato che non
-                    // compare da nessuna parte sarebbe un brano perso.
-                    val inLibrary = prefs.roots.any { folder.path.startsWith(it) }
-                    if (!inLibrary) settings.setRoots(prefs.roots + folder.path)
-                    ytdlp.download(track, folder) { file ->
+                    },
+                    onRescan = {
+                        scope.launch { library.load(prefs.roots.map { File(it) }.filter { it.isDirectory }) }
+                    },
+                    onPickDownloadFolder = {
                         scope.launch {
-                            val roots = settings.data.value.roots.map(::File).filter { it.isDirectory }
-                            library.load(roots)
-                            // Il testo, se LRCLIB ne ha uno con la stessa durata.
-                            val added = library.snapshot.value.tracks
-                                .firstOrNull { it.path.equals(file.path, ignoreCase = true) }
-                                ?.let { xaos.desktop.online.AutoLyrics.fetchAndEmbed(it) } == true
-                            if (added) library.load(roots)
+                            pickFolder(prefs.effectiveDownloadFolder)?.let { dir ->
+                                settings.update { it.copy(downloadFolder = dir.path) }
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                    onPickImportFolder = {
+                        scope.launch {
+                            pickFolder(prefs.effectiveImportFolder)?.let { dir ->
+                                settings.update { it.copy(importFolder = dir.path) }
+                            }
+                        }
+                    },
+                    onImport = { files ->
+                        val folder = prefs.effectiveImportFolder?.let(::File) ?: return@XaosDesktopApp
+                        // Come per i download: la cartella d'arrivo entra in libreria.
+                        if (prefs.roots.none { folder.path.startsWith(it) }) settings.setRoots(prefs.roots + folder.path)
+                        phone.importFiles(files, folder) {
+                            scope.launch {
+                                library.load(settings.data.value.roots.map(::File).filter { it.isDirectory })
+                                phone.planImport(library.snapshot.value.tracks)
+                            }
+                        }
+                    },
+                    onDownload = { track ->
+                        val folder = prefs.effectiveDownloadFolder?.let(::File) ?: return@XaosDesktopApp
+                        // Se i download finiscono fuori dalla libreria, la cartella
+                        // entra fra quelle scansionate: un brano scaricato che non
+                        // compare da nessuna parte sarebbe un brano perso.
+                        val inLibrary = prefs.roots.any { folder.path.startsWith(it) }
+                        if (!inLibrary) settings.setRoots(prefs.roots + folder.path)
+                        ytdlp.download(track, folder) { file ->
+                            scope.launch {
+                                val roots = settings.data.value.roots.map(::File).filter { it.isDirectory }
+                                library.load(roots)
+                                // Il testo, se LRCLIB ne ha uno con la stessa durata.
+                                val added = library.snapshot.value.tracks
+                                    .firstOrNull { it.path.equals(file.path, ignoreCase = true) }
+                                    ?.let { xaos.desktop.online.AutoLyrics.fetchAndEmbed(it) } == true
+                                if (added) library.load(roots)
+                            }
+                        }
+                    },
+                )
+            }
           }
         }
         }

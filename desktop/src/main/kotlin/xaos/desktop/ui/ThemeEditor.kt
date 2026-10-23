@@ -326,6 +326,8 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
                     color = if (inUse) colors.accentInk else colors.inkTertiary,
                 )
             }
+            CircleIconButton(XaosIcons.Download, t("Esporta come file .xtheme"), { exportTheme(preset) }, size = 28.dp, outlined = false)
+            Spacer(Modifier.width(4.dp))
             CircleIconButton(XaosIcons.Edit, t("Rinomina"), { renaming = preset }, size = 28.dp, outlined = false)
             Spacer(Modifier.width(4.dp))
             CircleIconButton(
@@ -337,9 +339,17 @@ private fun ThemePresets(prefs: SettingsData, settings: Settings) {
             )
         }
     }
-    if (prefs.customTheme.enabled) {
-        PillButton(t("SALVA COME PRESET"), onClick = { saving = true }, icon = XaosIcons.Add)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (prefs.customTheme.enabled) {
+            PillButton(t("SALVA COME PRESET"), onClick = { saving = true }, icon = XaosIcons.Add)
+        }
+        PillButton(t("IMPORTA DA FILE"), onClick = { pickThemeFile()?.let { importTheme(settings, it) } }, icon = XaosIcons.Folder)
     }
+    Text(
+        t("I temi si passano come file .xtheme: esportane uno, o trascinane uno in qualunque punto di Xaos per aggiungerlo."),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.inkTertiary,
+    )
 
     if (saving) {
         NameDialog(
@@ -398,6 +408,29 @@ private fun NameDialog(title: String, initial: String, hint: String?, onConfirm:
  * L'anteprima di un tema in miniatura: lo sfondo (anche sfumato), un pannello,
  * una riga di testo e il punto d'accento, con i colori che il tema darebbe.
  */
+/** Salva il preset come file .xtheme, dove sceglie l'utente (in Documenti all'inizio). */
+private fun exportTheme(preset: ThemePreset) {
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, t("Esporta il tema"), java.awt.FileDialog.SAVE)
+    dialog.directory = java.io.File(System.getProperty("user.home"), "Documents").path
+    dialog.file = xaos.desktop.theme.XTheme.fileName(preset.name)
+    dialog.isVisible = true
+    val name = dialog.file ?: return
+    var target = java.io.File(dialog.directory, name)
+    if (!target.name.endsWith(".${xaos.desktop.theme.XTheme.EXTENSION}", ignoreCase = true)) {
+        target = java.io.File(target.path + ".${xaos.desktop.theme.XTheme.EXTENSION}")
+    }
+    runCatching { target.writeText(xaos.desktop.theme.XTheme.encode(preset.name, preset.theme.copy(enabled = true)), Charsets.UTF_8) }
+}
+
+/** Sceglie un file .xtheme da aprire; null se annullato o se non è un tema. */
+private fun pickThemeFile(): xaos.desktop.theme.XThemeFile? {
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, t("Importa un tema"), java.awt.FileDialog.LOAD)
+    dialog.file = "*.${xaos.desktop.theme.XTheme.EXTENSION}"
+    dialog.isVisible = true
+    val name = dialog.file ?: return null
+    return xaos.desktop.theme.XTheme.read(java.io.File(dialog.directory, name))
+}
+
 @Composable
 internal fun ThemePreview(theme: CustomTheme, dark: Boolean) {
     val colors = Xaos.colors

@@ -31,6 +31,8 @@ object SingleInstance {
     @Volatile private var mutex: WinNT.HANDLE? = null
     @Volatile private var server: ServerSocket? = null
     @Volatile var onActivate: (() -> Unit)? = null
+    /** Un file aperto con Xaos (un tema .xtheme, con doppio clic) mentre Xaos è già aperto. */
+    @Volatile var onOpenFile: ((File) -> Unit)? = null
 
     private val portFile get() = File(Settings.appDir, "instance.port")
 
@@ -48,14 +50,15 @@ object SingleInstance {
         return true
     }
 
-    /** Dalla seconda copia: sveglia la prima e le cede il primo piano. */
-    fun activateExisting() {
+    /** Dalla seconda copia: sveglia la prima, le passa i file da aprire e le cede il primo piano. */
+    fun activateExisting(files: List<File> = emptyList()) {
         runCatching { ForegroundApi.INSTANCE.AllowSetForegroundWindow(ASFW_ANY) }
         val port = runCatching { portFile.readText().trim().toInt() }.getOrNull() ?: return
         runCatching {
             Socket(InetAddress.getLoopbackAddress(), port).use { socket ->
                 socket.soTimeout = 2_000
-                socket.getOutputStream().write("show\n".toByteArray())
+                val lines = files.joinToString("") { "open ${it.absolutePath}\n" } + "show\n"
+                socket.getOutputStream().write(lines.toByteArray(Charsets.UTF_8))
                 socket.getOutputStream().flush()
             }
         }
@@ -72,8 +75,14 @@ object SingleInstance {
                     runCatching {
                         socket.accept().use { client ->
                             client.soTimeout = 2_000
-                            val line = client.getInputStream().bufferedReader().readLine()
-                            if (line == "show") java.awt.EventQueue.invokeLater { onActivate?.invoke() }
+                            client.getInputStream().bufferedReader(Charsets.UTF_8).lineSequence().forEach { line ->
+                                when {
+                                    line == "show" -> java.awt.EventQueue.invokeLater { onActivate?.invoke() }
+                                    line.startsWith("open ") -> File(line.removePrefix("open ")).let { f ->
+                                        java.awt.EventQueue.invokeLater { onOpenFile?.invoke(f) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

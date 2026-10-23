@@ -27,4 +27,15 @@ internal val COMMON_STRINGS: Map<String, Tr> = mapOf(
     "IERI" to Tr("YESTERDAY", "昨日"),
     "%d GIORNI FA" to Tr("%d DAYS AGO", "%d日前"),
     "dd/MM" to Tr("MM/dd", "M/d"),
+
+    // I temi come file .xtheme.
+    "Tema «%s» aggiunto ai preset e applicato" to Tr("Theme «%s» added to presets and applied", "テーマ「%s」をプリセットに追加して適用しました"),
+    "Questo file non è un tema di Xaos" to Tr("This file isn't a Xaos theme", "このファイルはXaosのテーマではありません"),
+    "Condividi il tema" to Tr("Share theme", "テーマを共有"),
+    "Tema di Xaos: %s" to Tr("Xaos theme: %s", "Xaosのテーマ：%s"),
+    "IMPORTA DA FILE" to Tr("IMPORT FROM FILE", "ファイルから読み込む"),
+    "I temi si passano come file .xtheme: condividine uno, o tocca un file .xtheme ricevuto per aggiungerlo." to Tr(
+        "Themes travel as .xtheme files: share one, or tap an .xtheme file you received to add it.",
+        "テーマは.xthemeファイルで共有できます。共有するか、受け取った.xthemeファイルをタップすると追加できます。",
+    ),
 )

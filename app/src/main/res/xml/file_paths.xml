@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I file che Xaos condivide con le altre app: i temi .xtheme. -->
+<paths>
+    <cache-path name="themes" path="themes/" />
+</paths>

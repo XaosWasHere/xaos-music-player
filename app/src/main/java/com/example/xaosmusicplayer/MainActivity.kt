@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
         // La lingua va letta prima del primo frame.
         I18n.init(this)
         applySystemBars(themeStore.isDark.value, themeStore.custom.value)
+        openTheme(intent)
         setContent {
             val dark by themeStore.isDark.collectAsStateWithLifecycle()
             val custom by themeStore.custom.collectAsStateWithLifecycle()
@@ -103,6 +104,27 @@ class MainActivity : ComponentActivity() {
                 XaosApp()
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openTheme(intent)
+    }
+
+    /** Un tema .xtheme aperto da una chat o dai file: si aggiunge ai preset e si applica. */
+    private fun openTheme(intent: android.content.Intent?) {
+        if (intent?.action != android.content.Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+        val file = com.example.xaosmusicplayer.ui.theme.XTheme.read(this, uri)
+        val message = if (file != null) {
+            com.example.xaosmusicplayer.ui.theme.XTheme.importTheme(themeStore, file)
+            com.example.xaosmusicplayer.i18n.t("Tema «%s» aggiunto ai preset e applicato", file.name)
+        } else {
+            com.example.xaosmusicplayer.i18n.t("Questo file non è un tema di Xaos")
+        }
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+        // Una volta letto, il tema non si riapre a ogni rotazione dello schermo.
+        setIntent(android.content.Intent(this, MainActivity::class.java))
     }
 
     override fun onStart() {

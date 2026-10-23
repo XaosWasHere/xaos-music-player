@@ -43,6 +43,20 @@ internal val COMMON_STRINGS: Map<String, Tr> = mapOf(
         "The MP3 copy if there is one, otherwise AAC at 256 kbit/s: nearly identical to the ear, up to 20 times lighter. MP3 and AAC stay as they are.",
         "MP3のコピーがあればそれを、なければ256 kbpsのAACで送ります。聴感上ほぼ同じで、最大20分の1の軽さです。MP3とAACはそのまま送ります。",
     ),
+    // I temi come file .xtheme.
+    "TEMA «%s» AGGIUNTO AI PRESET E APPLICATO" to Tr("THEME «%s» ADDED TO PRESETS AND APPLIED", "テーマ「%s」をプリセットに追加して適用しました"),
+    "NUOVO TEMA" to Tr("NEW THEME", "NEW THEME"),
+    "Rilascia per aggiungerlo ai preset e applicarlo." to Tr("Drop to add it to your presets and apply it.", "ドロップするとプリセットに追加して適用します。"),
+    "Trascina qui un file .xtheme per aggiungere il tema." to Tr("Drag an .xtheme file here to add the theme.", ".xthemeファイルをここにドラッグするとテーマを追加できます。"),
+    "Esporta come file .xtheme" to Tr("Export as .xtheme file", ".xthemeファイルとして書き出す"),
+    "IMPORTA DA FILE" to Tr("IMPORT FROM FILE", "ファイルから読み込む"),
+    "I temi si passano come file .xtheme: esportane uno, o trascinane uno in qualunque punto di Xaos per aggiungerlo." to Tr(
+        "Themes travel as .xtheme files: export one, or drag one anywhere onto Xaos to add it.",
+        "テーマは.xthemeファイルで共有できます。書き出すか、ファイルをXaosのどこかにドラッグすると追加できます。",
+    ),
+    "Esporta il tema" to Tr("Export theme", "テーマを書き出す"),
+    "Importa un tema" to Tr("Import a theme", "テーマを読み込む"),
+
     "AAC a 128 kbit/s per tutto ciò che pesa di più: per le reti deboli." to Tr(
         "AAC at 128 kbit/s for anything heavier: for weak networks.",
         "それより重いものはすべて128 kbpsのAACで送ります。電波の弱いネットワーク向けです。",

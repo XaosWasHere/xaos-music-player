@@ -235,16 +235,18 @@ fun XaosDesktopApp(
                 LocalFavorites provides favorites,
             ) {
                 xaos.desktop.theme.XaosTheme(dark = prefs.dark, custom = prefs.customTheme) {
-                    FullscreenPlayer(
-                        player = player,
-                        background = prefs.fullscreenBackground,
-                        onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
-                        onClose = { onFullscreenChange(false) },
-                        lyricsOpen = lyricsOpen,
-                        onToggleLyrics = { lyricsOpen = !lyricsOpen },
-                        onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
-                        onOpenSource = { openSource(player.source.value, player.current.value) },
-                    )
+                    ThemeDropZone(settings) {
+                        FullscreenPlayer(
+                            player = player,
+                            background = prefs.fullscreenBackground,
+                            onBackgroundChange = { mode -> settings.update { it.copy(fullscreenBackground = mode) } },
+                            onClose = { onFullscreenChange(false) },
+                            lyricsOpen = lyricsOpen,
+                            onToggleLyrics = { lyricsOpen = !lyricsOpen },
+                            onEditLyrics = { t -> onFullscreenChange(false); details += Detail.Lyrics(t.path) },
+                            onOpenSource = { openSource(player.source.value, player.current.value) },
+                        )
+                    }
                 }
             }
         }

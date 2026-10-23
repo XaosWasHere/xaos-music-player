@@ -61,6 +61,8 @@ WizardSmallImageFileDynamicDark=small-dark-55.bmp,small-dark-83.bmp,small-dark-1
 AppMutex=XaosMusicPlayer.SingleInstance
 CloseApplications=yes
 RestartApplications=no
+; I temi .xtheme si aprono con Xaos.
+ChangesAssociations=yes
 
 [Languages]
 Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
@@ -87,6 +89,13 @@ Type: filesandordirs; Name: "{app}\runtime"
 [Icons]
 Name: "{autoprograms}\Xaos"; Filename: "{app}\Xaos.exe"
 Name: "{autodesktop}\Xaos"; Filename: "{app}\Xaos.exe"; Tasks: desktopicon
+
+[Registry]
+; I temi di Xaos (.xtheme): un doppio clic li aggiunge ai preset e li applica.
+Root: HKA; Subkey: "Software\Classes\.xtheme"; ValueType: string; ValueName: ""; ValueData: "Xaos.Theme"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Xaos.Theme"; ValueType: string; ValueName: ""; ValueData: "Tema di Xaos"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Xaos.Theme\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\Xaos.exe,0"
+Root: HKA; Subkey: "Software\Classes\Xaos.Theme\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Xaos.exe"" ""%1"""
 
 [Run]
 ; Xaos Beam: il telefono raggiunge il PC su due porte (47810 TCP per la
