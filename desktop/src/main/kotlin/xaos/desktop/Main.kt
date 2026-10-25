@@ -73,6 +73,8 @@ private fun runApp(openFiles: List<File>) = application {
         }
     }
     val dataSync = remember { DataSync(scope, phone, userData, File(Settings.appDir, "sync"), settings) }
+    // Dove si era rimasti: alla riapertura la coda torna, in pausa al punto giusto.
+    val playbackMemory = remember { xaos.desktop.player.PlaybackMemory(File(Settings.appDir, "playback.json"), player, scope) }
     val beam = remember {
         xaos.desktop.beam.BeamServer(
             settings, library, player, scope,
@@ -101,6 +103,7 @@ private fun runApp(openFiles: List<File>) = application {
     // Le impostazioni si applicano man mano che cambiano, e una volta all'avvio.
     LaunchedEffect(prefs.roots) {
         library.load(prefs.roots.map { File(it) }.filter { it.isDirectory })
+        playbackMemory.restore(library.snapshot.value)
         library.snapshot.value.let { snap ->
             StartupLog.mark("libreria letta: ${snap.tracks.size} brani, ${snap.albums.size} album, ${snap.duplicates.sumOf { it.copies.size }} doppioni nascosti")
         }
@@ -184,6 +187,7 @@ private fun runApp(openFiles: List<File>) = application {
             mediaBridge?.close()
             beam.stop()
             settings.flush()
+            playbackMemory.saveNow()
             player.release()
             exitApplication()
         },

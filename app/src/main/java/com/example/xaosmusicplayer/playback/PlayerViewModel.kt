@@ -792,10 +792,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         controller.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
+                saveResume()
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 syncCurrentSong()
+                saveResume()
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -824,6 +826,59 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             controller.shuffleModeEnabled = preferences.shuffleEnabled.first()
             controller.repeatMode = preferences.repeatMode.first()
         }
+        resumeLastQueue(controller)
+    }
+
+    // ---------- Dove si era rimasti ----------
+
+    private val resumePrefs by lazy {
+        getApplication<Application>().getSharedPreferences("xaos_playback", android.content.Context.MODE_PRIVATE)
+    }
+    @Volatile private var resumeDone = false
+
+    /**
+     * Alla riapertura la coda dell'ultima volta torna caricata, in pausa sul
+     * brano e al punto in cui era: play riparte da lì. Non tocca niente se il
+     * servizio sta già suonando (l'app era solo in background).
+     */
+    private fun resumeLastQueue(controller: MediaController) {
+        if (resumeDone) return
+        viewModelScope.launch {
+            // I brani servono per ritrovare quelli salvati: si aspetta la libreria.
+            _songs.first { it.isNotEmpty() }
+            if (resumeDone) return@launch
+            resumeDone = true
+            if (controller.mediaItemCount > 0) return@launch
+            val saved = resumePrefs.getString(KEY_RESUME, null)?.let { runCatching { org.json.JSONObject(it) }.getOrNull() } ?: return@launch
+            val ids = saved.optJSONArray("ids") ?: return@launch
+            val index = saved.optInt("index", 0)
+            val currentId = runCatching { ids.getLong(index) }.getOrNull() ?: return@launch
+            val songs = (0 until ids.length()).mapNotNull { i -> ids.optLong(i).let { songById(it) ?: rawSongById(it) } }
+            val start = songs.indexOfFirst { it.id == currentId }
+            if (start < 0) return@launch
+            val position = saved.optLong("positionMs", 0L).coerceIn(0L, (songs[start].durationMs - 1_000L).coerceAtLeast(0L))
+            _queue.value = songs
+            controller.setMediaItems(songs.map { it.toMediaItem() }, start, position)
+            controller.prepare()
+            _positionMs.value = position
+            syncCurrentSong()
+            _positionMs.value = position
+        }
+    }
+
+    /** Salva coda, brano e punto: a ogni cambio di brano, in pausa e ogni tanto mentre suona. */
+    private fun saveResume() {
+        val player = controller ?: return
+        if (!resumeDone || player.mediaItemCount == 0) return
+        val ids = org.json.JSONArray()
+        for (i in 0 until player.mediaItemCount) {
+            player.getMediaItemAt(i).mediaId.toLongOrNull()?.let { ids.put(it) } ?: return
+        }
+        val state = org.json.JSONObject()
+            .put("ids", ids)
+            .put("index", player.currentMediaItemIndex)
+            .put("positionMs", player.currentPosition)
+        resumePrefs.edit().putString(KEY_RESUME, state.toString()).apply()
     }
 
     private fun syncCurrentSong() {
@@ -1366,13 +1421,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     // Solo qui, cioè solo mentre suona davvero: in pausa il
                     // tempo non passa.
                     accumulateListening(player.duration)
+                    if (++resumeTicks % RESUME_SAVE_TICKS == 0) saveResume()
                 }
                 delay(POSITION_POLL_MS)
             }
         }
     }
 
+    /** Ogni quanti giri del controllo della posizione si salva il punto (5 secondi). */
+    private var resumeTicks = 0
+
     override fun onCleared() {
+        saveResume()
         BeamConnect.commandHandler = null
         BeamConnect.phoneState = null
         visualizer.stop()
@@ -1410,6 +1470,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val POSITION_POLL_MS = 500L
+        const val RESUME_SAVE_TICKS = 10
+        const val KEY_RESUME = "resume"
 
         /**
          * Quanto va riprodotto un brano perché conti come ascolto.

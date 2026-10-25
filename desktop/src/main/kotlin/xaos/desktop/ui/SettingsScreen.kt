@@ -299,7 +299,7 @@ private fun LyricsCard(prefs: SettingsData, settings: Settings) {
         if (prefs.autoLyrics && progress != null && progress.total > 0) {
             Text(
                 when {
-                    progress.offline -> t("LRCLIB NON RISPONDE: SI RIPROVA AL PROSSIMO AVVIO · [%d] AGGIUNTI", progress.added)
+                    progress.waiting -> t("LRCLIB OCCUPATO: RIPRENDO TRA POCO · [%d/%d] · [%d] AGGIUNTI", progress.done, progress.total, progress.added)
                     progress.running -> t("RICERCA [%d/%d] · [%d] AGGIUNTI", progress.done, progress.total, progress.added)
                     else -> t("[%d] BRANI CERCATI · [%d] TESTI AGGIUNTI", progress.total, progress.added)
                 },

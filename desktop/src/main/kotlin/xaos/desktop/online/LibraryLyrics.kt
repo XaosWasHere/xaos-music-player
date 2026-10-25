@@ -41,8 +41,8 @@ class LibraryLyrics(
         val done: Int = 0,
         val total: Int = 0,
         val added: Int = 0,
-        /** LRCLIB non ha risposto: si riprova al prossimo avvio. */
-        val offline: Boolean = false,
+        /** LRCLIB non risponde (occupato, o rete assente): si aspetta un po' e si riprende. */
+        val waiting: Boolean = false,
     )
 
     private val _progress = MutableStateFlow(Progress())
@@ -83,7 +83,7 @@ class LibraryLyrics(
         return "${f.length()}:${f.lastModified()}"
     }
 
-    /** false se LRCLIB non risponde: inutile continuare. */
+    /** Cerca i testi per [tracks]; con LRCLIB occupato aspetta e riprende, non si ferma. */
     private suspend fun scan(tracks: List<Track>): Boolean {
         val todo = synchronized(checked) {
             tracks.filter { t ->
@@ -95,14 +95,28 @@ class LibraryLyrics(
         var added = 0
         var sinceReload = 0
         _progress.value = Progress(running = true, total = todo.size)
-        for ((i, track) in todo.withIndex()) {
+        var i = 0
+        var refused = 0
+        while (i < todo.size) {
             coroutineContext.ensureActive()
+            val track = todo[i]
             when (runCatching { AutoLyrics.lookup(track) }.getOrDefault(AutoLyrics.Outcome.UNAVAILABLE)) {
                 AutoLyrics.Outcome.UNAVAILABLE -> {
-                    save()
-                    if (added > 0) onAdded()
-                    _progress.value = Progress(running = false, done = i, total = todo.size, added = added, offline = true)
-                    return false
+                    // Il brano non si segna: si riprova. Dopo qualche rifiuto di
+                    // fila (LRCLIB occupato, o la rete che manca) si fa una pausa.
+                    if (++refused >= REFUSALS_BEFORE_PAUSE) {
+                        save()
+                        if (sinceReload > 0) {
+                            sinceReload = 0
+                            onAdded()
+                        }
+                        _progress.value = Progress(running = true, done = i, total = todo.size, added = added, waiting = true)
+                        delay(BUSY_PAUSE_MS)
+                        refused = 0
+                    } else {
+                        delay(PAUSE_MS * 10)
+                    }
+                    continue
                 }
                 AutoLyrics.Outcome.ADDED -> {
                     added++
@@ -111,8 +125,10 @@ class LibraryLyrics(
                 }
                 AutoLyrics.Outcome.NOT_FOUND -> mark(track.path)
             }
-            _progress.value = Progress(running = true, done = i + 1, total = todo.size, added = added)
-            if ((i + 1) % 20 == 0) save()
+            refused = 0
+            i++
+            _progress.value = Progress(running = true, done = i, total = todo.size, added = added)
+            if (i % 20 == 0) save()
             // Ogni tanto la libreria si rilegge, così i testi si vedono subito.
             if (sinceReload >= 25) {
                 sinceReload = 0
@@ -147,5 +163,9 @@ class LibraryLyrics(
     private companion object {
         /** Fra un brano e l'altro: LRCLIB non va sommerso di richieste. */
         const val PAUSE_MS = 300L
+        /** Quanti rifiuti di fila prima di una pausa lunga. */
+        const val REFUSALS_BEFORE_PAUSE = 3
+        /** La pausa quando LRCLIB non risponde: poi si riprende da dove si era. */
+        const val BUSY_PAUSE_MS = 2 * 60_000L
     }
 }

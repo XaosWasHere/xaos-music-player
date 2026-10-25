@@ -68,11 +68,29 @@ object LrcLib {
             .timeout(Duration.ofSeconds(15))
             .GET()
             .build()
-        val response = client.send(request, HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
-        if (response.statusCode() != 200) throw Unavailable("HTTP ${response.statusCode()}")
-        json.decodeFromString<List<LrcResult>>(response.body())
+        // LRCLIB è un servizio gratuito e spesso risponde "occupato, riprova
+        // tra un momento" (503) o "troppe richieste" (429): si aspetta e si
+        // riprova, sempre più a lungo, prima di dire che non risponde.
+        var attempt = 0
+        while (true) {
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString(Charsets.UTF_8))
+            val code = response.statusCode()
+            if (code == 200) return@runCatching json.decodeFromString<List<LrcResult>>(response.body())
+            if (code !in RETRY_CODES || attempt >= RETRIES) throw Unavailable("HTTP $code")
+            val asked = response.headers().firstValue("Retry-After").orElse(null)?.toLongOrNull()?.times(1000)
+            Thread.sleep((asked ?: (RETRY_BASE_MS shl attempt)).coerceAtMost(RETRY_MAX_MS))
+            attempt++
+        }
+        @Suppress("UNREACHABLE_CODE")
+        emptyList<LrcResult>()
     }.getOrElse { e -> if (strict) throw (e as? Unavailable ?: Unavailable(e.message ?: e.toString())) else emptyList() }
 
     /** LRCLIB non ha risposto (rete assente, server giù, limite di richieste). */
     class Unavailable(message: String) : Exception(message)
+
+    /** Le risposte che vogliono dire "riprova tra poco". */
+    private val RETRY_CODES = setOf(429, 502, 503, 504)
+    private const val RETRIES = 4
+    private const val RETRY_BASE_MS = 2_000L
+    private const val RETRY_MAX_MS = 30_000L
 }

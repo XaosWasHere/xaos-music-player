@@ -190,6 +190,9 @@ private fun XaosApp(
 
     var section by remember { mutableStateOf(Section.HOME) }
     val backStack = remember { mutableListOf<Destination>().toMutableStateList() }
+    // Ogni schermata tiene il suo stato (fin dove si era scorsa una lista)
+    // mentre se ne apre un'altra: tornando indietro si ritrova il punto di prima.
+    val screens = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     var nowPlayingOpen by remember { mutableStateOf(false) }
 
     val libraryState by viewModel.libraryState.collectAsStateWithLifecycle()
@@ -391,6 +394,7 @@ private fun XaosApp(
     Box(modifier = Modifier.fillMaxSize().screenBackground()) {
         Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             Box(modifier = Modifier.weight(1f)) {
+                screens.SaveableStateProvider("section:${section.name}") {
                 when (section) {
                     Section.HOME -> HomeScreen(
                         recentAlbums = recentAlbums,
@@ -465,10 +469,13 @@ private fun XaosApp(
                     )
                 }
 
+                }
+
                 // Le schermate di dettaglio coprono la sezione ma non la barra
                 // in basso né il mini-player, che stanno fuori da quest'area.
                 backStack.lastOrNull()?.let { destination ->
                     Box(modifier = Modifier.fillMaxSize().screenBackground()) {
+                      screens.SaveableStateProvider("destination:${backStack.size}:$destination") {
                         DestinationContent(
                             destination = destination,
                             viewModel = viewModel,
@@ -494,6 +501,7 @@ private fun XaosApp(
                             onOpenSleepTimer = { sleepSheetOpen = true },
                             onOpenSettings = openSettings,
                         )
+                      }
                     }
                 }
             }

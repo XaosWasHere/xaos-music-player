@@ -134,6 +134,8 @@ fun XaosDesktopApp(
         mutableStateOf(Section.entries.firstOrNull { it.name == System.getenv("XAOS_START") } ?: Section.ALBUMS)
     }
     val details = remember { mutableStateListOf<Detail>() }
+    /** Lo stato delle schermate lasciate (la posizione nelle liste), per quando ci si torna. */
+    val screens = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     var query by remember { mutableStateOf("") }
 
     fun select(target: Section) {
@@ -281,7 +283,18 @@ fun XaosDesktopApp(
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         val detail = details.lastOrNull()
+                        // Ogni schermata tiene il suo stato (fin dove si era scorsa una
+                        // lista) mentre se ne apre un'altra: tornando indietro si ritrova
+                        // il punto di prima, invece di ripartire dall'inizio.
+                        val screenKey = when {
+                            detail is Detail.EditTrack || detail is Detail.EditAlbum || detail is Detail.Lyrics || detail is Detail.PlaylistDetail -> "detail:${details.size}:$detail"
+                            section == Section.PHONE || section == Section.SETTINGS -> "section:${section.name}"
+                            query.isNotBlank() -> "search"
+                            detail != null -> "detail:${details.size}:$detail"
+                            else -> "section:${section.name}"
+                        }
                         CompositionLocalProvider(LocalTrackActions provides trackActions, LocalFavorites provides favorites) {
+                        screens.SaveableStateProvider(screenKey) {
                         when {
                             detail is Detail.EditTrack -> EditTrackScreen(
                                 track = snapshot.tracks.firstOrNull { it.path == detail.path },
@@ -377,6 +390,7 @@ fun XaosDesktopApp(
                                 details += Detail.PlaylistDetail(it)
                             }
                             section == Section.STATS -> StatsScreen(snapshot, data, userData, player)
+                        }
                         }
                         }
                     }

@@ -73,9 +73,9 @@ internal val SETTINGS_STRINGS: Map<String, Tr> = mapOf(
         "At startup, songs without lyrics look them up on LRCLIB. Lyrics are added to the file only if the duration matches: that's how we know it's the same recording. If it doesn't match, nothing is changed.",
         "起動時に、歌詞のない曲をLRCLIBで検索します。ファイルに追加するのは曲の長さが一致した場合だけです。同じ音源であることを確かめるためで、一致しなければ何も変更しません。",
     ),
-    "LRCLIB NON RISPONDE: SI RIPROVA AL PROSSIMO AVVIO · [%d] AGGIUNTI" to Tr(
-        "LRCLIB NOT RESPONDING: WILL RETRY NEXT LAUNCH · [%d] ADDED",
-        "LRCLIBが応答しません：次回の起動時に再試行します · [%d]件追加",
+    "LRCLIB OCCUPATO: RIPRENDO TRA POCO · [%d/%d] · [%d] AGGIUNTI" to Tr(
+        "LRCLIB IS BUSY: RESUMING SHORTLY · [%d/%d] · [%d] ADDED",
+        "LRCLIBが混雑中：まもなく再開します · [%d/%d] · [%d]件追加",
     ),
     "RICERCA [%d/%d] · [%d] AGGIUNTI" to Tr("SEARCHING [%d/%d] · [%d] ADDED", "検索中 [%d/%d] · [%d]件追加"),
     "[%d] BRANI CERCATI · [%d] TESTI AGGIUNTI" to Tr("[%d] SONGS SEARCHED · [%d] LYRICS ADDED", "[%d]曲を検索 · 歌詞[%d]件を追加"),

@@ -248,6 +248,55 @@ class Player {
     private var order: List<Int> = emptyList()
     private var cursor = -1
 
+    /**
+     * Il brano ripreso all'avvio è caricato ma non ancora partito: il primo
+     * play lo fa partire da qui (e un salto sposta solo questo punto).
+     */
+    @Volatile private var pendingStartMs: Long? = null
+
+    /** Lo stato da ricordare per la prossima apertura. */
+    data class Resume(
+        val queue: List<Track>,
+        val index: Int,
+        val order: List<Int>,
+        val positionMs: Long,
+        val shuffle: Boolean,
+        val repeat: RepeatMode,
+        val source: PlaySource?,
+    )
+
+    fun resumeState(): Resume? {
+        val queue = _queue.value
+        val index = order.getOrNull(cursor) ?: return null
+        if (queue.isEmpty() || _current.value == null) return null
+        return Resume(queue, index, order, _positionMs.value, _shuffle.value, _repeat.value, _source.value)
+    }
+
+    /**
+     * Ricarica la coda dell'ultima volta, in pausa sul brano e al punto in cui
+     * era: la barra mostra subito dove si era, e play riparte da lì.
+     */
+    fun restore(state: Resume) {
+        if (state.queue.isEmpty() || _current.value != null) return
+        _source.value = state.source
+        _queue.value = state.queue
+        _shuffle.value = state.shuffle
+        _repeat.value = state.repeat
+        val valid = state.order.size == state.queue.size && state.order.sorted() == state.queue.indices.toList()
+        if (valid) {
+            order = state.order
+            cursor = order.indexOf(state.index).coerceAtLeast(0)
+            refreshUpNext()
+        } else {
+            rebuildOrder(state.index.coerceIn(state.queue.indices))
+        }
+        val track = state.queue[order[cursor]]
+        _current.value = track
+        _durationMs.value = track.durationMs
+        _positionMs.value = state.positionMs
+        pendingStartMs = state.positionMs
+    }
+
     private val listener = object : MediaPlayerEventAdapter() {
         override fun playing(mediaPlayer: MediaPlayer) { _isPlaying.value = true }
         override fun paused(mediaPlayer: MediaPlayer) { _isPlaying.value = false }
@@ -310,6 +359,10 @@ class Player {
 
     fun togglePlayPause() {
         val player = mp ?: return
+        pendingStartMs?.let { startMs ->
+            startCurrent(startMs)
+            return
+        }
         when {
             _current.value == null -> _queue.value.takeIf { it.isNotEmpty() }?.let { play(it, 0) }
             player.status().isPlaying -> player.controls().pause()
@@ -336,6 +389,11 @@ class Player {
         val duration = _durationMs.value
         if (duration <= 0) return
         val target = (duration * fraction.coerceIn(0f, 1f)).toLong()
+        if (pendingStartMs != null) {
+            pendingStartMs = target
+            _positionMs.value = target
+            return
+        }
         player.controls().setTime(target)
         _positionMs.value = target
     }
@@ -345,6 +403,10 @@ class Player {
         val player = mp ?: return
         val duration = _durationMs.value
         val target = if (duration > 0) ms.coerceIn(0, duration - 500) else ms.coerceAtLeast(0)
+        if (pendingStartMs != null) {
+            startCurrent(target)
+            return
+        }
         player.controls().setTime(target)
         _positionMs.value = target
         if (!player.status().isPlaying) player.controls().play()
@@ -356,6 +418,11 @@ class Player {
         val duration = _durationMs.value
         if (duration <= 0) return
         val target = (_positionMs.value + deltaMs).coerceIn(0, duration - 500)
+        if (pendingStartMs != null) {
+            pendingStartMs = target
+            _positionMs.value = target
+            return
+        }
         player.controls().setTime(target)
         _positionMs.value = target
     }
@@ -422,6 +489,7 @@ class Player {
     private fun startCurrent(startMs: Long = 0) {
         val player = mp ?: return
         val track = _queue.value.getOrNull(order.getOrNull(cursor) ?: return) ?: return
+        pendingStartMs = null
         _current.value = track
         refreshUpNext()
         listenedMs = 0
