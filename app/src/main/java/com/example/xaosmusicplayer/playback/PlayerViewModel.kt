@@ -782,7 +782,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val future = MediaController.Builder(getApplication(), token).buildAsync()
         future.addListener(
             {
-                controller = runCatching { future.get() }.getOrNull()?.also { attach(it) }
+                // Il campo va assegnato prima di attach: la ripresa della coda
+                // può partire subito e leggerlo.
+                controller = runCatching { future.get() }.getOrNull()
+                controller?.let { attach(it) }
             },
             MoreExecutors.directExecutor(),
         )
